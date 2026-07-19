@@ -1,0 +1,31 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAllowed() {
+      return request.auth != null &&
+        request.auth.token.email in [
+          'tannerwesgardner@gmail.com',
+          'rochelleygardner@gmail.com'
+        ];
+    }
+
+    // Each Item is its own document (no growing-array document to split, unlike
+    // the ledger app) -- checks required field *types* so a client bug or stray
+    // manual edit can't corrupt another item, without locking the schema down
+    // so hard that it can't evolve.
+    function isValidItem(d) {
+      return d.title is string && d.title.size() > 0 &&
+        d.domain in ['financial', 'material', 'health-fitness', 'vocational-career', 'relational', 'cross-domain'] &&
+        d.status in ['open', 'in-progress', 'done', 'dropped'] &&
+        d.sourceNote is string &&
+        d.createdDate is string &&
+        (!('targetDate' in d) || d.targetDate is string) &&
+        d.updatedAt is number;
+    }
+
+    match /items/{itemId} {
+      allow read, delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidItem(request.resource.data);
+    }
+  }
+}
