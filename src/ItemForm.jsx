@@ -1,13 +1,16 @@
 import { useState } from "react";
-import { DOMAINS, STATUSES, KINDS, EFFORTS, todayISO } from "./constants";
+import { DOMAINS, STATUSES, KINDS, EFFORTS, OWNERS, todayISO, ownerForEmail } from "./constants";
 import { Btn, Input, Textarea, Select, Card } from "./ui";
 import { MONO, MUTE, INK, LINE } from "./theme";
 
 const BLANK = { title: "", domain: "financial", status: "open", kind: "quick-task", effort: "quick", sourceNote: "", targetDate: "" };
 
 // Add/edit form for a single Item. `item` present = editing; absent = creating.
-export default function ItemForm({ item, onSave, onCancel }) {
-  const [form, setForm] = useState(item ? { ...BLANK, ...item } : BLANK);
+// `currentUserEmail` seeds Owner's default on a new item (editing keeps whatever's saved).
+export default function ItemForm({ item, currentUserEmail, onSave, onCancel }) {
+  const [form, setForm] = useState(
+    item ? { ...BLANK, ...item } : { ...BLANK, owner: ownerForEmail(currentUserEmail) }
+  );
   const [saving, setSaving] = useState(false);
 
   const set = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
@@ -23,6 +26,7 @@ export default function ItemForm({ item, onSave, onCancel }) {
         status: form.status,
         kind: form.kind,
         effort: form.effort,
+        owner: form.owner,
         sourceNote: form.sourceNote.trim(),
         createdDate: item?.createdDate || todayISO(),
         ...(form.targetDate ? { targetDate: form.targetDate } : {}),
@@ -42,7 +46,13 @@ export default function ItemForm({ item, onSave, onCancel }) {
           </div>
         </label>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+          <label style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Owner
+            <div style={{ marginTop: 4 }}>
+              <Select value={form.owner} onChange={set("owner")} options={OWNERS} width="100%" />
+            </div>
+          </label>
           <label style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.04em" }}>
             Domain
             <div style={{ marginTop: 4 }}>

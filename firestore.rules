@@ -28,6 +28,10 @@ service cloud.firestore {
       return ['quick', 'medium', 'large'];
     }
 
+    function ownerValues() {
+      return ['tanner', 'rochelle'];
+    }
+
     // Each Item is its own document (no growing-array document to split, unlike
     // the ledger app) -- checks required field *types* so a client bug or stray
     // manual edit can't corrupt another item, without locking the schema down
@@ -41,6 +45,7 @@ service cloud.firestore {
         (!('targetDate' in d) || d.targetDate is string) &&
         (!('kind' in d) || d.kind in kindValues()) &&
         (!('effort' in d) || d.effort in effortValues()) &&
+        (!('owner' in d) || d.owner in ownerValues()) &&
         d.updatedAt is number;
     }
 
