@@ -24,3 +24,10 @@ export const domainLabel = (id) => DOMAINS.find((d) => d.id === id)?.label || id
 export const statusLabel = (id) => STATUSES.find((s) => s.id === id)?.label || id;
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);
+
+// Two skipped weekly-triage cycles -- long enough that missing one week isn't
+// flagged, long enough to catch something quietly aging in the open list.
+export const STALE_DAYS = 14;
+
+export const isStale = (item) =>
+  OPEN_STATUSES.includes(item.status) && Date.now() - (item.updatedAt || 0) > STALE_DAYS * 86400000;

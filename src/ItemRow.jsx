@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { STATUSES, domainLabel } from "./constants";
-import { DOMAIN_COLORS, STATUS_COLORS, softTint, MONO, SANS, MUTE, MUTE_SOFT, INK, LINE } from "./theme";
+import { STATUSES, domainLabel, isStale } from "./constants";
+import { DOMAIN_COLORS, STATUS_COLORS, BRICK, BRICK_SOFT, softTint, MONO, SANS, MUTE, MUTE_SOFT, INK, LINE } from "./theme";
 import { Pill, Select, Btn } from "./ui";
 
 // Single Item row shared by both views -- domain pill always shows (so the
@@ -28,6 +28,10 @@ export default function ItemRow({ item, showDomain = true, onEdit, onStatusChang
         <Pill color={DOMAIN_COLORS[item.domain]} tint={softTint(DOMAIN_COLORS[item.domain])}>
           {domainLabel(item.domain)}
         </Pill>
+      )}
+
+      {isStale(item) && (
+        <Pill color={BRICK} tint={BRICK_SOFT}>Stale</Pill>
       )}
 
       <Select
