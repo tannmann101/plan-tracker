@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DOMAINS, KINDS, domainLabel, isStale, todayISO } from "./constants";
+import { DOMAINS, KINDS, OPEN_STATUSES, domainLabel, isStale, todayISO } from "./constants";
 import { DOMAIN_COLORS, MONO, MUTE, INK, LINE, TEAL, BRICK, HEAD_BG } from "./theme";
 import { SectionTitle, Note, Card, Btn } from "./ui";
 
@@ -36,7 +36,7 @@ function timelinesByItem(events) {
 function computeStats(items, events) {
   const completedCount = events.filter((e) => e.to === "done").length;
   const droppedCount = events.filter((e) => e.to === "dropped").length;
-  const openNow = items.filter((i) => i.status === "open" || i.status === "in-progress").length;
+  const openNow = items.filter((i) => OPEN_STATUSES.includes(i.status)).length;
 
   const cycleDays = [];
   for (const timeline of timelinesByItem(events).values()) {
@@ -137,7 +137,7 @@ function DomainBarChart({ data }) {
 
 function buildReport({ items, stats, completedByWeek, droppedByWeek, domainDone }) {
   const now = new Date();
-  const open = items.filter((i) => i.status === "open" || i.status === "in-progress");
+  const open = items.filter((i) => OPEN_STATUSES.includes(i.status));
   const stale = open.filter(isStale);
   const last4 = completedByWeek.slice(-4).reduce((a, d) => a + d.count, 0);
   const prev4 = completedByWeek.slice(-8, -4).reduce((a, d) => a + d.count, 0);
