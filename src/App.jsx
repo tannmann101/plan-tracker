@@ -6,11 +6,13 @@ import { useItems } from "./useItems";
 import { SANS, MONO, PAGE, INK, MUTE, TEAL, BRICK, LINE, RADIUS_SM } from "./theme";
 import { GlobalStyle, TabBar, Btn } from "./ui";
 import ItemForm from "./ItemForm";
+import Today from "./Today";
 import WeeklyTriage from "./WeeklyTriage";
 import MonthlyCheckin from "./MonthlyCheckin";
 import Trends from "./Trends";
 
 const TABS = [
+  { id: "today", label: "Today" },
   { id: "weekly", label: "Weekly Triage" },
   { id: "monthly", label: "Monthly Check-In" },
   { id: "trends", label: "Trends" },
@@ -18,7 +20,7 @@ const TABS = [
 
 function Shell({ user }) {
   const { items, events, status, saveStatus, refresh, saveItem, deleteItem } = useItems(true);
-  const [tab, setTab] = useState("weekly");
+  const [tab, setTab] = useState("today");
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
 
@@ -78,6 +80,7 @@ function Shell({ user }) {
         {formOpen && (
           <ItemForm
             item={editingItem}
+            currentUserEmail={user.email}
             onSave={handleSave}
             onCancel={() => { setFormOpen(false); setEditingItem(null); }}
           />
@@ -89,6 +92,8 @@ function Shell({ user }) {
           <div style={{ fontFamily: MONO, fontSize: 12.5, color: BRICK, padding: "30px 4px" }}>
             Couldn't load items. <Btn small onClick={refresh} color={BRICK}>Retry</Btn>
           </div>
+        ) : tab === "today" ? (
+          <Today items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
         ) : tab === "weekly" ? (
           <WeeklyTriage items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
         ) : tab === "monthly" ? (

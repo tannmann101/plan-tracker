@@ -37,10 +37,20 @@ export const EFFORTS = [
   { id: "large", label: "Large (multi-session)" },
 ];
 
+// Who owns the item -- the two accounts allow-listed in firestore.rules.
+// Optional (like kind/effort) so items saved before this existed still
+// validate; the form defaults it to whoever's currently signed in.
+export const OWNERS = [
+  { id: "tanner", label: "Tanner" },
+  { id: "rochelle", label: "Rochelle" },
+];
+
 export const domainLabel = (id) => DOMAINS.find((d) => d.id === id)?.label || id;
 export const statusLabel = (id) => STATUSES.find((s) => s.id === id)?.label || id;
 export const kindLabel = (id) => KINDS.find((k) => k.id === id)?.label || id;
 export const effortLabel = (id) => EFFORTS.find((e) => e.id === id)?.label || id;
+export const ownerLabel = (id) => OWNERS.find((o) => o.id === id)?.label || id;
+export const ownerForEmail = (email) => (email === "rochelleygardner@gmail.com" ? "rochelle" : "tanner");
 
 export const todayISO = () => new Date().toISOString().slice(0, 10);
 

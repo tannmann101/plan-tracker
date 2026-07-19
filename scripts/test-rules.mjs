@@ -179,6 +179,21 @@ try {
   check("write with an invalid effort is rejected", false);
 }
 
+// 8c. owner is optional, like kind/effort, but must be in-vocabulary when present
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item15"), validItem({ owner: "rochelle" })));
+  check("write with a valid owner is allowed", true);
+} catch (e) {
+  check("write with a valid owner is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item16"), validItem({ owner: "not-a-real-owner" })));
+  check("write with an invalid owner is rejected", true);
+} catch (e) {
+  check("write with an invalid owner is rejected", false);
+}
+
 // 9. An allowed account can delete an item (manual "graduation" out of this app)
 try {
   await assertSucceeds(deleteDoc(doc(tannerDb, "items/item1")));
