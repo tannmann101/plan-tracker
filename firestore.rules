@@ -20,6 +20,8 @@ service cloud.firestore {
         d.sourceNote is string &&
         d.createdDate is string &&
         (!('targetDate' in d) || d.targetDate is string) &&
+        (!('kind' in d) || d.kind in ['quick-task', 'research-decision', 'waiting-on-someone', 'project']) &&
+        (!('effort' in d) || d.effort in ['quick', 'medium', 'large']) &&
         d.updatedAt is number;
     }
 

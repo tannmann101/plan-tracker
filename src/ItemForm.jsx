@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { DOMAINS, STATUSES, todayISO } from "./constants";
+import { DOMAINS, STATUSES, KINDS, EFFORTS, todayISO } from "./constants";
 import { Btn, Input, Textarea, Select, Card } from "./ui";
 import { MONO, MUTE, INK, LINE } from "./theme";
 
-const BLANK = { title: "", domain: "financial", status: "open", sourceNote: "", targetDate: "" };
+const BLANK = { title: "", domain: "financial", status: "open", kind: "quick-task", effort: "quick", sourceNote: "", targetDate: "" };
 
 // Add/edit form for a single Item. `item` present = editing; absent = creating.
 export default function ItemForm({ item, onSave, onCancel }) {
@@ -21,6 +21,8 @@ export default function ItemForm({ item, onSave, onCancel }) {
         title: form.title.trim(),
         domain: form.domain,
         status: form.status,
+        kind: form.kind,
+        effort: form.effort,
         sourceNote: form.sourceNote.trim(),
         createdDate: item?.createdDate || todayISO(),
         ...(form.targetDate ? { targetDate: form.targetDate } : {}),
@@ -51,6 +53,21 @@ export default function ItemForm({ item, onSave, onCancel }) {
             Status
             <div style={{ marginTop: 4 }}>
               <Select value={form.status} onChange={set("status")} options={STATUSES} width="100%" />
+            </div>
+          </label>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+          <label style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Kind
+            <div style={{ marginTop: 4 }}>
+              <Select value={form.kind} onChange={set("kind")} options={KINDS} width="100%" />
+            </div>
+          </label>
+          <label style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Effort
+            <div style={{ marginTop: 4 }}>
+              <Select value={form.effort} onChange={set("effort")} options={EFFORTS} width="100%" />
             </div>
           </label>
         </div>
