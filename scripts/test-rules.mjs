@@ -189,6 +189,67 @@ try {
   console.error(e.message);
 }
 
+// 10. itemEvents: append-only log written alongside item save/delete
+const validEvent = (overrides = {}) => ({
+  itemId: "item1",
+  domain: "financial",
+  from: null,
+  to: "done",
+  at: Date.now(),
+  ...overrides,
+});
+
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "itemEvents/evt1"), validEvent()));
+  check("allowed account can write a valid item event", true);
+} catch (e) {
+  check("allowed account can write a valid item event", false);
+  console.error(e.message);
+}
+try {
+  const snap = await assertSucceeds(getDoc(doc(rochelleDb, "itemEvents/evt1")));
+  check("allowed account can read item events", snap.data()?.to === "done");
+} catch (e) {
+  check("allowed account can read item events", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "itemEvents/evt2"), validEvent({ domain: "not-a-real-domain" })));
+  check("item event with an invalid domain is rejected", true);
+} catch (e) {
+  check("item event with an invalid domain is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "itemEvents/evt3"), validEvent({ to: "not-a-real-status" })));
+  check("item event with an invalid 'to' is rejected", true);
+} catch (e) {
+  check("item event with an invalid 'to' is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "itemEvents/evt4"), validEvent({ to: "deleted", from: "open" })));
+  check("item event with to='deleted' (item removal) is allowed", true);
+} catch (e) {
+  check("item event with to='deleted' (item removal) is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "itemEvents/evt1"), validEvent({ to: "open" })));
+  check("an existing item event cannot be overwritten (append-only)", true);
+} catch (e) {
+  check("an existing item event cannot be overwritten (append-only)", false);
+}
+try {
+  await assertFails(deleteDoc(doc(tannerDb, "itemEvents/evt1")));
+  check("an item event cannot be deleted", true);
+} catch (e) {
+  check("an item event cannot be deleted", false);
+}
+try {
+  await assertFails(setDoc(doc(strangerDb, "itemEvents/evt5"), validEvent()));
+  check("non-allow-listed account cannot write item events", true);
+} catch (e) {
+  check("non-allow-listed account cannot write item events", false);
+}
+
 await testEnv.cleanup();
 
 if (failures > 0) {
