@@ -211,6 +211,13 @@ try {
   check("write with new statuses (scheduled, needs-review) is allowed", false);
   console.error(e.message);
 }
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item21"), validItem({ kind: "regular-task" })));
+  check("write with new kind (regular-task) is allowed", true);
+} catch (e) {
+  check("write with new kind (regular-task) is allowed", false);
+  console.error(e.message);
+}
 
 // 9. An allowed account can delete an item (manual "graduation" out of this app)
 try {
