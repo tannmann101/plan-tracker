@@ -15,12 +15,12 @@ const useEmulator = import.meta.env.VITE_USE_FIREBASE_EMULATOR === "true";
 const firebaseConfig = useEmulator
   ? { apiKey: "demo-key", authDomain: "localhost", projectId: "demo-plan-tracker" }
   : {
-      apiKey: "REPLACE_ME",
-      authDomain: "REPLACE_ME.firebaseapp.com",
-      projectId: "REPLACE_ME",
-      storageBucket: "REPLACE_ME.firebasestorage.app",
-      messagingSenderId: "REPLACE_ME",
-      appId: "REPLACE_ME",
+      apiKey: "AIzaSyBtYX2TUx3NrvOI26wj9NPcMcvGZX_RZL8",
+      authDomain: "plan-tracker-eb0c3.firebaseapp.com",
+      projectId: "plan-tracker-eb0c3",
+      storageBucket: "plan-tracker-eb0c3.firebasestorage.app",
+      messagingSenderId: "886472751358",
+      appId: "1:886472751358:web:2073f9694edb367c388daf",
     };
 
 export const app = initializeApp(firebaseConfig);
