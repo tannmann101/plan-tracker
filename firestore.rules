@@ -13,15 +13,15 @@ service cloud.firestore {
     // isValidItem and isValidEvent) so the item schema and the event log
     // schema can't quietly drift apart.
     function domainValues() {
-      return ['financial', 'material', 'health-fitness', 'vocational-career', 'relational', 'cross-domain'];
+      return ['financial', 'material', 'health-fitness', 'vocational-career', 'relational', 'chores', 'cross-domain', 'other'];
     }
 
     function statusValues() {
-      return ['open', 'in-progress', 'done', 'dropped'];
+      return ['open', 'in-progress', 'scheduled', 'needs-review', 'done', 'dropped'];
     }
 
     function kindValues() {
-      return ['quick-task', 'research-decision', 'waiting-on-someone', 'project'];
+      return ['one-off', 'quick-task', 'question-mark', 'project'];
     }
 
     function effortValues() {
@@ -57,7 +57,7 @@ service cloud.firestore {
     function isValidEvent(d) {
       return d.itemId is string &&
         d.domain in domainValues() &&
-        d.to in ['open', 'in-progress', 'done', 'dropped', 'deleted'] &&
+        (d.to == 'deleted' || d.to in statusValues()) &&
         (d.from == null || d.from in statusValues()) &&
         (!('kind' in d) || d.kind in kindValues()) &&
         (!('effort' in d) || d.effort in effortValues()) &&

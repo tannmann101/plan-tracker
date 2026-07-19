@@ -34,6 +34,7 @@ export const softTint = (color) => {
   if (color === GOLD) return GOLD_SOFT;
   if (color === BLUE) return BLUE_SOFT;
   if (color === PURPLE) return PURPLE_SOFT;
+  if (color === OLIVE) return OLIVE_SOFT;
   return HEAD_BG;
 };
 
@@ -42,6 +43,8 @@ export const BLUE = "#2E6E8E";
 export const BLUE_SOFT = "#E1EBF0";
 export const PURPLE = "#6B4FA0";
 export const PURPLE_SOFT = "#EAE4F3";
+export const OLIVE = "#5C6B2C";
+export const OLIVE_SOFT = "#E7EAD9";
 
 export const DOMAIN_COLORS = {
   financial: TEAL,
@@ -49,14 +52,22 @@ export const DOMAIN_COLORS = {
   "health-fitness": BLUE,
   "vocational-career": PURPLE,
   relational: BRICK,
+  chores: OLIVE,
   "cross-domain": MUTE,
+  other: MUTE,
 };
 
 // Status colors -- separate palette (reuses only neutrals + teal/brick, never
-// blue/purple/gold) so a status pill never reads as a domain pill.
+// blue/purple/gold) so a status pill never reads as a domain pill. Scheduled
+// and needs-review reuse open/dropped's colors rather than adding new hues --
+// status isn't rendered as a distinguishing colored pill anywhere yet (only
+// STATUS_COLORS.dropped drives the delete button), so there's nothing to
+// visually collide with today.
 export const STATUS_COLORS = {
   open: MUTE,
   "in-progress": TEAL,
+  scheduled: MUTE,
+  "needs-review": BRICK,
   done: INK,
   dropped: BRICK,
 };

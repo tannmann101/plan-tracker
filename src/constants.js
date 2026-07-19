@@ -8,27 +8,34 @@ export const DOMAINS = [
   { id: "health-fitness", label: "Health & Fitness" },
   { id: "vocational-career", label: "Vocational / Career" },
   { id: "relational", label: "Relational" },
+  { id: "chores", label: "Chores" },
   { id: "cross-domain", label: "Cross-Domain" },
+  { id: "other", label: "Other" },
 ];
 
 export const STATUSES = [
   { id: "open", label: "Open" },
   { id: "in-progress", label: "In Progress" },
+  { id: "scheduled", label: "Scheduled" },
+  { id: "needs-review", label: "Needs Review" },
   { id: "done", label: "Done" },
   { id: "dropped", label: "Dropped" },
 ];
 
-export const OPEN_STATUSES = ["open", "in-progress"];
+// Statuses that still need attention -- surfaced in Weekly Triage, Today,
+// and the staleness check below. Scheduled and needs-review are both
+// still-actionable, unresolved states, same as open/in-progress.
+export const OPEN_STATUSES = ["open", "in-progress", "scheduled", "needs-review"];
 
 // Kind and effort are a second axis, orthogonal to domain -- what sort of
 // work this is and how big it is, not which area of life it belongs to.
 // Both optional (like targetDate) so items saved before this existed still
 // validate; the form always sets a default on new items.
 export const KINDS = [
+  { id: "one-off", label: "One-off" },
   { id: "quick-task", label: "Quick Task" },
-  { id: "research-decision", label: "Needs Research/Decision" },
-  { id: "waiting-on-someone", label: "Waiting on Someone" },
-  { id: "project", label: "Bigger Project" },
+  { id: "question-mark", label: "Question Mark" },
+  { id: "project", label: "Project" },
 ];
 
 export const EFFORTS = [

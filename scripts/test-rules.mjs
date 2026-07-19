@@ -160,7 +160,7 @@ try {
 
 // 8b. kind/effort are optional, like targetDate, but must be in-vocabulary when present
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item12"), validItem({ kind: "research-decision", effort: "large" })));
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item12"), validItem({ kind: "question-mark", effort: "large" })));
   check("write with valid kind/effort is allowed", true);
 } catch (e) {
   check("write with valid kind/effort is allowed", false);
@@ -192,6 +192,24 @@ try {
   check("write with an invalid owner is rejected", true);
 } catch (e) {
   check("write with an invalid owner is rejected", false);
+}
+
+// 8d. newly added domain/status vocabulary
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item17"), validItem({ domain: "chores" })));
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item18"), validItem({ domain: "other" })));
+  check("write with new domains (chores, other) is allowed", true);
+} catch (e) {
+  check("write with new domains (chores, other) is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item19"), validItem({ status: "scheduled" })));
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item20"), validItem({ status: "needs-review" })));
+  check("write with new statuses (scheduled, needs-review) is allowed", true);
+} catch (e) {
+  check("write with new statuses (scheduled, needs-review) is allowed", false);
+  console.error(e.message);
 }
 
 // 9. An allowed account can delete an item (manual "graduation" out of this app)
