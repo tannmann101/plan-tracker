@@ -9,25 +9,64 @@ service cloud.firestore {
         ];
     }
 
+    // Shared vocabularies -- kept as functions (rather than duplicated in
+    // isValidItem and isValidEvent) so the item schema and the event log
+    // schema can't quietly drift apart.
+    function domainValues() {
+      return ['financial', 'material', 'health-fitness', 'vocational-career', 'relational', 'cross-domain'];
+    }
+
+    function statusValues() {
+      return ['open', 'in-progress', 'done', 'dropped'];
+    }
+
+    function kindValues() {
+      return ['quick-task', 'research-decision', 'waiting-on-someone', 'project'];
+    }
+
+    function effortValues() {
+      return ['quick', 'medium', 'large'];
+    }
+
     // Each Item is its own document (no growing-array document to split, unlike
     // the ledger app) -- checks required field *types* so a client bug or stray
     // manual edit can't corrupt another item, without locking the schema down
     // so hard that it can't evolve.
     function isValidItem(d) {
       return d.title is string && d.title.size() > 0 &&
-        d.domain in ['financial', 'material', 'health-fitness', 'vocational-career', 'relational', 'cross-domain'] &&
-        d.status in ['open', 'in-progress', 'done', 'dropped'] &&
+        d.domain in domainValues() &&
+        d.status in statusValues() &&
         d.sourceNote is string &&
         d.createdDate is string &&
         (!('targetDate' in d) || d.targetDate is string) &&
-        (!('kind' in d) || d.kind in ['quick-task', 'research-decision', 'waiting-on-someone', 'project']) &&
-        (!('effort' in d) || d.effort in ['quick', 'medium', 'large']) &&
+        (!('kind' in d) || d.kind in kindValues()) &&
+        (!('effort' in d) || d.effort in effortValues()) &&
         d.updatedAt is number;
+    }
+
+    // itemEvents is an append-only log of status transitions, written
+    // alongside every item save/delete so trends can be reconstructed later
+    // without a scheduled snapshot job. "to" additionally allows 'deleted'
+    // (item removal, e.g. manual graduation to a Push) which never appears
+    // as an item's own status.
+    function isValidEvent(d) {
+      return d.itemId is string &&
+        d.domain in domainValues() &&
+        d.to in ['open', 'in-progress', 'done', 'dropped', 'deleted'] &&
+        (d.from == null || d.from in statusValues()) &&
+        (!('kind' in d) || d.kind in kindValues()) &&
+        (!('effort' in d) || d.effort in effortValues()) &&
+        d.at is number;
     }
 
     match /items/{itemId} {
       allow read, delete: if isAllowed();
       allow create, update: if isAllowed() && isValidItem(request.resource.data);
+    }
+
+    match /itemEvents/{eventId} {
+      allow read: if isAllowed();
+      allow create: if isAllowed() && isValidEvent(request.resource.data);
     }
   }
 }

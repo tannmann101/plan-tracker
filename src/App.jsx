@@ -8,14 +8,16 @@ import { GlobalStyle, TabBar, Btn } from "./ui";
 import ItemForm from "./ItemForm";
 import WeeklyTriage from "./WeeklyTriage";
 import MonthlyCheckin from "./MonthlyCheckin";
+import Trends from "./Trends";
 
 const TABS = [
   { id: "weekly", label: "Weekly Triage" },
   { id: "monthly", label: "Monthly Check-In" },
+  { id: "trends", label: "Trends" },
 ];
 
 function Shell({ user }) {
-  const { items, status, saveStatus, refresh, saveItem, deleteItem } = useItems(true);
+  const { items, events, status, saveStatus, refresh, saveItem, deleteItem } = useItems(true);
   const [tab, setTab] = useState("weekly");
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -89,8 +91,10 @@ function Shell({ user }) {
           </div>
         ) : tab === "weekly" ? (
           <WeeklyTriage items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
-        ) : (
+        ) : tab === "monthly" ? (
           <MonthlyCheckin items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
+        ) : (
+          <Trends items={items || []} events={events || []} />
         )}
       </div>
     </div>
