@@ -34,6 +34,7 @@ export const OPEN_STATUSES = ["open", "in-progress", "scheduled", "needs-review"
 export const KINDS = [
   { id: "one-off", label: "One-off" },
   { id: "quick-task", label: "Quick Task" },
+  { id: "regular-task", label: "Regular Task" },
   { id: "question-mark", label: "Question Mark" },
   { id: "project", label: "Project" },
 ];

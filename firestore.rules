@@ -21,7 +21,7 @@ service cloud.firestore {
     }
 
     function kindValues() {
-      return ['one-off', 'quick-task', 'question-mark', 'project'];
+      return ['one-off', 'quick-task', 'regular-task', 'question-mark', 'project'];
     }
 
     function effortValues() {
