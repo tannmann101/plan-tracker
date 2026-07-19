@@ -158,6 +158,27 @@ try {
   check("write with a wrong-typed targetDate is rejected", false);
 }
 
+// 8b. kind/effort are optional, like targetDate, but must be in-vocabulary when present
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item12"), validItem({ kind: "research-decision", effort: "large" })));
+  check("write with valid kind/effort is allowed", true);
+} catch (e) {
+  check("write with valid kind/effort is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item13"), validItem({ kind: "not-a-real-kind" })));
+  check("write with an invalid kind is rejected", true);
+} catch (e) {
+  check("write with an invalid kind is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item14"), validItem({ effort: "not-a-real-effort" })));
+  check("write with an invalid effort is rejected", true);
+} catch (e) {
+  check("write with an invalid effort is rejected", false);
+}
+
 // 9. An allowed account can delete an item (manual "graduation" out of this app)
 try {
   await assertSucceeds(deleteDoc(doc(tannerDb, "items/item1")));

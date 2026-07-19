@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { STATUSES, domainLabel, isStale } from "./constants";
+import { STATUSES, domainLabel, kindLabel, effortLabel, isStale } from "./constants";
 import { DOMAIN_COLORS, STATUS_COLORS, BRICK, BRICK_SOFT, softTint, MONO, SANS, MUTE, MUTE_SOFT, INK, LINE } from "./theme";
 import { Pill, Select, Btn } from "./ui";
 
@@ -21,6 +21,7 @@ export default function ItemRow({ item, showDomain = true, onEdit, onStatusChang
         )}
         <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE_SOFT, marginTop: 3 }}>
           created {item.createdDate}{item.targetDate ? ` · target ${item.targetDate}` : ""}
+          {item.kind ? ` · ${kindLabel(item.kind)}` : ""}{item.effort ? ` · ${effortLabel(item.effort)}` : ""}
         </div>
       </div>
 
