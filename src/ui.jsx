@@ -52,10 +52,10 @@ export function Btn({ onClick, children, color = TEAL, small, primary, disabled,
         border: `1px solid ${color}`,
         background: primary ? color : "transparent",
         color: primary ? "#FFFFFF" : color,
-        fontFamily: MONO,
-        fontWeight: primary ? 600 : 400,
-        fontSize: small ? 11 : 12,
-        padding: small ? "4px 8px" : "6px 13px",
+        fontFamily: SANS,
+        fontWeight: primary ? 600 : 500,
+        fontSize: small ? 12 : 13,
+        padding: small ? "5px 10px" : "7px 15px",
         borderRadius: RADIUS_SM,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.5 : 1,
@@ -108,10 +108,16 @@ export function Select({ value, onChange, options, width }) {
   );
 }
 
-// Segmented-control style page/view switcher.
+// Pill-style page/view switcher -- tabs span the full width of their
+// container so the bar reads as one rounded control, not a row of buttons.
+// `icon` is optional per-tab (a small inline SVG) so nav reads as a proper
+// app shell rather than plain text links.
 export function TabBar({ tabs, active, onChange }) {
   return (
-    <div style={{ display: "inline-flex", gap: 2, padding: 3, background: HEAD_BG, borderRadius: RADIUS, border: `1px solid ${LINE}` }}>
+    <div style={{
+      display: "inline-flex", gap: 3, padding: 4, background: HEAD_BG, borderRadius: 999,
+      boxShadow: SHADOW_CARD, backdropFilter: "blur(6px)", maxWidth: "100%", overflowX: "auto",
+    }}>
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -119,11 +125,13 @@ export function TabBar({ tabs, active, onChange }) {
           className="ui-tab"
           onClick={() => onChange(t.id)}
           style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
             border: "none", background: active === t.id ? BG : "transparent", color: active === t.id ? INK : MUTE,
-            fontFamily: MONO, fontSize: 12, fontWeight: active === t.id ? 600 : 400, padding: "6px 15px",
-            borderRadius: RADIUS_SM, cursor: "pointer", boxShadow: active === t.id ? "0 1px 3px rgba(24,26,23,0.14)" : "none",
+            fontFamily: SANS, fontSize: 13, fontWeight: active === t.id ? 600 : 500, padding: "9px 14px",
+            borderRadius: 999, cursor: "pointer", boxShadow: active === t.id ? "0 1px 4px rgba(24,26,23,0.16)" : "none",
+            whiteSpace: "nowrap", transition: `background ${TRANSITION}, box-shadow ${TRANSITION}`,
           }}
-        >{t.label}</button>
+        >{t.icon}{t.label}</button>
       ))}
     </div>
   );
