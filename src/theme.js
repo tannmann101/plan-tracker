@@ -57,17 +57,14 @@ export const DOMAIN_COLORS = {
   other: MUTE,
 };
 
-// Status colors -- separate palette (reuses only neutrals + teal/brick, never
-// blue/purple/gold) so a status pill never reads as a domain pill. Scheduled
-// and needs-review reuse open/dropped's colors rather than adding new hues --
-// status isn't rendered as a distinguishing colored pill anywhere yet (only
-// STATUS_COLORS.dropped drives the delete button), so there's nothing to
-// visually collide with today.
+// Status colors -- each status gets its own hue so a stacked/legend chart
+// (Overview's status mix) can tell all six apart at a glance; ItemRow's
+// delete button also keys off STATUS_COLORS.dropped.
 export const STATUS_COLORS = {
-  open: MUTE,
+  open: MUTE_SOFT,
   "in-progress": TEAL,
-  scheduled: MUTE,
-  "needs-review": BRICK,
+  scheduled: BLUE,
+  "needs-review": GOLD,
   done: INK,
   dropped: BRICK,
 };

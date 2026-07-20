@@ -9,12 +9,14 @@ import ItemForm from "./ItemForm";
 import Today from "./Today";
 import WeeklyTriage from "./WeeklyTriage";
 import MonthlyCheckin from "./MonthlyCheckin";
+import Overview from "./Overview";
 import Trends from "./Trends";
 
 const TABS = [
   { id: "today", label: "Today" },
   { id: "weekly", label: "Weekly Triage" },
   { id: "monthly", label: "Monthly Check-In" },
+  { id: "overview", label: "Overview" },
   { id: "trends", label: "Trends" },
 ];
 
@@ -98,6 +100,8 @@ function Shell({ user }) {
           <WeeklyTriage items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
         ) : tab === "monthly" ? (
           <MonthlyCheckin items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
+        ) : tab === "overview" ? (
+          <Overview items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
         ) : (
           <Trends items={items || []} events={events || []} />
         )}
