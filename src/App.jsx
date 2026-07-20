@@ -11,13 +11,14 @@ import WeeklyTriage from "./WeeklyTriage";
 import MonthlyCheckin from "./MonthlyCheckin";
 import Overview from "./Overview";
 import Trends from "./Trends";
+import { IconToday, IconTriage, IconCalendar, IconOverview, IconTrends } from "./icons";
 
 const TABS = [
-  { id: "today", label: "Today" },
-  { id: "weekly", label: "Weekly Triage" },
-  { id: "monthly", label: "Monthly Check-In" },
-  { id: "overview", label: "Overview" },
-  { id: "trends", label: "Trends" },
+  { id: "today", label: "Today", icon: <IconToday /> },
+  { id: "weekly", label: "Weekly Triage", icon: <IconTriage /> },
+  { id: "monthly", label: "Monthly Check-In", icon: <IconCalendar /> },
+  { id: "overview", label: "Overview", icon: <IconOverview /> },
+  { id: "trends", label: "Trends", icon: <IconTrends /> },
 ];
 
 function Shell({ user }) {
