@@ -65,8 +65,8 @@ export default function AuthGate({ user, forbidden, children }) {
     return (
       <Centered>
         <div style={{ width: 8, height: 8, borderRadius: "50%", background: TEAL, margin: "0 auto 14px" }} />
-        <h1 style={{ fontFamily: SANS, fontSize: 21, fontWeight: 700, letterSpacing: "-0.01em", margin: "0 0 6px", color: INK }}>3-Year Plan Tracker</h1>
-        <p style={{ fontFamily: MONO, fontSize: 12.5, color: MUTE, margin: "0 0 22px" }}>Sign in to see the shared item list.</p>
+        <h1 style={{ fontFamily: SANS, fontSize: 21, fontWeight: 700, letterSpacing: "-0.01em", margin: "0 0 6px", color: INK }}>Plan Tracker</h1>
+        <p style={{ fontFamily: MONO, fontSize: 12.5, color: MUTE, margin: "0 0 22px" }}>Sign in to see the shared list.</p>
         <GoogleButton onClick={doSignIn} label={signingIn ? "Signing in…" : "Sign in with Google"} />
         {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK, marginTop: 14 }}>{error}</p>}
       </Centered>

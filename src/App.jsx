@@ -6,24 +6,22 @@ import { useItems } from "./useItems";
 import { SANS, MONO, PAGE, INK, MUTE, TEAL, BRICK, LINE, RADIUS_SM } from "./theme";
 import { GlobalStyle, TabBar, Btn } from "./ui";
 import ItemForm from "./ItemForm";
-import Today from "./Today";
-import WeeklyTriage from "./WeeklyTriage";
-import MonthlyCheckin from "./MonthlyCheckin";
+import Plan from "./Plan";
 import Overview from "./Overview";
 import Trends from "./Trends";
-import { IconToday, IconTriage, IconCalendar, IconOverview, IconTrends } from "./icons";
+import Log from "./Log";
+import { IconPlan, IconOverview, IconTrends, IconLog } from "./icons";
 
 const TABS = [
-  { id: "today", label: "Today", icon: <IconToday /> },
-  { id: "weekly", label: "Weekly Triage", icon: <IconTriage /> },
-  { id: "monthly", label: "Monthly Check-In", icon: <IconCalendar /> },
+  { id: "plan", label: "Plan", icon: <IconPlan /> },
   { id: "overview", label: "Overview", icon: <IconOverview /> },
   { id: "trends", label: "Trends", icon: <IconTrends /> },
+  { id: "log", label: "Log", icon: <IconLog /> },
 ];
 
 function Shell({ user }) {
   const { items, events, status, saveStatus, refresh, saveItem, deleteItem } = useItems(true);
-  const [tab, setTab] = useState("today");
+  const [tab, setTab] = useState("plan");
   const [formOpen, setFormOpen] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
 
@@ -57,7 +55,7 @@ function Shell({ user }) {
         <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 22 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 8, height: 8, borderRadius: "50%", background: TEAL }} />
-            <h1 style={{ fontFamily: SANS, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", color: INK, margin: 0 }}>3-Year Plan Tracker</h1>
+            <h1 style={{ fontFamily: SANS, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", color: INK, margin: 0 }}>Plan Tracker</h1>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>{user.email}</span>
@@ -83,6 +81,7 @@ function Shell({ user }) {
         {formOpen && (
           <ItemForm
             item={editingItem}
+            items={items || []}
             currentUserEmail={user.email}
             onSave={handleSave}
             onCancel={() => { setFormOpen(false); setEditingItem(null); }}
@@ -95,16 +94,14 @@ function Shell({ user }) {
           <div style={{ fontFamily: MONO, fontSize: 12.5, color: BRICK, padding: "30px 4px" }}>
             Couldn't load items. <Btn small onClick={refresh} color={BRICK}>Retry</Btn>
           </div>
-        ) : tab === "today" ? (
-          <Today items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
-        ) : tab === "weekly" ? (
-          <WeeklyTriage items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
-        ) : tab === "monthly" ? (
-          <MonthlyCheckin items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
+        ) : tab === "plan" ? (
+          <Plan items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
         ) : tab === "overview" ? (
           <Overview items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
-        ) : (
+        ) : tab === "trends" ? (
           <Trends items={items || []} events={events || []} />
+        ) : (
+          <Log items={items || []} onEdit={openForm} onStatusChange={handleStatusChange} onDelete={handleDelete} />
         )}
       </div>
     </div>

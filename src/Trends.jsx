@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { DOMAINS, KINDS, OPEN_STATUSES, domainLabel, isStale, todayISO } from "./constants";
+import { DOMAINS, TYPES, OPEN_STATUSES, domainLabel, isStale, todayISO, itemType } from "./constants";
 import { DOMAIN_COLORS, MONO, MUTE, INK, LINE, TEAL, BRICK, HEAD_BG } from "./theme";
 import { SectionTitle, Note, Card, Btn } from "./ui";
 
@@ -143,7 +143,7 @@ function buildReport({ items, stats, completedByWeek, droppedByWeek, domainDone 
   const prev4 = completedByWeek.slice(-8, -4).reduce((a, d) => a + d.count, 0);
   const dropped4 = droppedByWeek.slice(-4).reduce((a, d) => a + d.count, 0);
   const byDomainOpen = DOMAINS.map((d) => ({ label: d.label, count: open.filter((i) => i.domain === d.id).length }));
-  const byKindOpen = KINDS.map((k) => ({ label: k.label, count: open.filter((i) => i.kind === k.id).length }));
+  const byTypeOpen = TYPES.map((t) => ({ label: t.label, count: open.filter((i) => itemType(i) === t.id).length }));
 
   const lines = [
     `# Plan Tracker Report -- ${now.toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}`,
@@ -162,8 +162,8 @@ function buildReport({ items, stats, completedByWeek, droppedByWeek, domainDone 
     "## Open items by domain",
     ...byDomainOpen.map((d) => `- ${d.label}: ${d.count}`),
     "",
-    "## Open items by kind",
-    ...byKindOpen.map((k) => `- ${k.label}: ${k.count}`),
+    "## Open items by type",
+    ...byTypeOpen.map((t) => `- ${t.label}: ${t.count}`),
     "",
     "## Completions by domain (last 12 weeks)",
     ...domainDone.map((d) => `- ${d.label}: ${d.count}`),

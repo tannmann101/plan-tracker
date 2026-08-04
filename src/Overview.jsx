@@ -1,5 +1,5 @@
-import { DOMAINS, STATUSES, KINDS, OWNERS, OPEN_STATUSES, isStale, todayISO } from "./constants";
-import { DOMAIN_COLORS, STATUS_COLORS, MONO, MUTE, MUTE_SOFT, INK, LINE, TEAL, GOLD } from "./theme";
+import { DOMAINS, STATUSES, TYPES, OWNERS, OPEN_STATUSES, isStale, todayISO, itemType, descendantProgress, parentTitleOf } from "./constants";
+import { DOMAIN_COLORS, STATUS_COLORS, MONO, SANS, MUTE, MUTE_SOFT, INK, LINE, TEAL, GOLD } from "./theme";
 import { SectionTitle, Note, Card } from "./ui";
 import ItemRow from "./ItemRow";
 
@@ -21,7 +21,7 @@ function StatTile({ label, value, sub, flag }) {
   );
 }
 
-// Shared horizontal bar list -- used for the domain, kind, and owner
+// Shared horizontal bar list -- used for the domain, type, and owner
 // breakdowns below. Every bar carries a direct text label + count (never
 // color alone), same convention as Trends' DomainBarChart.
 function HBarChart({ rows, colorFor, labelWidth = 150 }) {
@@ -89,10 +89,11 @@ export default function Overview({ items, onEdit, onStatusChange, onDelete }) {
 
   const statusCounts = STATUSES.map((s) => ({ ...s, count: items.filter((i) => i.status === s.id).length }));
   const domainRows = DOMAINS.map((d) => ({ id: d.id, label: d.label, count: openNow.filter((i) => i.domain === d.id).length }));
-  const kindRows = KINDS
-    .map((k) => ({ id: k.id, label: k.label, count: openNow.filter((i) => i.kind === k.id).length }))
+  const typeRows = TYPES
+    .map((t) => ({ id: t.id, label: t.label, count: openNow.filter((i) => itemType(i) === t.id).length }))
     .sort((a, b) => b.count - a.count);
   const ownerRows = OWNERS.map((o) => ({ id: o.id, label: o.label, count: openNow.filter((i) => i.owner === o.id).length }));
+  const goals = items.filter((i) => itemType(i) === "goal").map((g) => ({ ...g, progress: descendantProgress(items, g.id) }));
 
   return (
     <div>
@@ -122,9 +123,9 @@ export default function Overview({ items, onEdit, onStatusChange, onDelete }) {
 
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginBottom: 8, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-          Open by kind ({openNow.length})
+          Open by type ({openNow.length})
         </div>
-        <HBarChart rows={kindRows} colorFor={() => TEAL} labelWidth={120} />
+        <HBarChart rows={typeRows} colorFor={() => TEAL} labelWidth={120} />
       </Card>
 
       <Card style={{ marginTop: 14 }}>
@@ -134,6 +135,31 @@ export default function Overview({ items, onEdit, onStatusChange, onDelete }) {
         <HBarChart rows={ownerRows} colorFor={(r) => OWNER_COLORS[r.id]} labelWidth={90} />
       </Card>
 
+      {goals.length > 0 && (
+        <Card style={{ marginTop: 14 }}>
+          <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginBottom: 10, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+            Goal progress ({goals.length})
+          </div>
+          <div style={{ display: "grid", gap: 10 }}>
+            {goals.map((g) => (
+              <div key={g.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontFamily: SANS, fontSize: 12.5, color: INK, marginBottom: 4 }}>
+                  <span>{g.title}</span>
+                  <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE, flex: "none" }}>
+                    {g.progress.total ? `${g.progress.done}/${g.progress.total}` : "no linked plans yet"}
+                  </span>
+                </div>
+                {g.progress.total > 0 && (
+                  <div style={{ height: 6, borderRadius: 3, background: LINE, overflow: "hidden" }}>
+                    <div style={{ height: "100%", width: `${(g.progress.done / g.progress.total) * 100}%`, background: TEAL, borderRadius: 3 }} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       <SectionTitle note={`${stale.length} stale`}>Stale</SectionTitle>
       <Note>Open or in-progress items untouched for 14+ days, oldest first.</Note>
       <div style={{ marginTop: 14 }}>
@@ -141,7 +167,7 @@ export default function Overview({ items, onEdit, onStatusChange, onDelete }) {
           <div style={{ fontFamily: MONO, fontSize: 12.5, color: MUTE, padding: "20px 4px" }}>Nothing stale -- everything open has moved in the last two weeks.</div>
         ) : (
           stale.map((item) => (
-            <ItemRow key={item.id} item={item} onEdit={onEdit} onStatusChange={onStatusChange} onDelete={onDelete} />
+            <ItemRow key={item.id} item={item} parentTitle={parentTitleOf(items, item)} onEdit={onEdit} onStatusChange={onStatusChange} onDelete={onDelete} />
           ))
         )}
       </div>

@@ -158,19 +158,19 @@ try {
   check("write with a wrong-typed targetDate is rejected", false);
 }
 
-// 8b. kind/effort are optional, like targetDate, but must be in-vocabulary when present
+// 8b. type/effort are optional, like targetDate, but must be in-vocabulary when present
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item12"), validItem({ kind: "question-mark", effort: "large" })));
-  check("write with valid kind/effort is allowed", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item12"), validItem({ type: "goal", effort: "large" })));
+  check("write with valid type/effort is allowed", true);
 } catch (e) {
-  check("write with valid kind/effort is allowed", false);
+  check("write with valid type/effort is allowed", false);
   console.error(e.message);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "items/item13"), validItem({ kind: "not-a-real-kind" })));
-  check("write with an invalid kind is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "items/item13"), validItem({ type: "not-a-real-type" })));
+  check("write with an invalid type is rejected", true);
 } catch (e) {
-  check("write with an invalid kind is rejected", false);
+  check("write with an invalid type is rejected", false);
 }
 try {
   await assertFails(setDoc(doc(tannerDb, "items/item14"), validItem({ effort: "not-a-real-effort" })));
@@ -179,7 +179,37 @@ try {
   check("write with an invalid effort is rejected", false);
 }
 
-// 8c. owner is optional, like kind/effort, but must be in-vocabulary when present
+// 8b2. parentId is optional, must be a string when present
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item12b"), validItem({ type: "task", parentId: "item12" })));
+  check("write with a valid parentId is allowed", true);
+} catch (e) {
+  check("write with a valid parentId is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item12c"), validItem({ parentId: 12345 })));
+  check("write with a wrong-typed parentId is rejected", true);
+} catch (e) {
+  check("write with a wrong-typed parentId is rejected", false);
+}
+
+// 8b3. definitionOfDone is optional (Plan-specific), must be a string when present
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item12d"), validItem({ type: "plan", definitionOfDone: "Every account rolled into the new provider." })));
+  check("write with a valid definitionOfDone is allowed", true);
+} catch (e) {
+  check("write with a valid definitionOfDone is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item12e"), validItem({ definitionOfDone: 12345 })));
+  check("write with a wrong-typed definitionOfDone is rejected", true);
+} catch (e) {
+  check("write with a wrong-typed definitionOfDone is rejected", false);
+}
+
+// 8c. owner is optional, like type/effort, but must be in-vocabulary when present
 try {
   await assertSucceeds(setDoc(doc(tannerDb, "items/item15"), validItem({ owner: "rochelle" })));
   check("write with a valid owner is allowed", true);
@@ -212,10 +242,10 @@ try {
   console.error(e.message);
 }
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item21"), validItem({ kind: "regular-task" })));
-  check("write with new kind (regular-task) is allowed", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item21"), validItem({ type: "plan" })));
+  check("write with type (plan) is allowed", true);
 } catch (e) {
-  check("write with new kind (regular-task) is allowed", false);
+  check("write with type (plan) is allowed", false);
   console.error(e.message);
 }
 
@@ -263,6 +293,19 @@ try {
   check("item event with an invalid 'to' is rejected", true);
 } catch (e) {
   check("item event with an invalid 'to' is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "itemEvents/evt3b"), validEvent({ type: "goal" })));
+  check("item event with a valid type is allowed", true);
+} catch (e) {
+  check("item event with a valid type is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "itemEvents/evt3c"), validEvent({ type: "not-a-real-type" })));
+  check("item event with an invalid type is rejected", true);
+} catch (e) {
+  check("item event with an invalid type is rejected", false);
 }
 try {
   await assertSucceeds(setDoc(doc(tannerDb, "itemEvents/evt4"), validEvent({ to: "deleted", from: "open" })));

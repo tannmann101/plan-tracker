@@ -10,9 +10,9 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: '3-Year Plan Tracker',
+        name: 'Plan Tracker',
         short_name: 'Plan Tracker',
-        description: 'Shared goal/task intake for a household 3-year plan',
+        description: 'A shared task, plan, and goal tracker across day, week, month, quarter, and year horizons.',
         theme_color: '#1A1A1A',
         background_color: '#F6F6F4',
         display: 'standalone',

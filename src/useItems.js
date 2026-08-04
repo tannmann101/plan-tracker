@@ -63,7 +63,7 @@ export function useItems(enabled) {
         await logEvent({
           itemId: docId,
           domain: payload.domain,
-          ...(payload.kind ? { kind: payload.kind } : {}),
+          ...(payload.type ? { type: payload.type } : {}),
           ...(payload.effort ? { effort: payload.effort } : {}),
           from: prev ? prev.status : null,
           to: payload.status,
@@ -95,7 +95,7 @@ export function useItems(enabled) {
         await logEvent({
           itemId: id,
           domain: prev.domain,
-          ...(prev.kind ? { kind: prev.kind } : {}),
+          ...(prev.type ? { type: prev.type } : {}),
           ...(prev.effort ? { effort: prev.effort } : {}),
           from: prev.status,
           to: "deleted",

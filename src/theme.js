@@ -72,3 +72,12 @@ export const STATUS_COLORS = {
   done: INK,
   dropped: BRICK,
 };
+
+// Type colors -- deliberately ascending in visual weight (subdued -> primary
+// accent -> gold) so the tier itself reads as a hierarchy at a glance,
+// wherever an item's Type pill shows up.
+export const TYPE_COLORS = {
+  task: MUTE_SOFT,
+  plan: TEAL,
+  goal: GOLD,
+};

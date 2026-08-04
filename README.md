@@ -1,27 +1,37 @@
-# 3-Year Plan Tracker
+# Plan Tracker
 
-A shared intake and triage tool for household goal/task items feeding a
-3-year plan: weekly triage of everything open, and a monthly check-in
-grouped by domain.
+A shared task/plan/goal tracker, reviewed across five horizons — Day, Week,
+Month, Quarter, and Year — with an event log behind it so completions and
+drop-offs can be turned into trends, patterns, and a shareable report over
+time. General-purpose: a household 3-year plan is just one set of tagged
+goals/plans/tasks among whatever else you track here.
 
 ## What this app owns (and doesn't)
 
 This app owns exactly one thing: **Items** — a title, a domain tag
 (Financial / Material / Health-Fitness / Vocational-Career / Relational /
-Cross-Domain), a status (open / in-progress / done / dropped), a source
-note, a created date, and an optional target date.
+Chores / Cross-Domain / Other), a status (open / in-progress / scheduled /
+needs-review / done / dropped), a type (Task / Plan / Goal), an optional
+owner, a source note, a created date, and an optional target date.
 
-It explicitly does **not** own:
+**Type is the hierarchy tier**, not a rigid requirement: a Goal is a
+higher-level aspiration, a Plan is a bounded body of work that serves a goal,
+a Task is the smallest unit of actual work. A task can optionally link to
+the plan it serves, and a plan can optionally link to the goal it serves
+(via the Parent field in the item form) — but every item stands on its own
+by default, with no forced hierarchy. The Quarter and Year horizons surface
+Plans and Goals respectively, each showing their linked children beneath,
+and any linked item shows a "part of X" note wherever else it appears.
 
-- **Pushes** — bounded units of work tied to a 3-year plan's phases. Those
-  live in a separate Phase Roadmap document.
-- **Maintenance procedures** — recurring routines. Those live in Google
-  Calendar.
+Two fields are tier-specific rather than universal: a **Task** carries an
+effort size (Quick / Medium / Large — a work-session estimate that doesn't
+mean much for a multi-week Plan or a Goal); a **Plan** carries an optional
+Definition of Done (what completing that bounded body of work looks like).
+A Goal stays the leanest tier — no execution detail, just what it is, why it
+matters (Source note), and an optional target date.
 
-**Graduation**: when an item becomes bounded and phase-tied enough to become
-a Push, that's a human call, not something this app automates — delete the
-item here once you've manually copied it into the Phase Roadmap. There's no
-auto-migration button on purpose.
+This app explicitly does **not** own recurring maintenance routines — those
+live in Google Calendar.
 
 ## Running locally
 
@@ -44,11 +54,21 @@ listed in `firestore.rules` can read or write.
 
 ## Views
 
-- **Weekly Triage** — every `open` and `in-progress` item, soonest target
-  date first, with inline status changes so you can work through the list
-  without leaving the page.
-- **Monthly Domain Check-In** — every item (any status), grouped into the
-  six domain sections, for a once-a-month walk through each area.
+- **Plan** — one view, five horizons, switched with a Day/Week/Month/
+  Quarter/Year control at the top:
+  - **Day** — open items due today or overdue, most overdue first.
+  - **Week** — every open item, soonest target date first.
+  - **Month** — every item, any status, grouped by domain.
+  - **Quarter** — every Plan-type item, with its linked tasks nested beneath.
+  - **Year** — every Goal-type item, with its linked plans and tasks nested
+    beneath, plus a done/total progress readout.
+- **Overview** — a live snapshot: open/stale/due-this-week counts, a status
+  mix, open-by-domain and open-by-type breakdowns, an owner split, per-goal
+  progress, and the current stale-item list.
+- **Trends** — completion/drop-off trends reconstructed from the event log
+  (weekly chart, per-domain completions, average cycle time), plus a
+  "Generate report" button that compiles all of it into a markdown summary
+  to copy or download — meant for pasting into a Claude Project for planning.
 
 ## Installing as an app
 
