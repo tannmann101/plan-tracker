@@ -113,7 +113,11 @@ old app:
    (or push to `main` with changes under `functions/` -- see
    `.github/workflows/deploy-functions.yml`, which needs a
    `FIREBASE_SERVICE_ACCOUNT` and `ANTHROPIC_API_KEY` repo secret).
-4. **Deploy the updated Firestore rules**:
+4. **Firestore rules deploy automatically** on push to `main` when
+   `firestore.rules` changes -- see
+   `.github/workflows/deploy-firestore-rules.yml` (reuses the same
+   `FIREBASE_SERVICE_ACCOUNT` secret as the functions deploy). To deploy by
+   hand instead:
    ```
    npx firebase-tools deploy --only firestore:rules --project plan-tracker-eb0c3
    ```
