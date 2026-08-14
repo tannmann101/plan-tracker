@@ -1,0 +1,36 @@
+import { Card, Checkbox, Pill } from "../ui";
+import { SANS, MONO, INK, MUTE, DOMAIN_COLORS, softTint } from "../theme";
+import { InfoIcon } from "./InfoModal";
+import { domainLabel } from "../constants";
+
+// Shared card for Tasks and Sessions on Today/This Week/Domains -- always a
+// card (never a bare checklist row), always showing domain + tool_location +
+// notes, with the completion checkbox and "why is this here" trace both
+// directly on the card.
+export function EntityCard({ type, entity, domains, data, onToggleDone, readOnly, note }) {
+  const domainColor = DOMAIN_COLORS[entity.domain] || MUTE;
+  const done = !!entity.done;
+  return (
+    <Card style={{ display: "flex", alignItems: "flex-start", gap: 11, opacity: done ? 0.62 : 1 }}>
+      {!readOnly && onToggleDone ? (
+        <Checkbox checked={done} onChange={(next) => onToggleDone(entity, next)} />
+      ) : (
+        <div style={{ width: 19, height: 19, flex: "none" }} />
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{
+          fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500,
+          textDecoration: done ? "line-through" : "none", lineHeight: 1.4,
+        }}>{entity.title}</div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+          {entity.domain && <Pill color={domainColor} tint={softTint(domainColor)}>{domainLabel(entity.domain, domains)}</Pill>}
+          {type === "session" && entity.toolLocation && <Pill>{entity.toolLocation}</Pill>}
+          {entity.targetDay && <Pill color={MUTE}>{entity.targetDay}</Pill>}
+          {entity.date && <Pill color={MUTE}>{entity.date}</Pill>}
+        </div>
+        {note && <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginTop: 6 }}>{note}</div>}
+      </div>
+      <InfoIcon type={type} entity={entity} data={data} />
+    </Card>
+  );
+}

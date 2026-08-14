@@ -1,83 +1,80 @@
 // theme.js
-// Shared design tokens for the whole app -- single source of truth so every
-// view renders as one consistent, professional system instead of independently
-// drifting inline style sheets. Neutrals match the household ledger app's
-// palette; domain accent colors are unique to this app's six domain tags.
-//
-// PAGE is this app's warm terracotta wash -- the household ledger app uses the
-// same card-on-colored-wash system with a sage-green wash instead, so the two
-// apps read as one family while staying visually distinct at a glance.
+// Shared design tokens for Secretary. Same card-on-colored-wash family as
+// the household ledger (sage wash) and The Workshop (cream + serif), so the
+// three apps read as one household of tools -- but Secretary's own wash is
+// a parchment ivory, its type pairing leans more formal, and its accent is
+// an ink-blue rather than either sibling's teal/rust, matching its quieter,
+// more old-fashioned register (see the Voice note in the project README).
 
 export const MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
-export const SANS = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, Helvetica, Arial, sans-serif";
+export const SANS = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif";
+// Used for the wordmark and section headings only -- everything else stays
+// sans, so the serif reads as a considered accent, not a full period pastiche.
+export const SERIF = "'Source Serif 4', 'Iowan Old Style', Palatino, Georgia, serif";
 
 export const BG = "#FFFFFF";
 export const CARD = "#FFFFFF";
-export const PAGE = "#E3CCC1";
-export const INK = "#181A17";
-export const MUTE = "#68685F";
-export const MUTE_SOFT = "#9A9A90";
-export const LINE = "#E3E2D9";
-export const HEAD_BG = "rgba(255,255,255,0.55)";
+export const PAGE = "#F2EEE3";
+export const INK = "#242220";
+export const MUTE = "#7C7568";
+export const MUTE_SOFT = "#A8A092";
+export const LINE = "#E4DECC";
+export const HEAD_BG = "#EAE3D1";
 
-export const TEAL = "#1F5C4F";
-export const TEAL_SOFT = "#E2EEE9";
-export const BRICK = "#A23F2A";
-export const BRICK_SOFT = "#F4E4DE";
-export const GOLD = "#8C6410";
-export const GOLD_SOFT = "#F1E7D0";
+// Primary accent -- an ink-blue standing in for a fountain pen, distinct
+// from both sibling apps' teal/rust accents.
+export const INKBLUE = "#2E4A5E";
+export const INKBLUE_SOFT = "#DEE6EA";
+export const BRASS = "#96702E";
+export const BRASS_SOFT = "#EFE3CC";
+export const BRICK = "#8B3A2B";
+export const BRICK_SOFT = "#F1DCD4";
+export const MOSS = "#4F6B4A";
+export const MOSS_SOFT = "#DFE6DA";
+export const PLUM = "#5B4570";
+export const PLUM_SOFT = "#E5DFEC";
+export const TERRACOTTA = "#9C5B3E";
+export const TERRACOTTA_SOFT = "#EFDDD1";
+export const SLATE = "#55606B";
+export const SLATE_SOFT = "#E1E4E7";
 
-export const RADIUS = 16;
-export const RADIUS_SM = 10;
-export const SHADOW_CARD = "0 2px 6px rgba(24,26,23,0.06), 0 14px 32px rgba(24,26,23,0.10)";
-export const TRANSITION = "120ms ease";
+export const RADIUS = 12;
+export const RADIUS_SM = 8;
+export const SHADOW_CARD = "0 1px 2px rgba(36,34,32,0.05), 0 8px 22px rgba(36,34,32,0.07)";
+export const TRANSITION = "130ms ease";
 
 export const softTint = (color) => {
-  if (color === TEAL) return TEAL_SOFT;
+  if (color === INKBLUE) return INKBLUE_SOFT;
+  if (color === BRASS) return BRASS_SOFT;
   if (color === BRICK) return BRICK_SOFT;
-  if (color === GOLD) return GOLD_SOFT;
-  if (color === BLUE) return BLUE_SOFT;
-  if (color === PURPLE) return PURPLE_SOFT;
-  if (color === OLIVE) return OLIVE_SOFT;
+  if (color === MOSS) return MOSS_SOFT;
+  if (color === PLUM) return PLUM_SOFT;
+  if (color === TERRACOTTA) return TERRACOTTA_SOFT;
+  if (color === SLATE) return SLATE_SOFT;
   return HEAD_BG;
 };
 
-// Domain accent colors -- one per domain tag, distinct from status colors below.
-export const BLUE = "#2E6E8E";
-export const BLUE_SOFT = "#E1EBF0";
-export const PURPLE = "#6B4FA0";
-export const PURPLE_SOFT = "#EAE4F3";
-export const OLIVE = "#5C6B2C";
-export const OLIVE_SOFT = "#E7EAD9";
-
+// One accent per domain -- distinct from the lifecycle-status palette below
+// so a domain pill never reads as a status pill.
 export const DOMAIN_COLORS = {
-  financial: TEAL,
-  material: GOLD,
-  "health-fitness": BLUE,
-  "vocational-career": PURPLE,
-  relational: BRICK,
-  chores: OLIVE,
-  "cross-domain": MUTE,
-  other: MUTE,
+  finances: MOSS,
+  material: BRASS,
+  teacher: PLUM,
+  "tech-admin": SLATE,
+  catchall: TERRACOTTA,
 };
 
-// Status colors -- each status gets its own hue so a stacked/legend chart
-// (Overview's status mix) can tell all six apart at a glance; ItemRow's
-// delete button also keys off STATUS_COLORS.dropped.
 export const STATUS_COLORS = {
-  open: MUTE_SOFT,
-  "in-progress": TEAL,
-  scheduled: BLUE,
-  "needs-review": GOLD,
-  done: INK,
-  dropped: BRICK,
+  active: INKBLUE,
+  done: MOSS,
+  dropped: MUTE,
 };
 
-// Type colors -- deliberately ascending in visual weight (subdued -> primary
-// accent -> gold) so the tier itself reads as a hierarchy at a glance,
-// wherever an item's Type pill shows up.
-export const TYPE_COLORS = {
-  task: MUTE_SOFT,
-  plan: TEAL,
-  goal: GOLD,
+// Tier accents for the Goals tree -- coarsest (yearly) to finest (weekly),
+// reusing the domain/status palette rather than adding a fourth hue family.
+export const TIER_COLORS = {
+  yearly: INKBLUE,
+  quarterly: PLUM,
+  monthly: BRASS,
+  weekly: MOSS,
 };

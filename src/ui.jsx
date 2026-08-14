@@ -1,8 +1,12 @@
 // ui.jsx
-// Shared visual primitives -- the single place the app's "look" lives, so
-// every view renders as one consistent system.
+// Shared visual primitives -- the single place Secretary's "look" lives, so
+// every screen renders as one consistent system.
 
-import { MONO, SANS, BG, CARD, INK, MUTE, MUTE_SOFT, LINE, HEAD_BG, TEAL, TEAL_SOFT, RADIUS, RADIUS_SM, SHADOW_CARD, TRANSITION } from "./theme";
+import { useState } from "react";
+import {
+  MONO, SANS, SERIF, BG, CARD, INK, MUTE, MUTE_SOFT, LINE, HEAD_BG,
+  INKBLUE, INKBLUE_SOFT, RADIUS, RADIUS_SM, SHADOW_CARD, TRANSITION,
+} from "./theme";
 
 export function GlobalStyle() {
   return (
@@ -13,26 +17,39 @@ export function GlobalStyle() {
       table tbody tr { transition: background ${TRANSITION}; }
       table tbody tr:hover td { background: ${HEAD_BG}; }
       .ui-field { transition: border-color ${TRANSITION}, box-shadow ${TRANSITION}; }
-      .ui-field:focus { outline: none; border-color: ${TEAL}; box-shadow: 0 0 0 3px ${TEAL_SOFT}; }
+      .ui-field:focus { outline: none; border-color: ${INKBLUE}; box-shadow: 0 0 0 3px ${INKBLUE_SOFT}; }
       .ui-btn { transition: background ${TRANSITION}, border-color ${TRANSITION}, filter ${TRANSITION}, transform 60ms ease; }
       .ui-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--btn-c) 14%, transparent); }
-      .ui-btn-primary:hover:not(:disabled) { filter: brightness(0.93); }
+      .ui-btn-primary:hover:not(:disabled) { filter: brightness(0.94); }
       .ui-btn:active:not(:disabled) { transform: translateY(1px); }
       .ui-btn:focus-visible { outline: 2px solid var(--btn-c); outline-offset: 2px; }
-      .ui-tab:hover { background: rgba(24,26,23,0.05); }
-      ::selection { background: ${TEAL_SOFT}; }
+      .ui-tab:hover { background: rgba(36,34,32,0.05); }
+      .ui-card-link:hover { border-color: ${INKBLUE}; box-shadow: 0 1px 2px rgba(36,34,32,0.06), 0 10px 26px rgba(36,34,32,0.1); }
+      .ui-check { transition: background ${TRANSITION}, border-color ${TRANSITION}; cursor: pointer; }
+      .ui-fab { transition: transform 120ms ease, box-shadow ${TRANSITION}; }
+      .ui-fab:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(36,34,32,0.22); }
+      .ui-fab:active { transform: translateY(0); }
+      ::selection { background: ${INKBLUE_SOFT}; }
     `}</style>
+  );
+}
+
+export function Wordmark({ size = 18 }) {
+  return (
+    <span style={{ fontFamily: SERIF, fontSize: size, fontWeight: 600, letterSpacing: "-0.01em", color: INK }}>
+      Secretary
+    </span>
   );
 }
 
 export function SectionTitle({ children, note }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "36px 0 10px", gap: 10, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "32px 0 10px", gap: 10, flexWrap: "wrap" }}>
       <h2 style={{
-        fontFamily: SANS, fontSize: 13.5, fontWeight: 700, color: INK, margin: 0,
-        textTransform: "uppercase", letterSpacing: "0.06em", display: "flex", alignItems: "center", gap: 8,
+        fontFamily: SERIF, fontSize: 15.5, fontWeight: 600, color: INK, margin: 0,
+        letterSpacing: "0.01em", display: "flex", alignItems: "center", gap: 8,
       }}>
-        <span style={{ width: 5, height: 5, borderRadius: "50%", background: TEAL, display: "inline-block", flex: "none" }} />
+        <span style={{ width: 5, height: 5, borderRadius: "50%", background: INKBLUE, display: "inline-block", flex: "none" }} />
         {children}
       </h2>
       {note && <span style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>{note}</span>}
@@ -40,10 +57,11 @@ export function SectionTitle({ children, note }) {
   );
 }
 
-export function Btn({ onClick, children, color = TEAL, small, primary, disabled, type = "button" }) {
+export function Btn({ onClick, children, color = INKBLUE, small, primary, disabled, type = "button", title }) {
   return (
     <button
       type={type}
+      title={title}
       onClick={onClick}
       disabled={disabled}
       className={primary ? "ui-btn ui-btn-primary" : "ui-btn"}
@@ -52,10 +70,10 @@ export function Btn({ onClick, children, color = TEAL, small, primary, disabled,
         border: `1px solid ${color}`,
         background: primary ? color : "transparent",
         color: primary ? "#FFFFFF" : color,
-        fontFamily: SANS,
-        fontWeight: primary ? 600 : 500,
-        fontSize: small ? 12 : 13,
-        padding: small ? "5px 10px" : "7px 15px",
+        fontFamily: MONO,
+        fontWeight: primary ? 600 : 400,
+        fontSize: small ? 11 : 12,
+        padding: small ? "4px 8px" : "6px 13px",
         borderRadius: RADIUS_SM,
         cursor: disabled ? "not-allowed" : "pointer",
         opacity: disabled ? 0.5 : 1,
@@ -65,7 +83,25 @@ export function Btn({ onClick, children, color = TEAL, small, primary, disabled,
   );
 }
 
-export function Input({ value, onChange, placeholder, width, type = "text", onEnter }) {
+export function IconButton({ onClick, children, title, color = MUTE }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="ui-btn"
+      style={{
+        "--btn-c": color, border: `1px solid ${LINE}`, background: BG, color,
+        width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        fontFamily: MONO, fontSize: 12, flex: "none", padding: 0,
+      }}
+    >{children}</button>
+  );
+}
+
+export function Input({ value, onChange, placeholder, width, type = "text", onEnter, autoFocus }) {
   return (
     <input
       className="ui-field"
@@ -74,6 +110,7 @@ export function Input({ value, onChange, placeholder, width, type = "text", onEn
       onKeyDown={(e) => { if (e.key === "Enter" && onEnter) onEnter(); }}
       placeholder={placeholder}
       type={type}
+      autoFocus={autoFocus}
       style={{
         border: `1px solid ${LINE}`, borderRadius: RADIUS_SM, padding: "6px 9px", fontSize: 12.5,
         fontFamily: SANS, color: INK, width: width || "100%", background: BG,
@@ -108,16 +145,10 @@ export function Select({ value, onChange, options, width }) {
   );
 }
 
-// Pill-style page/view switcher -- tabs span the full width of their
-// container so the bar reads as one rounded control, not a row of buttons.
-// `icon` is optional per-tab (a small inline SVG) so nav reads as a proper
-// app shell rather than plain text links.
+// Segmented-control style page/view switcher.
 export function TabBar({ tabs, active, onChange }) {
   return (
-    <div style={{
-      display: "inline-flex", gap: 3, padding: 4, background: HEAD_BG, borderRadius: 999,
-      boxShadow: SHADOW_CARD, backdropFilter: "blur(6px)", maxWidth: "100%", overflowX: "auto",
-    }}>
+    <div style={{ display: "inline-flex", gap: 2, padding: 3, background: HEAD_BG, borderRadius: RADIUS, border: `1px solid ${LINE}` }}>
       {tabs.map((t) => (
         <button
           key={t.id}
@@ -125,24 +156,27 @@ export function TabBar({ tabs, active, onChange }) {
           className="ui-tab"
           onClick={() => onChange(t.id)}
           style={{
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
             border: "none", background: active === t.id ? BG : "transparent", color: active === t.id ? INK : MUTE,
-            fontFamily: SANS, fontSize: 13, fontWeight: active === t.id ? 600 : 500, padding: "9px 14px",
-            borderRadius: 999, cursor: "pointer", boxShadow: active === t.id ? "0 1px 4px rgba(24,26,23,0.16)" : "none",
-            whiteSpace: "nowrap", transition: `background ${TRANSITION}, box-shadow ${TRANSITION}`,
+            fontFamily: MONO, fontSize: 12, fontWeight: active === t.id ? 600 : 400, padding: "6px 15px",
+            borderRadius: RADIUS_SM, cursor: "pointer", boxShadow: active === t.id ? "0 1px 3px rgba(36,34,32,0.14)" : "none",
           }}
-        >{t.icon}{t.label}</button>
+        >{t.label}</button>
       ))}
     </div>
   );
 }
 
-export function Card({ children, style, tint }) {
+export function Card({ children, style, tint, onClick }) {
   return (
-    <div style={{
-      border: `1px solid ${LINE}`, borderRadius: RADIUS, background: tint || CARD,
-      boxShadow: tint ? "none" : SHADOW_CARD, padding: 14, ...style,
-    }}>{children}</div>
+    <div
+      onClick={onClick}
+      className={onClick ? "ui-card-link" : undefined}
+      style={{
+        border: `1px solid ${LINE}`, borderRadius: RADIUS, background: tint || CARD,
+        boxShadow: tint ? "none" : SHADOW_CARD, padding: 14, cursor: onClick ? "pointer" : "default",
+        ...style,
+      }}
+    >{children}</div>
   );
 }
 
@@ -161,5 +195,138 @@ export function Note({ children }) {
     <p style={{ fontFamily: MONO, fontSize: 11, color: MUTE, lineHeight: 1.65, margin: "10px 0 0" }}>
       {children}
     </p>
+  );
+}
+
+// Tap target for completing a Task/Session directly on its card.
+export function Checkbox({ checked, onChange, color = INKBLUE }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      className="ui-check"
+      onClick={(e) => { e.stopPropagation(); onChange(!checked); }}
+      style={{
+        width: 19, height: 19, borderRadius: 5, flex: "none",
+        border: `1.5px solid ${checked ? color : LINE}`, background: checked ? color : BG,
+        display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0,
+      }}
+    >
+      {checked && (
+        <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
+          <path d="M3 8.5L6.5 12L13 4.5" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      )}
+    </button>
+  );
+}
+
+// Modal/overlay for capture-confirmation and other over-the-current-screen
+// interactions -- never a separate page to navigate to.
+export function Modal({ onClose, children, width = 420 }) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, background: "rgba(36,34,32,0.42)", display: "flex",
+        alignItems: "center", justifyContent: "center", padding: 18, zIndex: 100,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          background: CARD, border: `1px solid ${LINE}`, borderRadius: RADIUS, boxShadow: SHADOW_CARD,
+          padding: 22, width: "100%", maxWidth: width, maxHeight: "85vh", overflowY: "auto",
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// Floating action button -- richer capture (photo, etc.) entry point,
+// always reachable regardless of which hub area you're in.
+export function FAB({ onClick, title = "Capture" }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      aria-label={title}
+      className="ui-fab"
+      style={{
+        position: "fixed", right: 20, bottom: 20, width: 52, height: 52, borderRadius: "50%",
+        background: INKBLUE, color: "#fff", border: "none", boxShadow: "0 2px 10px rgba(36,34,32,0.28)",
+        cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40,
+      }}
+    >
+      +
+    </button>
+  );
+}
+
+// AI-assist affordance: generate a draft, review it, then explicitly accept
+// or discard -- Secretary never commits an AI suggestion on its own. Used by
+// both the weekly-meeting import and the capture-triage confirmation step.
+export function AIAssist({ actionLabel = "Ask Secretary", onGenerate, onAccept, renderDraft, autoStart }) {
+  const [draft, setDraft] = useState(null);
+  const [loading, setLoading] = useState(!!autoStart);
+  const [error, setError] = useState(null);
+  const [started, setStarted] = useState(false);
+
+  const generate = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await onGenerate();
+      setDraft(result);
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (autoStart && !started) {
+    setStarted(true);
+    generate();
+  }
+
+  if (draft === null) {
+    return (
+      <div>
+        {!autoStart && (
+          <Btn primary color={INKBLUE} disabled={loading} onClick={generate}>
+            {loading ? "Working…" : actionLabel}
+          </Btn>
+        )}
+        {loading && autoStart && (
+          <p style={{ fontFamily: MONO, fontSize: 12, color: MUTE }}>One moment…</p>
+        )}
+        {error ? (
+          <p style={{ fontFamily: MONO, fontSize: 11.5, color: "#8B3A2B", marginTop: 10 }}>
+            {error} <button type="button" onClick={generate} style={{ border: "none", background: "none", color: INKBLUE, cursor: "pointer", fontFamily: MONO, fontSize: 11.5, textDecoration: "underline" }}>Try again</button>
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>
+        Draft -- review before accepting
+      </div>
+      <div>{renderDraft(draft, { setDraft })}</div>
+      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+        {onAccept ? (
+          <Btn primary color={INKBLUE} onClick={() => { onAccept(draft); setDraft(null); }}>Accept</Btn>
+        ) : null}
+        <Btn onClick={() => setDraft(null)} color={MUTE}>Discard</Btn>
+        <Btn onClick={generate} disabled={loading} color={MUTE}>{loading ? "Working…" : "Try again"}</Btn>
+      </div>
+    </div>
   );
 }
