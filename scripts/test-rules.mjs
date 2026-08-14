@@ -29,265 +29,309 @@ const check = (label, ok) => {
   if (!ok) failures++;
 };
 
-// Mirrors isValidItem() in firestore.rules -- the shape useItems.js writes.
-const validItem = (overrides = {}) => ({
-  title: "Get a will drafted",
-  domain: "financial",
-  status: "open",
-  sourceNote: "",
-  createdDate: "2026-07-19",
-  updatedAt: Date.now(),
+const now = () => Date.now();
+
+const validGoal = (overrides = {}) => ({
+  title: "Clean the house",
+  tier: "monthly",
+  domain: "catchall",
+  owner: "tanner",
+  parentGoalId: null,
+  status: "active",
+  createdAt: now(),
+  updatedAt: now(),
   ...overrides,
 });
 
-// 1. Allowed account can write an item
+const validProject = (overrides = {}) => ({
+  title: "Shine the floors",
+  initiator: "me",
+  familyScope: "touches-family",
+  consentStatus: "pending",
+  status: "active",
+  createdAt: now(),
+  updatedAt: now(),
+  ...overrides,
+});
+
+const validPlan = (overrides = {}) => ({
+  title: "Clean the house -- per room",
+  parentType: "goal",
+  parentId: "goal1",
+  domain: "catchall",
+  sessionIds: [],
+  status: "active",
+  createdAt: now(),
+  updatedAt: now(),
+  ...overrides,
+});
+
+const validSession = (overrides = {}) => ({
+  title: "Clean the kitchen",
+  planId: "plan1",
+  domain: "catchall",
+  contentType: "quick-capture",
+  toolLocation: "Travel notebook",
+  taskIds: [],
+  targetDay: "2026-08-17",
+  done: false,
+  createdAt: now(),
+  updatedAt: now(),
+  ...overrides,
+});
+
+const validTask = (overrides = {}) => ({
+  title: "Clean the shower",
+  sessionId: "session1",
+  done: false,
+  date: "2026-08-17",
+  createdAt: now(),
+  updatedAt: now(),
+  ...overrides,
+});
+
+const validEvent = (overrides = {}) => ({
+  entityType: "task",
+  entityId: "task1",
+  domain: "catchall",
+  from: null,
+  to: "done",
+  at: now(),
+  ...overrides,
+});
+
+const validCapture = (overrides = {}) => ({
+  status: "pending-triage",
+  rawText: "buy air filters",
+  createdAt: now(),
+  ...overrides,
+});
+
+const validConfig = (overrides = {}) => ({
+  entries: [{ id: "scheduling", label: "Scheduling / time-blocking", toolLocation: "Google Calendar" }],
+  ...overrides,
+});
+
+// -- Owner (Tanner) can write every entity type ------------------------
+
+for (const [name, path, payload] of [
+  ["goal", "goals/goal1", validGoal()],
+  ["project", "projects/project1", validProject()],
+  ["plan", "plans/plan1", validPlan()],
+  ["session", "sessions/session1", validSession()],
+  ["task", "tasks/task1", validTask()],
+  ["capture", "captures/capture1", validCapture()],
+  ["config doc", "config/routingTable", validConfig()],
+]) {
+  try {
+    await assertSucceeds(setDoc(doc(tannerDb, path), payload));
+    check(`owner can write a valid ${name}`, true);
+  } catch (e) {
+    check(`owner can write a valid ${name}`, false);
+    console.error(e.message);
+  }
+}
+
+// events are append-only -- owner can create, not overwrite (checked later)
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item1"), validItem()));
-  check("allowed account can write an item", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "events/evt1"), validEvent()));
+  check("owner can write a valid event", true);
 } catch (e) {
-  check("allowed account can write an item", false);
+  check("owner can write a valid event", false);
   console.error(e.message);
 }
 
-// 2. Allowed account can read it back
+// -- Rochelle (allow-listed, but not owner) can read everything, write nothing --
+
+for (const [name, path] of [
+  ["goal", "goals/goal1"],
+  ["project", "projects/project1"],
+  ["plan", "plans/plan1"],
+  ["session", "sessions/session1"],
+  ["task", "tasks/task1"],
+  ["event", "events/evt1"],
+  ["capture", "captures/capture1"],
+  ["config doc", "config/routingTable"],
+]) {
+  try {
+    const snap = await assertSucceeds(getDoc(doc(rochelleDb, path)));
+    check(`viewer (Rochelle) can read ${name}`, snap.exists());
+  } catch (e) {
+    check(`viewer (Rochelle) can read ${name}`, false);
+    console.error(e.message);
+  }
+}
+
 try {
-  const snap = await assertSucceeds(getDoc(doc(tannerDb, "items/item1")));
-  check("allowed account can read", snap.data()?.title === "Get a will drafted");
+  await assertFails(setDoc(doc(rochelleDb, "goals/goal2"), validGoal({ title: "Rochelle's goal" })));
+  check("viewer (Rochelle) cannot create a goal", true);
 } catch (e) {
-  check("allowed account can read", false);
+  check("viewer (Rochelle) cannot create a goal", false);
+}
+try {
+  await assertFails(setDoc(doc(rochelleDb, "goals/goal1"), validGoal({ status: "done" })));
+  check("viewer (Rochelle) cannot update a goal", true);
+} catch (e) {
+  check("viewer (Rochelle) cannot update a goal", false);
+}
+try {
+  await assertFails(deleteDoc(doc(rochelleDb, "tasks/task1")));
+  check("viewer (Rochelle) cannot delete a task", true);
+} catch (e) {
+  check("viewer (Rochelle) cannot delete a task", false);
+}
+
+// -- Listing (refresh-on-open reads) works for both allow-listed accounts --
+
+try {
+  const snap = await assertSucceeds(getDocs(collection(tannerDb, "goals")));
+  check("owner can list the goals collection", snap.size === 1);
+} catch (e) {
+  check("owner can list the goals collection", false);
   console.error(e.message);
 }
 
-// 2b. The second allowed account (Rochelle) can also read and write
-try {
-  await assertSucceeds(setDoc(doc(rochelleDb, "items/item2"), validItem({ title: "Plan anniversary trip", domain: "relational" })));
-  const snap = await assertSucceeds(getDoc(doc(rochelleDb, "items/item2")));
-  check("second allowed account (Rochelle) can read/write", snap.data()?.domain === "relational");
-} catch (e) {
-  check("second allowed account (Rochelle) can read/write", false);
-  console.error(e.message);
-}
+// -- Non-allow-listed / unauthenticated access is rejected --
 
-// 2c. Either account can list the whole shared collection (refresh-on-open read)
 try {
-  const snap = await assertSucceeds(getDocs(collection(tannerDb, "items")));
-  check("allowed account can list all items", snap.size === 2);
-} catch (e) {
-  check("allowed account can list all items", false);
-  console.error(e.message);
-}
-
-// 3. A signed-in but non-allow-listed email is rejected
-try {
-  await assertFails(getDoc(doc(strangerDb, "items/item1")));
+  await assertFails(getDoc(doc(strangerDb, "goals/goal1")));
   check("non-allow-listed account is rejected (read)", true);
 } catch (e) {
   check("non-allow-listed account is rejected (read)", false);
 }
 try {
-  await assertFails(setDoc(doc(strangerDb, "items/item3"), validItem()));
+  await assertFails(setDoc(doc(strangerDb, "goals/goal3"), validGoal()));
   check("non-allow-listed account is rejected (write)", true);
 } catch (e) {
   check("non-allow-listed account is rejected (write)", false);
 }
-
-// 4. Fully unauthenticated access is rejected
 try {
-  await assertFails(getDoc(doc(anonDb, "items/item1")));
+  await assertFails(getDoc(doc(anonDb, "goals/goal1")));
   check("unauthenticated access is rejected", true);
 } catch (e) {
   check("unauthenticated access is rejected", false);
 }
 
-// 5. Schema validation: a write missing a required field is rejected
-try {
-  const { domain: _domain, ...missingDomain } = validItem();
-  await assertFails(setDoc(doc(tannerDb, "items/item4"), missingDomain));
-  check("write missing a required field is rejected", true);
-} catch (e) {
-  check("write missing a required field is rejected", false);
-}
+// -- Schema validation: required fields / vocab / types ------------------
 
-// 6. Schema validation: an out-of-vocabulary domain/status is rejected
 try {
-  await assertFails(setDoc(doc(tannerDb, "items/item5"), validItem({ domain: "not-a-real-domain" })));
-  check("write with an invalid domain is rejected", true);
+  const { domain: _domain, ...missingDomain } = validGoal();
+  await assertFails(setDoc(doc(tannerDb, "goals/goal4"), missingDomain));
+  check("goal missing a required field is rejected", true);
 } catch (e) {
-  check("write with an invalid domain is rejected", false);
+  check("goal missing a required field is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "items/item6"), validItem({ status: "not-a-real-status" })));
-  check("write with an invalid status is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "goals/goal5"), validGoal({ tier: "decade" })));
+  check("goal with an out-of-vocabulary tier is rejected", true);
 } catch (e) {
-  check("write with an invalid status is rejected", false);
-}
-
-// 7. Schema validation: a wrong-typed field is rejected
-try {
-  await assertFails(setDoc(doc(tannerDb, "items/item7"), validItem({ title: 12345 })));
-  check("write with a wrong-typed title is rejected", true);
-} catch (e) {
-  check("write with a wrong-typed title is rejected", false);
+  check("goal with an out-of-vocabulary tier is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "items/item8"), validItem({ updatedAt: "not-a-number" })));
-  check("write with a wrong-typed updatedAt is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "goals/goal6"), validGoal({ domain: "not-a-real-domain" })));
+  check("goal with an out-of-vocabulary domain is rejected", true);
 } catch (e) {
-  check("write with a wrong-typed updatedAt is rejected", false);
-}
-
-// 8. targetDate is optional, but must be a string when present
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item9"), validItem()));
-  check("write with targetDate omitted is allowed", true);
-} catch (e) {
-  check("write with targetDate omitted is allowed", false);
-  console.error(e.message);
+  check("goal with an out-of-vocabulary domain is rejected", false);
 }
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item10"), validItem({ targetDate: "2027-01-01" })));
-  check("write with a valid targetDate is allowed", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "goals/goal7"), validGoal({ parentGoalId: "goal1", tier: "weekly" })));
+  check("goal with a valid parentGoalId is allowed", true);
 } catch (e) {
-  check("write with a valid targetDate is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "items/item11"), validItem({ targetDate: 20270101 })));
-  check("write with a wrong-typed targetDate is rejected", true);
-} catch (e) {
-  check("write with a wrong-typed targetDate is rejected", false);
-}
-
-// 8b. kind/effort are optional, like targetDate, but must be in-vocabulary when present
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item12"), validItem({ kind: "question-mark", effort: "large" })));
-  check("write with valid kind/effort is allowed", true);
-} catch (e) {
-  check("write with valid kind/effort is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "items/item13"), validItem({ kind: "not-a-real-kind" })));
-  check("write with an invalid kind is rejected", true);
-} catch (e) {
-  check("write with an invalid kind is rejected", false);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "items/item14"), validItem({ effort: "not-a-real-effort" })));
-  check("write with an invalid effort is rejected", true);
-} catch (e) {
-  check("write with an invalid effort is rejected", false);
-}
-
-// 8c. owner is optional, like kind/effort, but must be in-vocabulary when present
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item15"), validItem({ owner: "rochelle" })));
-  check("write with a valid owner is allowed", true);
-} catch (e) {
-  check("write with a valid owner is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "items/item16"), validItem({ owner: "not-a-real-owner" })));
-  check("write with an invalid owner is rejected", true);
-} catch (e) {
-  check("write with an invalid owner is rejected", false);
-}
-
-// 8d. newly added domain/status vocabulary
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item17"), validItem({ domain: "chores" })));
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item18"), validItem({ domain: "other" })));
-  check("write with new domains (chores, other) is allowed", true);
-} catch (e) {
-  check("write with new domains (chores, other) is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item19"), validItem({ status: "scheduled" })));
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item20"), validItem({ status: "needs-review" })));
-  check("write with new statuses (scheduled, needs-review) is allowed", true);
-} catch (e) {
-  check("write with new statuses (scheduled, needs-review) is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "items/item21"), validItem({ kind: "regular-task" })));
-  check("write with new kind (regular-task) is allowed", true);
-} catch (e) {
-  check("write with new kind (regular-task) is allowed", false);
+  check("goal with a valid parentGoalId is allowed", false);
   console.error(e.message);
 }
 
-// 9. An allowed account can delete an item (manual "graduation" out of this app)
 try {
-  await assertSucceeds(deleteDoc(doc(tannerDb, "items/item1")));
-  const snap = await getDoc(doc(rochelleDb, "items/item1"));
-  check("allowed account can delete an item", !snap.exists());
+  await assertFails(setDoc(doc(tannerDb, "projects/project2"), validProject({ familyScope: "shared-house" })));
+  check("project with an out-of-vocabulary familyScope is rejected", true);
 } catch (e) {
-  check("allowed account can delete an item", false);
-  console.error(e.message);
+  check("project with an out-of-vocabulary familyScope is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "projects/project3"), validProject({ consentStatus: "maybe" })));
+  check("project with an out-of-vocabulary consentStatus is rejected", true);
+} catch (e) {
+  check("project with an out-of-vocabulary consentStatus is rejected", false);
 }
 
-// 10. itemEvents: append-only log written alongside item save/delete
-const validEvent = (overrides = {}) => ({
-  itemId: "item1",
-  domain: "financial",
-  from: null,
-  to: "done",
-  at: Date.now(),
-  ...overrides,
-});
+try {
+  await assertFails(setDoc(doc(tannerDb, "plans/plan2"), validPlan({ parentType: "task" })));
+  check("plan with an invalid parentType is rejected", true);
+} catch (e) {
+  check("plan with an invalid parentType is rejected", false);
+}
 
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "itemEvents/evt1"), validEvent()));
-  check("allowed account can write a valid item event", true);
+  await assertFails(setDoc(doc(tannerDb, "sessions/session2"), validSession({ contentType: "telepathy" })));
+  check("session with an out-of-vocabulary contentType is rejected", true);
 } catch (e) {
-  check("allowed account can write a valid item event", false);
+  check("session with an out-of-vocabulary contentType is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "sessions/session3"), validSession({ done: "no" })));
+  check("session with a wrong-typed done is rejected", true);
+} catch (e) {
+  check("session with a wrong-typed done is rejected", false);
+}
+
+try {
+  await assertFails(setDoc(doc(tannerDb, "tasks/task2"), validTask({ title: "" })));
+  check("task with an empty title is rejected", true);
+} catch (e) {
+  check("task with an empty title is rejected", false);
+}
+
+// -- Events: append-only, schema-validated --
+
+try {
+  await assertFails(setDoc(doc(tannerDb, "events/evt1"), validEvent({ to: "open" })));
+  check("an existing event cannot be overwritten (append-only)", true);
+} catch (e) {
+  check("an existing event cannot be overwritten (append-only)", false);
+}
+try {
+  await assertFails(deleteDoc(doc(tannerDb, "events/evt1")));
+  check("an event cannot be deleted", true);
+} catch (e) {
+  check("an event cannot be deleted", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "events/evt2"), validEvent({ entityType: "capture" })));
+  check("event with an invalid entityType is rejected", true);
+} catch (e) {
+  check("event with an invalid entityType is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(rochelleDb, "events/evt3"), validEvent()));
+  check("viewer (Rochelle) cannot write an event", true);
+} catch (e) {
+  check("viewer (Rochelle) cannot write an event", false);
+}
+
+// -- Config: owner-editable routing table / domain definitions --
+
+try {
+  await assertFails(setDoc(doc(rochelleDb, "config/routingTable"), validConfig()));
+  check("viewer (Rochelle) cannot write config", true);
+} catch (e) {
+  check("viewer (Rochelle) cannot write config", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "config/domains"), { entries: "not-a-list" }));
+  check("config with a wrong-typed entries is rejected", true);
+} catch (e) {
+  check("config with a wrong-typed entries is rejected", false);
+}
+
+// -- Owner can delete --
+
+try {
+  await assertSucceeds(deleteDoc(doc(tannerDb, "tasks/task1")));
+  const snap = await getDoc(doc(rochelleDb, "tasks/task1"));
+  check("owner can delete a task", !snap.exists());
+} catch (e) {
+  check("owner can delete a task", false);
   console.error(e.message);
-}
-try {
-  const snap = await assertSucceeds(getDoc(doc(rochelleDb, "itemEvents/evt1")));
-  check("allowed account can read item events", snap.data()?.to === "done");
-} catch (e) {
-  check("allowed account can read item events", false);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "itemEvents/evt2"), validEvent({ domain: "not-a-real-domain" })));
-  check("item event with an invalid domain is rejected", true);
-} catch (e) {
-  check("item event with an invalid domain is rejected", false);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "itemEvents/evt3"), validEvent({ to: "not-a-real-status" })));
-  check("item event with an invalid 'to' is rejected", true);
-} catch (e) {
-  check("item event with an invalid 'to' is rejected", false);
-}
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "itemEvents/evt4"), validEvent({ to: "deleted", from: "open" })));
-  check("item event with to='deleted' (item removal) is allowed", true);
-} catch (e) {
-  check("item event with to='deleted' (item removal) is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "itemEvents/evt1"), validEvent({ to: "open" })));
-  check("an existing item event cannot be overwritten (append-only)", true);
-} catch (e) {
-  check("an existing item event cannot be overwritten (append-only)", false);
-}
-try {
-  await assertFails(deleteDoc(doc(tannerDb, "itemEvents/evt1")));
-  check("an item event cannot be deleted", true);
-} catch (e) {
-  check("an item event cannot be deleted", false);
-}
-try {
-  await assertFails(setDoc(doc(strangerDb, "itemEvents/evt5"), validEvent()));
-  check("non-allow-listed account cannot write item events", true);
-} catch (e) {
-  check("non-allow-listed account cannot write item events", false);
 }
 
 await testEnv.cleanup();

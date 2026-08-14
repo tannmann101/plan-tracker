@@ -20,9 +20,9 @@ export default class ErrorBoundary extends Component {
     if (!this.state.error) return this.props.children;
     return (
       <Centered>
-        <h1 style={{ fontFamily: SANS, fontSize: 21, fontWeight: 700, letterSpacing: "-0.01em", margin: "0 0 6px" }}>Something went wrong</h1>
+        <h1 style={{ fontFamily: SANS, fontSize: 21, fontWeight: 700, letterSpacing: "-0.01em", margin: "0 0 6px" }}>My apologies</h1>
         <p style={{ fontFamily: MONO, fontSize: 12.5, color: MUTE, margin: "0 0 20px" }}>
-          The app hit an unexpected error. Your data on the server is untouched -- reload to try again.
+          Something has gone amiss. Your records are untouched -- reload, and I shall attend to it again.
         </p>
         <button
           className="ui-btn ui-btn-primary"

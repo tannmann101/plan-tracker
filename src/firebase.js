@@ -6,6 +6,7 @@ import {
   persistentMultipleTabManager,
   connectFirestoreEmulator,
 } from "firebase/firestore";
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 const useEmulator = import.meta.env.VITE_USE_FIREBASE_EMULATOR === "true";
 
@@ -31,8 +32,11 @@ export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
 });
 
+export const functions = getFunctions(app);
+
 // .env.local sets VITE_USE_FIREBASE_EMULATOR=true so local development never touches the real project.
 if (useEmulator) {
   connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
   connectFirestoreEmulator(db, "127.0.0.1", 8080);
+  connectFunctionsEmulator(functions, "127.0.0.1", 5001);
 }

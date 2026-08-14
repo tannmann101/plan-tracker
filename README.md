@@ -1,27 +1,91 @@
-# 3-Year Plan Tracker
+# Secretary
 
-A shared intake and triage tool for household goal/task items feeding a
-3-year plan: weekly triage of everything open, and a monthly check-in
-grouped by domain.
+A head-of-household management layer: Goals (yearly → quarterly → monthly →
+weekly), Plans, Sessions, and Tasks, fed by a weekly-meeting photo import and
+a standing capture/triage inbox, with an append-only event log behind a
+running Goal rollup report.
+
+This app was rebuilt from an earlier "3-Year Plan Tracker" -- it reuses that
+project's repo, GitHub Pages deploy pipeline, and Firebase project, but owns
+an entirely different data model. Nothing from the old Items schema carries
+forward.
 
 ## What this app owns (and doesn't)
 
-This app owns exactly one thing: **Items** — a title, a domain tag
-(Financial / Material / Health-Fitness / Vocational-Career / Relational /
-Cross-Domain), a status (open / in-progress / done / dropped), a source
-note, a created date, and an optional target date.
+Secretary owns the household planning graph: **Goal → Plan → Session →
+Task**, plus **Project** for atypical personal initiatives that fall outside
+the Goal hierarchy (see the worked example below). It explicitly does
+**not** own:
 
-It explicitly does **not** own:
+- **Finances** -- lives in [Finance Tracker](https://github.com/tannmann101/budget-ledger). Secretary tags the Finances domain and links out.
+- **The Workshop's inventory** -- a separate tool for material/inventory management. Secretary's Material domain links out; no direct integration yet.
+- **The Teacher domain's content tool** -- a separate knowledge/teaching app. Secretary has a link placeholder for it; the app itself isn't built yet.
 
-- **Pushes** — bounded units of work tied to a 3-year plan's phases. Those
-  live in a separate Phase Roadmap document.
-- **Maintenance procedures** — recurring routines. Those live in Google
-  Calendar.
+Tech/Admin and Catch-All have no dedicated tool at all yet -- their Sessions
+log generically inside Secretary until one is built. Graduating either of
+those to a dedicated tool is a manual call, same as the old app's "no
+auto-migration" philosophy: nothing here silently migrates itself.
 
-**Graduation**: when an item becomes bounded and phase-tied enough to become
-a Push, that's a human call, not something this app automates — delete the
-item here once you've manually copied it into the Phase Roadmap. There's no
-auto-migration button on purpose.
+## The data model
+
+| Entity | Fields |
+|---|---|
+| **Goal** | title, tier (yearly/quarterly/monthly/weekly), domain, owner, parent_goal_id (nullable), status |
+| **Project** | title, initiator (me/wife), family_scope (personal/touches-family), status, consent_status (when family_scope = touches-family) |
+| **Plan** | title, parent_type (goal/project), parent_id, domain, session_ids[] |
+| **Session** | title, plan_id, domain, content_type, tool_location (resolved from content_type via the routing table), task_ids[], target_day, done |
+| **Task** | title, session_id, done, date |
+
+Worked example: Goal "clean the house" → Plan with Sessions per room → Tasks
+like "clean the shower." An atypical add-on like "shine the floors" becomes
+a Project instead -- a personal initiative that, because it touches shared
+floors, needs consent tracked before a Plan gets built around it.
+
+Firestore is one collection per entity type (`goals`, `projects`, `plans`,
+`sessions`, `tasks`), plus an append-only `events` log (mirroring the old
+app's `itemEvents` pattern) that the Goal rollup report is built from, and a
+`captures` collection for the standing triage inbox. `config/routingTable`
+and `config/domains` hold the editable copies of the content-type routing
+table and domain definitions (see Settings).
+
+## The five domains
+
+Finances, Material Provisioning, Teacher, Tech/Admin, Catch-All (ecology of
+practices). See `src/constants.js` (`DEFAULT_DOMAINS`) or Settings for the
+full descriptions and links.
+
+## Weekly-meeting pipeline
+
+Upload a photo of your handwritten weekly-meeting notebook page (This Week →
+"Import weekly-meeting photo"). A Cloud Function (`parseWeeklyPhoto`) reads
+it and extracts Goals-in-context, this week's Plans, their Sessions (domain +
+content-type tagged), and Tasks. Nothing saves automatically -- you get a
+full checklist to review and edit first.
+
+## Capture, triage & alignment
+
+An always-visible quick-capture bar (and a floating button for richer,
+longer captures) feeds a triage pipeline (`triageCapture` Cloud Function):
+relevance, level (Task/Session/Plan/Goal/Project), domain + content-type
+placement, and an alignment check against existing Goals. Confident
+placements happen directly; uncertain ones open a short conversational
+confirmation (Secretary can ask a genuine follow-up question) rather than
+forcing a guess into a form. Anything that doesn't align to an existing Goal
+surfaces in the Review queue -- never silently discarded.
+
+## Sync
+
+Refresh-on-open, not live push -- the app loads everything once when it
+opens and whenever you hit refresh. Secretary is driven by a weekly meeting
+plus occasional capture, which doesn't need the sub-second cross-device sync
+the household ledger or Workshop apps do.
+
+## Access
+
+Google sign-in, same two-account allow-list pattern as the sibling apps.
+Only Tanner's account can write; Rochelle's account is read-only across the
+entire Goal hierarchy and every domain (see `firestore.rules`' `isOwner()`
+vs `isAllowed()`, and `isOwnerEmail()` in `src/constants.js`).
 
 ## Running locally
 
@@ -30,83 +94,59 @@ npm install
 npm run dev
 ```
 
-## Data & sync
+## One-time cloud setup
 
-Data lives in a shared Firestore `items` collection — every item is its own
-document, both users read and write the same collection. Sync is
-**refresh-on-open**: the app loads items once when it opens, plus whenever
-you hit the "Refresh" button — there's no live push between devices (by
-design; this doesn't need sub-second cross-device visibility the way the
-household ledger does).
+This reuses the existing `plan-tracker-eb0c3` Firebase project -- no new
+project needed. Beyond the Firestore/Auth setup already in place from the
+old app:
 
-Access is locked down with Google sign-in: only the two email addresses
-listed in `firestore.rules` can read or write.
-
-## Views
-
-- **Weekly Triage** — every `open` and `in-progress` item, soonest target
-  date first, with inline status changes so you can work through the list
-  without leaving the page.
-- **Monthly Domain Check-In** — every item (any status), grouped into the
-  six domain sections, for a once-a-month walk through each area.
-
-## Installing as an app
-
-Once deployed (see below), open the site in your phone's browser and use
-"Add to Home Screen" (iOS Safari share menu, or Chrome's install prompt on
-Android) to install it like a native app.
-
-## One-time cloud setup (free, ~10 minutes)
-
-This app uses its own Firebase project, separate from any other app you've
-built this way — its data, quota, and security rules are fully isolated.
-
-1. Go to <https://console.firebase.google.com>, sign in, and create a new
-   project (no credit card needed — the free "Spark" plan is enough).
-2. **Enable Firestore**: in the left sidebar, Build → Firestore Database →
-   Create database → start in **production mode** → pick any region.
-3. **Enable Google sign-in**: Build → Authentication → Get started → Sign-in
-   method tab → enable the **Google** provider.
-4. **Authorize your domain**: still in Authentication → Settings → Authorized
-   domains → add `<your-username>.github.io`.
-5. **Register a web app**: Project settings (gear icon) → General → "Your apps"
-   → Add app → Web (`</>`). Copy the `firebaseConfig` object it gives you.
-6. Paste those values into [src/firebase.js](src/firebase.js), replacing the
-   `REPLACE_ME` placeholders.
-7. **Deploy the security rules** in [firestore.rules](firestore.rules) — the
-   emails are already set to your two accounts, so just run:
+1. **Enable Cloud Functions** (requires the Blaze pay-as-you-go plan --
+   Functions isn't available on Spark): Firebase Console → Build → Functions.
+2. **Set the Anthropic API key secret**:
    ```
-   npx firebase-tools login
-   npx firebase-tools deploy --only firestore:rules --project <your-project-id>
+   npx firebase-tools functions:secrets:set ANTHROPIC_API_KEY --project plan-tracker-eb0c3
    ```
-   (or paste the contents of `firestore.rules` directly into Firebase Console →
-   Firestore Database → Rules → Publish).
-8. Commit and push. Once the site redeploys, open it, sign in with Google on
-   both phones, and you should see the same shared item list.
-
-If either of you ever needs to change which accounts are allowed, edit the
-email list in `firestore.rules` and redeploy the rules (step 7).
+3. **Deploy functions**:
+   ```
+   npx firebase-tools deploy --only functions --project plan-tracker-eb0c3
+   ```
+   (or push to `main` with changes under `functions/` -- see
+   `.github/workflows/deploy-functions.yml`, which needs a
+   `FIREBASE_SERVICE_ACCOUNT` and `ANTHROPIC_API_KEY` repo secret).
+4. **Deploy the updated Firestore rules**:
+   ```
+   npx firebase-tools deploy --only firestore:rules --project plan-tracker-eb0c3
+   ```
 
 ## Local development against a fake project (no real Firebase needed)
 
 `.env.local` sets `VITE_USE_FIREBASE_EMULATOR=true` (create it yourself,
-it's gitignored — see `.env.local.example`), so `npm run dev` talks to a
-local emulator instead of your real project. Requires a Java runtime
+it's gitignored -- see `.env.local.example`), so `npm run dev` talks to
+local emulators instead of the real project. Requires a Java runtime
 installed once.
 
 ```
-npm run emulators   # starts local Auth + Firestore emulators
+npm run emulators   # starts local Auth + Firestore + Functions emulators
 npm run dev          # in another terminal
 npm run test:rules   # scripted checks of firestore.rules (allow-list + schema)
 ```
 
+The Functions emulator needs its own dependencies installed once:
+`npm install --prefix functions`. Emulated Cloud Functions still call the
+real Anthropic API if you export `ANTHROPIC_API_KEY` in your shell before
+starting the emulator.
+
 ## Deploying to GitHub Pages (free)
 
-1. Push this project to the `main` branch of its GitHub repo.
-2. In the repo settings → Pages, set the source to "GitHub Actions".
-3. The included workflow (`.github/workflows/deploy.yml`) builds and deploys
-   automatically on every push to `main`.
-4. Your app will be live at `https://<your-username>.github.io/plan-tracker/`.
+Unchanged from the old app: push to `main`, GitHub Pages source set to
+"GitHub Actions", `.github/workflows/deploy.yml` builds and deploys
+automatically. Live at `https://<your-username>.github.io/plan-tracker/`
+(the repo -- and therefore the URL -- wasn't renamed).
 
-(If you rename the repo, update `base` in `vite.config.js` and
-`start_url`/`scope` in the PWA manifest to match.)
+## Sibling apps
+
+- [Finance Tracker](https://github.com/tannmann101/budget-ledger) -- handles the Financial domain.
+- [The Workshop](https://github.com/tannmann101/roc-workspace) -- wife's domain tool.
+
+Secretary federates with both (links out) rather than rebuilding or
+absorbing them.
