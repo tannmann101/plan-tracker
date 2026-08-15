@@ -378,6 +378,13 @@ try {
 } catch (e) {
   check("task with a contentType but no domain is rejected", false);
 }
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-toollocation"), validTask({ sessionId: null, domain: "reading", contentType: "rdg-capture", toolLocation: "Travel notebook" })));
+  check("task with a toolLocation is allowed", true);
+} catch (e) {
+  check("task with a toolLocation is allowed", false);
+  console.error(e.message);
+}
 
 try {
   await assertSucceeds(setDoc(doc(tannerDb, "goals/goal-secondary"), validGoal({ secondaryDomains: ["career", "planning"] })));

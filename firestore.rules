@@ -171,6 +171,7 @@ service cloud.firestore {
         (!('contentType' in d) || d.contentType == null ||
           (d.domain in domainValues() && d.contentType in contentTypeValues() &&
            d.contentType.matches(contentTypeDomainPrefix(d.domain) + '.*'))) &&
+        (!('toolLocation' in d) || d.toolLocation == null || d.toolLocation is string) &&
         hasValidSecondaryDomains(d) &&
         d.done is bool &&
         (!('date' in d) || d.date is string) &&

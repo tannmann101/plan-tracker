@@ -9,6 +9,7 @@ const CARDS = [
   { id: "domains", title: "Domains", blurb: "The roles you keep, one dashboard each." },
   { id: "trends", title: "Trends", blurb: "What's getting done, how aligned it is, and the log of it all." },
   { id: "workspace", title: "Plan Workspace", blurb: "Rough out ideas for a Goal, then turn them into real Sessions and Tasks." },
+  { id: "locations", title: "Locations", blurb: "Where Sessions and Tasks actually land, by tool or place." },
 ];
 
 function countFor(id, secretary) {
@@ -27,6 +28,13 @@ function countFor(id, secretary) {
   }
   if (id === "domains") return (secretary.domains || []).length;
   if (id === "workspace") return (secretary.ideas || []).length;
+  if (id === "locations") {
+    const active = [
+      ...(secretary.sessions || []).filter((s) => !s.done),
+      ...(secretary.tasks || []).filter((t) => !t.done),
+    ];
+    return new Set(active.map((e) => e.toolLocation).filter(Boolean)).size;
+  }
   return null;
 }
 
