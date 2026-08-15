@@ -4,9 +4,10 @@ import { todayISO, weekStartISO } from "../constants";
 
 const CARDS = [
   { id: "today", title: "Today", blurb: "What's in front of you." },
-  { id: "thisweek", title: "This Week", blurb: "The week's plans and sessions." },
+  { id: "thisweek", title: "This Week", blurb: "The week's plans and sessions, or the month at a glance." },
   { id: "goals", title: "Goals", blurb: "Yearly down to weekly, and the rollup report." },
-  { id: "domains", title: "Domains", blurb: "Finances, Material, Teacher, Tech/Admin, Catch-All." },
+  { id: "domains", title: "Domains", blurb: "The roles you keep, one dashboard each." },
+  { id: "trends", title: "Trends", blurb: "What's getting done, how aligned it is, and the log of it all." },
 ];
 
 function countFor(id, secretary) {
@@ -23,7 +24,7 @@ function countFor(id, secretary) {
   if (id === "goals") {
     return (secretary.goals || []).filter((g) => g.status === "active").length;
   }
-  if (id === "domains") return 5;
+  if (id === "domains") return (secretary.domains || []).length;
   return null;
 }
 

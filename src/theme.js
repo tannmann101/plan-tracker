@@ -38,30 +38,65 @@ export const TERRACOTTA_SOFT = "#EFDDD1";
 export const SLATE = "#55606B";
 export const SLATE_SOFT = "#E1E4E7";
 
+// Nine more hues for the expanded (15-domain) categorical set, generated at
+// the same OKLCH lightness/chroma band as the seven above (L~0.47-0.57,
+// C~0.09-0.10) so they read as one family rather than a bolted-on palette.
+// Note on accessibility: this app's whole existing palette (BRASS/MOSS/PLUM/
+// etc.) sits below the chroma floor a chart-grade categorical palette would
+// need (verified against the dataviz skill's validator) -- it was built
+// deliberately muted for UI accents that are always paired with a text
+// label (a domain Pill always shows the domain name), which the skill's own
+// checks scope to chart series identity, not label-paired UI tagging. These
+// nine follow that same established register rather than breaking it.
+export const WINE = "#83425D";
+export const DEEPTEAL = "#00667F";
+export const OCHRE = "#814C1A";
+export const INDIGO = "#4C5590";
+export const TEAL = "#006B6B";
+export const OLIVE = "#675B07";
+export const MAGENTA_PLUM = "#784674";
+export const SEAGREEN = "#006B53";
+export const REDBROWN = "#884249";
+
 export const RADIUS = 12;
 export const RADIUS_SM = 8;
 export const SHADOW_CARD = "0 1px 2px rgba(36,34,32,0.05), 0 8px 22px rgba(36,34,32,0.07)";
 export const TRANSITION = "130ms ease";
 
-export const softTint = (color) => {
-  if (color === INKBLUE) return INKBLUE_SOFT;
-  if (color === BRASS) return BRASS_SOFT;
-  if (color === BRICK) return BRICK_SOFT;
-  if (color === MOSS) return MOSS_SOFT;
-  if (color === PLUM) return PLUM_SOFT;
-  if (color === TERRACOTTA) return TERRACOTTA_SOFT;
-  if (color === SLATE) return SLATE_SOFT;
-  return HEAD_BG;
+const NAMED_SOFT_TINTS = {
+  [INKBLUE]: INKBLUE_SOFT,
+  [BRASS]: BRASS_SOFT,
+  [BRICK]: BRICK_SOFT,
+  [MOSS]: MOSS_SOFT,
+  [PLUM]: PLUM_SOFT,
+  [TERRACOTTA]: TERRACOTTA_SOFT,
+  [SLATE]: SLATE_SOFT,
 };
 
+// Falls back to a computed tint (via CSS color-mix) for any color without a
+// hand-picked _SOFT pair -- covers the nine new categorical hues without
+// hand-authoring nine more near-white variants.
+export const softTint = (color) => NAMED_SOFT_TINTS[color] || `color-mix(in srgb, ${color} 16%, white)`;
+
 // One accent per domain -- distinct from the lifecycle-status palette below
-// so a domain pill never reads as a status pill.
+// so a domain pill never reads as a status pill. Order matches
+// DEFAULT_DOMAINS in src/constants.js.
 export const DOMAIN_COLORS = {
   finances: MOSS,
   material: BRASS,
   teacher: PLUM,
   "tech-admin": SLATE,
-  catchall: TERRACOTTA,
+  career: INKBLUE,
+  projects: TERRACOTTA,
+  collab: WINE,
+  cleaning: DEEPTEAL,
+  repair: OCHRE,
+  planning: INDIGO,
+  "weekly-meeting": TEAL,
+  reading: OLIVE,
+  writing: MAGENTA_PLUM,
+  contemplation: SEAGREEN,
+  "ecology-practices": REDBROWN,
 };
 
 export const STATUS_COLORS = {

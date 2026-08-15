@@ -16,7 +16,11 @@ const MODEL = 'claude-haiku-4-5-20251001';
 // separate Node/CommonJS deploy from the Vite/ESM client bundle, so there's
 // no shared import between them (same reasoning firestore.rules uses for
 // its own duplicated vocab).
-const DOMAIN_IDS = ['finances', 'material', 'teacher', 'tech-admin', 'catchall'];
+const DOMAIN_IDS = [
+  'finances', 'material', 'teacher', 'tech-admin', 'career', 'projects',
+  'collab', 'cleaning', 'repair', 'planning', 'weekly-meeting', 'reading',
+  'writing', 'contemplation', 'ecology-practices',
+];
 const TIER_IDS = ['yearly', 'quarterly', 'monthly', 'weekly'];
 const CONTENT_TYPE_IDS = [
   'scheduling', 'quick-capture', 'structured-teaching', 'reflective-dialogic',

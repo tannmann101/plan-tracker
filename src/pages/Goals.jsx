@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Btn, SectionTitle, Note, Card, Pill, Input, Select } from "../ui";
-import { SERIF, SANS, MONO, INK, MUTE, LINE, TIER_COLORS, softTint } from "../theme";
+import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, LINE, TIER_COLORS, softTint } from "../theme";
 import { InfoIcon } from "../components/InfoModal";
-import { childGoals, rootGoals, rollupForGoal } from "../lib/graph";
+import { childGoals, rootGoals, rollupForGoal, goalSubtreeIds } from "../lib/graph";
 import { TIERS, domainLabel, ownerLabel, lifecycleStatusLabel } from "../constants";
 
 function NewGoalForm({ secretary, parentGoal, onDone }) {
@@ -36,16 +36,30 @@ function nextTier(tier) {
   return order[Math.min(i + 1, order.length - 1)];
 }
 
-function GoalNode({ goal, secretary, isOwner, depth, onOpenReport }) {
-  const [expanded, setExpanded] = useState(depth === 0);
+function GoalNode({ goal, secretary, isOwner, depth, onOpenReport, focusGoalId }) {
+  const isFocused = goal.id === focusGoalId;
+  const containsFocus = focusGoalId && goalSubtreeIds(goal.id, secretary.goals).includes(focusGoalId);
+  const [expanded, setExpanded] = useState(depth === 0 || containsFocus);
   const [addingChild, setAddingChild] = useState(false);
   const children = childGoals(goal.id, secretary.goals);
   const color = TIER_COLORS[goal.tier] || MUTE;
   const canNest = goal.tier !== "weekly";
+  const nodeRef = useRef(null);
+
+  useEffect(() => {
+    if (containsFocus) setExpanded(true);
+  }, [containsFocus]);
+
+  useEffect(() => {
+    if (isFocused) nodeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [isFocused]);
 
   return (
-    <div style={{ marginLeft: depth ? 18 : 0, marginTop: 8 }}>
-      <Card style={{ display: "flex", alignItems: "flex-start", gap: 10, opacity: goal.status === "dropped" ? 0.55 : 1 }}>
+    <div style={{ marginLeft: depth ? 18 : 0, marginTop: 8 }} ref={nodeRef}>
+      <Card style={{
+        display: "flex", alignItems: "flex-start", gap: 10, opacity: goal.status === "dropped" ? 0.55 : 1,
+        borderColor: isFocused ? INKBLUE : undefined, boxShadow: isFocused ? `0 0 0 2px ${INKBLUE}33` : undefined,
+      }}>
         {children.length > 0 ? (
           <button type="button" onClick={() => setExpanded((e) => !e)} style={{ border: "none", background: "none", cursor: "pointer", color: MUTE, fontFamily: MONO, fontSize: 13, flex: "none", padding: "2px 4px" }}>
             {expanded ? "▾" : "▸"}
@@ -72,7 +86,7 @@ function GoalNode({ goal, secretary, isOwner, depth, onOpenReport }) {
         <InfoIcon type="goal" entity={goal} data={secretary} />
       </Card>
       {expanded && children.map((child) => (
-        <GoalNode key={child.id} goal={child} secretary={secretary} isOwner={isOwner} depth={depth + 1} onOpenReport={onOpenReport} />
+        <GoalNode key={child.id} goal={child} secretary={secretary} isOwner={isOwner} depth={depth + 1} onOpenReport={onOpenReport} focusGoalId={focusGoalId} />
       ))}
     </div>
   );
@@ -118,10 +132,20 @@ function RollupReport({ goal, secretary, onBack }) {
   );
 }
 
-export default function Goals({ secretary, isOwner, onBack }) {
+export default function Goals({ secretary, isOwner, onBack, focusGoalId, onFocusHandled }) {
   const [reportGoal, setReportGoal] = useState(null);
   const [addingRoot, setAddingRoot] = useState(false);
   const roots = rootGoals(secretary.goals || []).sort((a, b) => a.title.localeCompare(b.title));
+
+  // One-shot: consume the requested focus (expand + scroll happens in
+  // GoalNode via the focusGoalId prop) then let the parent clear it, so
+  // navigating away and back doesn't leave a stale highlight.
+  useEffect(() => {
+    if (focusGoalId) {
+      const t = setTimeout(() => onFocusHandled?.(), 1500);
+      return () => clearTimeout(t);
+    }
+  }, [focusGoalId, onFocusHandled]);
 
   if (reportGoal) {
     return <RollupReport goal={reportGoal} secretary={secretary} onBack={() => setReportGoal(null)} />;
@@ -139,7 +163,7 @@ export default function Goals({ secretary, isOwner, onBack }) {
         <Note>No Goals yet. Add a yearly Goal above, or import a weekly-meeting photo to seed the tree.</Note>
       ) : (
         roots.map((g) => (
-          <GoalNode key={g.id} goal={g} secretary={secretary} isOwner={isOwner} depth={0} onOpenReport={setReportGoal} />
+          <GoalNode key={g.id} goal={g} secretary={secretary} isOwner={isOwner} depth={0} onOpenReport={setReportGoal} focusGoalId={focusGoalId} />
         ))
       )}
     </div>
