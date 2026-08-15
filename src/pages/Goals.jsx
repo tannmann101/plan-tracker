@@ -1,22 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import { Btn, SectionTitle, Note, Card, Pill, Input, Select } from "../ui";
+import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Modal, ProgressBar } from "../ui";
 import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, LINE, TIER_COLORS, softTint } from "../theme";
-import { InfoIcon } from "../components/InfoModal";
-import { childGoals, rootGoals, rollupForGoal, goalSubtreeIds } from "../lib/graph";
+import { InfoIcon, GoalChainLine } from "../components/InfoModal";
+import QuickAddModal from "../components/QuickAddModal";
+import GoalBreakdownAssist from "../components/GoalBreakdownAssist";
+import { childGoals, rootGoals, rollupForGoal, goalSubtreeIds, goalProgress } from "../lib/graph";
 import { TIERS, domainLabel, ownerLabel, lifecycleStatusLabel } from "../constants";
 
 function NewGoalForm({ secretary, parentGoal, onDone }) {
   const [title, setTitle] = useState("");
   const [tier, setTier] = useState(parentGoal ? nextTier(parentGoal.tier) : "yearly");
   const [domain, setDomain] = useState(parentGoal?.domain || (secretary.domains[0]?.id ?? ""));
+  const [targetDate, setTargetDate] = useState("");
 
   const save = async () => {
     if (!title.trim()) return;
     await secretary.saveEntity("goal", {
       title: title.trim(), tier, domain, owner: "tanner",
-      parentGoalId: parentGoal ? parentGoal.id : null, status: "active",
+      parentGoalId: parentGoal ? parentGoal.id : null, targetDate: targetDate || null, status: "active",
     });
     setTitle("");
+    setTargetDate("");
     onDone?.();
   };
 
@@ -25,6 +29,7 @@ function NewGoalForm({ secretary, parentGoal, onDone }) {
       <Input value={title} onChange={setTitle} placeholder={parentGoal ? `New ${nextTier(parentGoal.tier)} goal under this one…` : "New yearly goal…"} onEnter={save} width={220} />
       {!parentGoal && <Select value={tier} onChange={setTier} options={TIERS} width={120} />}
       <Select value={domain} onChange={setDomain} options={secretary.domains} width={150} />
+      <Input value={targetDate} onChange={setTargetDate} placeholder="Target date (optional)" width={150} />
       <Btn small primary onClick={save} disabled={!title.trim()}>Add</Btn>
     </div>
   );
@@ -41,9 +46,12 @@ function GoalNode({ goal, secretary, isOwner, depth, onOpenReport, focusGoalId }
   const containsFocus = focusGoalId && goalSubtreeIds(goal.id, secretary.goals).includes(focusGoalId);
   const [expanded, setExpanded] = useState(depth === 0 || containsFocus);
   const [addingChild, setAddingChild] = useState(false);
+  const [addingPlan, setAddingPlan] = useState(false);
+  const [breakingDown, setBreakingDown] = useState(false);
   const children = childGoals(goal.id, secretary.goals);
   const color = TIER_COLORS[goal.tier] || MUTE;
   const canNest = goal.tier !== "weekly";
+  const progress = goalProgress(goal.id, secretary);
   const nodeRef = useRef(null);
 
   useEffect(() => {
@@ -72,19 +80,45 @@ function GoalNode({ goal, secretary, isOwner, depth, onOpenReport, focusGoalId }
             <Pill>{domainLabel(goal.domain, secretary.domains)}</Pill>
             <Pill color={MUTE}>{lifecycleStatusLabel(goal.status)}</Pill>
             <Pill color={MUTE}>{ownerLabel(goal.owner)}</Pill>
+            {goal.targetDate && <Pill color={MUTE}>by {goal.targetDate}</Pill>}
           </div>
-          <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+          <GoalChainLine type="goal" entity={goal} data={secretary} onNavigateGoal={undefined} />
+          <ProgressBar percent={progress.percent} color={color} />
+          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
             <Btn small onClick={() => onOpenReport(goal)}>Rollup report</Btn>
             {isOwner && canNest && (
               <Btn small color={MUTE} onClick={() => setAddingChild((a) => !a)}>
                 {addingChild ? "Cancel" : `+ ${nextTier(goal.tier)} goal`}
               </Btn>
             )}
+            {isOwner && (
+              <Btn small color={MUTE} onClick={() => setAddingPlan(true)}>+ Add Plan</Btn>
+            )}
+            {isOwner && (
+              <Btn small color={INKBLUE} onClick={() => setBreakingDown(true)}>Ask Secretary to break this down…</Btn>
+            )}
           </div>
           {addingChild && <NewGoalForm secretary={secretary} parentGoal={goal} onDone={() => setAddingChild(false)} />}
         </div>
         <InfoIcon type="goal" entity={goal} data={secretary} />
       </Card>
+      {addingPlan && (
+        <QuickAddModal
+          secretary={secretary}
+          types={["plan"]}
+          defaultType="plan"
+          defaults={{ domain: goal.domain, parentType: "goal", parentId: goal.id }}
+          onClose={() => setAddingPlan(false)}
+        />
+      )}
+      {breakingDown && (
+        <Modal onClose={() => setBreakingDown(false)} width={520}>
+          <h3 style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: INK, margin: "0 0 12px" }}>
+            Breaking down "{goal.title}"
+          </h3>
+          <GoalBreakdownAssist goal={goal} secretary={secretary} onDone={() => setBreakingDown(false)} />
+        </Modal>
+      )}
       {expanded && children.map((child) => (
         <GoalNode key={child.id} goal={child} secretary={secretary} isOwner={isOwner} depth={depth + 1} onOpenReport={onOpenReport} focusGoalId={focusGoalId} />
       ))}
@@ -92,17 +126,34 @@ function GoalNode({ goal, secretary, isOwner, depth, onOpenReport, focusGoalId }
   );
 }
 
+function daysUntil(dateStr) {
+  const target = new Date(`${dateStr}T00:00:00`);
+  if (Number.isNaN(target.getTime())) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Math.round((target - today) / 86400000);
+}
+
 function RollupReport({ goal, secretary, onBack }) {
   const { plans, sessions, tasks, events } = rollupForGoal(goal.id, secretary);
+  const progress = goalProgress(goal.id, secretary);
+  const days = goal.targetDate ? daysUntil(goal.targetDate) : null;
   return (
     <div>
       <Btn small onClick={onBack} color={MUTE}>← Goals</Btn>
       <SectionTitle note={`${goal.tier} · ${domainLabel(goal.domain, secretary.domains)}`}>{goal.title} -- Rollup Report</SectionTitle>
       <Note>
         Everything gathered along the way under this Goal (and its nested Goals), built from the event log -- this grows as weeks pass, it isn't a snapshot.
+        {goal.targetDate && days !== null && (
+          days >= 0 ? ` Target date ${goal.targetDate} -- ${days} day${days === 1 ? "" : "s"} remaining.` : ` Target date ${goal.targetDate} was ${-days} day${days === -1 ? "" : "s"} ago.`
+        )}
       </Note>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px,1fr))", gap: 10, margin: "16px 0" }}>
+        <Card tint="#F9F7F1">
+          <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em" }}>Progress</div>
+          <div style={{ fontFamily: SERIF, fontSize: 22, color: INK, fontWeight: 600, marginTop: 4 }}>{progress.percent === null ? "--" : `${progress.percent}%`}</div>
+        </Card>
         {[["Plans", plans.length], ["Sessions", sessions.length], ["Tasks", tasks.length], ["Tasks done", tasks.filter((t) => t.done).length]].map(([label, n]) => (
           <Card key={label} tint="#F9F7F1">
             <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em" }}>{label}</div>

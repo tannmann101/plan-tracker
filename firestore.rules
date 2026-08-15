@@ -105,6 +105,7 @@ service cloud.firestore {
         hasValidSecondaryDomains(d) &&
         d.owner in ['tanner', 'rochelle'] &&
         (!('parentGoalId' in d) || d.parentGoalId == null || d.parentGoalId is string) &&
+        (!('targetDate' in d) || d.targetDate == null || d.targetDate is string) &&
         d.status in statusValues() &&
         d.createdAt is number &&
         d.updatedAt is number;
@@ -160,10 +161,16 @@ service cloud.firestore {
 
     // sessionId is optional -- a bare Task can stand alone (most quick-adds
     // won't have a Session picked out yet) and gets attached to one later.
+    // contentType is likewise optional and, like Session's, only valid
+    // within its own domain -- and only meaningful once domain is present,
+    // which the domain-membership check here already enforces.
     function isValidTask(d) {
       return d.title is string && d.title.size() > 0 &&
         (!('sessionId' in d) || d.sessionId == null || (d.sessionId is string && d.sessionId.size() > 0)) &&
         (!('domain' in d) || d.domain in domainValues()) &&
+        (!('contentType' in d) || d.contentType == null ||
+          (d.domain in domainValues() && d.contentType in contentTypeValues() &&
+           d.contentType.matches(contentTypeDomainPrefix(d.domain) + '.*'))) &&
         hasValidSecondaryDomains(d) &&
         d.done is bool &&
         (!('date' in d) || d.date is string) &&

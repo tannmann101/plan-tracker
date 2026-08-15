@@ -3,8 +3,21 @@ import { Modal, Btn, Input, Select } from "../ui";
 import { SERIF, MONO, INK, MUTE, INKBLUE, BRICK, LINE } from "../theme";
 import {
   contentTypesForDomain, defaultContentTypeForDomain, contentTypeLabel, toolLocationFor, LIFECYCLE_STATUSES,
-  INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES,
+  INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, TIER_ORDER,
 } from "../constants";
+import { goalSubtreeIds } from "../lib/graph";
+
+// A Goal can only reparent one tier up (yearly has none) -- and never into
+// its own subtree, which would create a cycle. goalSubtreeIds() already
+// gathers a Goal's whole descendant set for the rollup report; reused here
+// to exclude exactly those ids from the candidate list.
+function goalParentCandidates(goal, goals) {
+  const tierIdx = TIER_ORDER.indexOf(goal.tier);
+  if (tierIdx <= 0) return [];
+  const parentTier = TIER_ORDER[tierIdx - 1];
+  const excluded = new Set(goalSubtreeIds(goal.id, goals));
+  return (goals || []).filter((g) => g.tier === parentTier && !excluded.has(g.id));
+}
 
 function Field({ label, children }) {
   return (
@@ -66,6 +79,8 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
   const [domain, setDomain] = useState(entity.domain || secretary.domains[0]?.id || "");
   const [secondaryDomains, setSecondaryDomains] = useState(entity.secondaryDomains || []);
   const [status, setStatus] = useState(entity.status || "active");
+  const [targetDate, setTargetDate] = useState(entity.targetDate || "");
+  const [goalParentId, setGoalParentId] = useState(entity.parentGoalId || "");
   const [contentType, setContentType] = useState(
     entity.contentType || defaultContentTypeForDomain(entity.domain || secretary.domains[0]?.id || "", secretary.routingTable)
   );
@@ -87,10 +102,12 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
   // content-type that no longer belongs to it.
   const changeDomain = (nextDomain) => {
     setDomain(nextDomain);
-    if (type === "session") setContentType(defaultContentTypeForDomain(nextDomain, secretary.routingTable));
+    if (type === "session" || type === "task") setContentType(defaultContentTypeForDomain(nextDomain, secretary.routingTable));
   };
 
   const contentTypeOptions = contentTypesForDomain(domain, secretary.routingTable).map((r) => ({ id: r.id, label: contentTypeLabel(r.id, secretary.routingTable) }));
+  const taskContentTypeOptions = [{ id: "", label: "-- none --" }, ...contentTypeOptions];
+  const goalParentOptions = type === "goal" ? goalParentCandidates(entity, secretary.goals) : [];
   const plansInDomain = (secretary.plans || []).filter((p) => p.domain === domain);
   const sessionsInDomain = (secretary.sessions || []).filter((s) => s.domain === domain);
 
@@ -101,6 +118,10 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
     try {
       const patch = { ...entity, title: title.trim(), domain, secondaryDomains };
       if (type === "goal" || type === "project" || type === "plan") patch.status = status;
+      if (type === "goal") {
+        patch.targetDate = targetDate || null;
+        patch.parentGoalId = goalParentId || null;
+      }
       if (type === "project") {
         patch.initiator = initiator;
         patch.familyScope = familyScope;
@@ -120,6 +141,7 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
       if (type === "task") {
         patch.date = date || null;
         patch.sessionId = sessionId || null;
+        patch.contentType = contentType || null;
       }
       await secretary.saveEntity(type, patch);
       onClose();
@@ -149,6 +171,25 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
       {(type === "goal" || type === "project" || type === "plan") && (
         <Field label="Status">
           <Select value={status} onChange={setStatus} options={LIFECYCLE_STATUSES} />
+        </Field>
+      )}
+
+      {type === "goal" && (
+        <Field label="Target date (optional)">
+          <Input value={targetDate} onChange={setTargetDate} placeholder="YYYY-MM-DD" />
+        </Field>
+      )}
+
+      {type === "goal" && (goalParentOptions.length > 0 || entity.parentGoalId) && (
+        <Field label="Parent goal (reassign to fix a mis-categorization)">
+          <select
+            value={goalParentId}
+            onChange={(e) => setGoalParentId(e.target.value)}
+            style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}
+          >
+            <option value="">-- root, no parent --</option>
+            {goalParentOptions.map((g) => <option key={g.id} value={g.id}>{g.title} ({g.tier})</option>)}
+          </select>
         </Field>
       )}
 
@@ -194,6 +235,9 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
         <>
           <Field label="Date">
             <Input value={date} onChange={setDate} placeholder="YYYY-MM-DD" />
+          </Field>
+          <Field label="Content-type (optional)">
+            <Select value={contentType} onChange={setContentType} options={taskContentTypeOptions} />
           </Field>
           <Field label="Session (reassign to fix a mis-categorization)">
             <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}>

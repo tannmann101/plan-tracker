@@ -9,6 +9,7 @@ import { functions } from "../firebase.js";
 
 const parseWeeklyPhotoFn = httpsCallable(functions, "parseWeeklyPhoto");
 const triageCaptureFn = httpsCallable(functions, "triageCapture");
+const suggestGoalBreakdownFn = httpsCallable(functions, "suggestGoalBreakdown");
 
 export async function parseWeeklyPhoto({ imageBase64, mediaType, existingGoals }) {
   try {
@@ -25,6 +26,15 @@ export async function triageCapture({ text, existingGoals, priorAnswers }) {
     return result.data.result;
   } catch (err) {
     throw new Error(err.message || "Could not triage this capture.");
+  }
+}
+
+export async function suggestGoalBreakdown({ goalTitle, domain, tier }) {
+  try {
+    const result = await suggestGoalBreakdownFn({ goalTitle, domain, tier });
+    return result.data.result;
+  } catch (err) {
+    throw new Error(err.message || "Could not draft a breakdown for this Goal.");
   }
 }
 

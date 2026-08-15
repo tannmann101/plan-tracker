@@ -234,3 +234,55 @@ ${priorAnswers.length ? `\nThis capture has already been through one or more rou
 
   return { result: parsed };
 });
+
+// Given an existing Goal, drafts a Plan (optional) plus its Sessions and
+// Tasks -- the top-down counterpart to triageCapture's bottom-up
+// "does this deserve to be a Goal" judgment. Same draft-then-accept
+// discipline as everywhere else this pipeline touches Firestore: the
+// client shows an editable checklist and never commits anything until
+// Tanner accepts it (see src/components/GoalBreakdownAssist.jsx).
+exports.suggestGoalBreakdown = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 }, async (request) => {
+  requireOwner(request);
+
+  const goalTitle = request.data?.goalTitle;
+  const domain = request.data?.domain;
+  const tier = request.data?.tier;
+  if (!goalTitle || typeof goalTitle !== 'string') {
+    throw new HttpsError('invalid-argument', 'A goalTitle string is required.');
+  }
+  if (!domain || !DOMAIN_IDS.includes(domain)) {
+    throw new HttpsError('invalid-argument', 'A valid domain is required.');
+  }
+
+  const contentTypes = CONTENT_TYPES_BY_DOMAIN[domain] || [];
+
+  const system = `You are Secretary, a formal, courteous, old-fashioned household secretary, helping your employer break a Goal down into concrete groundwork. Respond with ONLY a single JSON object, no prose, no markdown fences.
+
+Schema:
+{
+  "plan": { "title": string } or null,
+  "sessions": [{ "title": string, "contentType": one of ${JSON.stringify(contentTypes)}, "targetDay": string or null }],
+  "tasks": [{ "title": string, "sessionTitle": string, "date": string or null }]
+}
+
+Rules:
+- The Goal already exists (given below) -- draft the Plan of action that would serve it, in this Goal's own domain, "${domain}". "plan" is null only if the Goal is better served by a handful of direct Tasks with no organizing Plan (rare -- prefer drafting a Plan).
+- "sessions" are the themed working blocks under that Plan; pick contentType from the domain's own list above -- never invent an id outside it. targetDay is an ISO date (YYYY-MM-DD) only if there's a clear reason to suggest timing (e.g. a weekly Goal implies this week); otherwise null -- don't fabricate a date just to fill the field.
+- "tasks" are concrete action items; sessionTitle must match a "sessions" title exactly (or be omitted from tasks entirely if no sessions are drafted).
+- Keep the draft modest and concrete -- 1 Plan, 1-4 Sessions, a handful of Tasks per Session at most. This is a starting point Tanner will edit before anything saves, not a finished plan.
+
+Goal: "${goalTitle}" (tier: ${tier || "unspecified"}, domain: ${domain})`;
+
+  const messages = [{ role: 'user', content: 'Draft the breakdown for this Goal per the schema in your instructions.' }];
+
+  const responseText = await callClaude({ system, messages, maxTokens: 1536 });
+  let parsed;
+  try {
+    parsed = parseJson(responseText);
+  } catch (err) {
+    console.error('Failed to parse suggestGoalBreakdown response as JSON', responseText, err);
+    throw new HttpsError('internal', "Claude's response wasn't valid JSON.");
+  }
+
+  return { result: parsed };
+});

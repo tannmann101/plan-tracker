@@ -5,7 +5,7 @@
 import { useState } from "react";
 import {
   MONO, SANS, SERIF, BG, CARD, INK, MUTE, MUTE_SOFT, LINE, HEAD_BG,
-  INKBLUE, INKBLUE_SOFT, RADIUS, RADIUS_SM, SHADOW_CARD, TRANSITION,
+  INKBLUE, INKBLUE_SOFT, RADIUS, RADIUS_SM, SHADOW_CARD, TRANSITION, softTint,
 } from "./theme";
 
 export function GlobalStyle() {
@@ -222,6 +222,22 @@ export function Checkbox({ checked, onChange, color = INKBLUE }) {
   );
 }
 
+// A Goal's completion at a glance -- one hue, fill on a lighter step of the
+// same ramp (per the dataviz skill's meter spec), thin and rounded. percent
+// null (nothing to measure yet) renders nothing rather than an empty bar.
+export function ProgressBar({ percent, color = INKBLUE }) {
+  if (percent === null || percent === undefined) return null;
+  const pct = Math.max(0, Math.min(100, percent));
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6 }}>
+      <div style={{ flex: 1, height: 5, borderRadius: 999, background: softTint(color) }}>
+        <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: color }} />
+      </div>
+      <span style={{ fontFamily: MONO, fontSize: 10.5, fontWeight: 600, color, flex: "none" }}>{pct}%</span>
+    </div>
+  );
+}
+
 // Modal/overlay for capture-confirmation and other over-the-current-screen
 // interactions -- never a separate page to navigate to.
 export function Modal({ onClose, children, width = 420 }) {
@@ -273,6 +289,7 @@ export function FAB({ onClick, title = "Capture" }) {
 export function AIAssist({ actionLabel = "Ask Secretary", onGenerate, onAccept, renderDraft, autoStart }) {
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(!!autoStart);
+  const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState(null);
   const [started, setStarted] = useState(false);
 
@@ -286,6 +303,23 @@ export function AIAssist({ actionLabel = "Ask Secretary", onGenerate, onAccept, 
       setError(err.message || "Something went wrong.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Awaits onAccept and only clears the draft once it actually succeeds --
+  // a failed commit (network error, a rejected write) keeps the reviewed/
+  // edited draft on screen with the error shown, rather than silently
+  // discarding Tanner's edits and forcing a full regenerate.
+  const accept = async () => {
+    setAccepting(true);
+    setError(null);
+    try {
+      await onAccept(draft);
+      setDraft(null);
+    } catch (err) {
+      setError(err.message || "Could not save that.");
+    } finally {
+      setAccepting(false);
     }
   };
 
@@ -320,12 +354,13 @@ export function AIAssist({ actionLabel = "Ask Secretary", onGenerate, onAccept, 
         Draft -- review before accepting
       </div>
       <div>{renderDraft(draft, { setDraft })}</div>
+      {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: "#8B3A2B", marginTop: 10 }}>{error}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         {onAccept ? (
-          <Btn primary color={INKBLUE} onClick={() => { onAccept(draft); setDraft(null); }}>Accept</Btn>
+          <Btn primary color={INKBLUE} disabled={accepting} onClick={accept}>{accepting ? "Saving…" : "Accept"}</Btn>
         ) : null}
-        <Btn onClick={() => setDraft(null)} color={MUTE}>Discard</Btn>
-        <Btn onClick={generate} disabled={loading} color={MUTE}>{loading ? "Working…" : "Try again"}</Btn>
+        <Btn onClick={() => setDraft(null)} color={MUTE} disabled={accepting}>Discard</Btn>
+        <Btn onClick={generate} disabled={loading || accepting} color={MUTE}>{loading ? "Working…" : "Try again"}</Btn>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { Card, Checkbox, Pill } from "../ui";
 import { SANS, MONO, INK, MUTE, DOMAIN_COLORS, softTint } from "../theme";
-import { InfoIcon } from "./InfoModal";
-import { domainLabel } from "../constants";
+import { InfoIcon, GoalChainLine } from "./InfoModal";
+import { domainLabel, contentTypeLabel } from "../constants";
 
 // Shared card for Tasks and Sessions on Today/This Week/Domains -- always a
 // card (never a bare checklist row), always showing domain + tool_location +
@@ -34,10 +34,12 @@ export function EntityCard({ type, entity, domains, data, onToggleDone, readOnly
             return <Pill key={id} color={c} tint={softTint(c)}>{domainLabel(id, domains)}</Pill>;
           })}
           {type === "session" && entity.toolLocation && <Pill>{entity.toolLocation}</Pill>}
+          {type === "task" && entity.contentType && <Pill>{contentTypeLabel(entity.contentType, data?.routingTable)}</Pill>}
           {entity.targetDay && <Pill color={MUTE}>{entity.targetDay}</Pill>}
           {entity.date && <Pill color={MUTE}>{entity.date}</Pill>}
         </div>
         {note && <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginTop: 6 }}>{note}</div>}
+        <GoalChainLine type={type} entity={entity} data={data} onNavigateGoal={onNavigateGoal} />
       </div>
       <InfoIcon type={type} entity={entity} data={data} onNavigateGoal={onNavigateGoal} />
     </Card>

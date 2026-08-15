@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Btn, SectionTitle, Note, Card, Pill } from "../ui";
 import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
-import { InfoIcon } from "../components/InfoModal";
+import { InfoIcon, GoalChainLine } from "../components/InfoModal";
 import QuickAddModal from "../components/QuickAddModal";
 import EditEntityModal from "../components/EditEntityModal";
 import { lifecycleStatusLabel, initiatorLabel, familyScopeLabel } from "../constants";
@@ -56,6 +56,7 @@ function DomainDashboard({ domain, secretary, isOwner, onBack, onNavigateGoal })
                     <Pill color={color} tint={softTint(color)}>{initiatorLabel(p.initiator)}</Pill>
                     <Pill color={MUTE}>{familyScopeLabel(p.familyScope)}</Pill>
                   </div>
+                  <GoalChainLine type="project" entity={p} data={secretary} onNavigateGoal={onNavigateGoal} />
                 </div>
                 <InfoIcon type="project" entity={p} data={secretary} onNavigateGoal={onNavigateGoal} />
               </Card>
@@ -72,6 +73,7 @@ function DomainDashboard({ domain, secretary, isOwner, onBack, onNavigateGoal })
               <div style={{ flex: 1 }}>
                 <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500 }}>{p.title}</div>
                 <Pill color={color} tint={softTint(color)}>{p.parentType ? p.parentType : "not yet linked"}</Pill>
+                <GoalChainLine type="plan" entity={p} data={secretary} onNavigateGoal={onNavigateGoal} />
               </div>
               <InfoIcon type="plan" entity={p} data={secretary} onNavigateGoal={onNavigateGoal} />
             </Card>

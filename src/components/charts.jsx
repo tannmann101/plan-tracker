@@ -98,8 +98,8 @@ export function WeeklyBarChart({ data, series, height = 160 }) {
 // Ranked horizontal bars -- domain distribution, tool-location usage. Label
 // to the left, value at the bar's end (outside when the bar itself is too
 // short to hold it comfortably).
-export function HorizontalBarChart({ rows, height = 22 }) {
-  const max = Math.max(1, ...rows.map((r) => r.count));
+export function HorizontalBarChart({ rows, height = 22, max: fixedMax }) {
+  const max = fixedMax ?? Math.max(1, ...rows.map((r) => r.count));
   const width = 640;
   const labelW = 150;
   const barMaxW = width - labelW - 40;

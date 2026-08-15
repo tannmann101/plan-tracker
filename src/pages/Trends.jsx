@@ -1,15 +1,16 @@
 import { useState } from "react";
-import { Btn, SectionTitle, Note, Card, Pill, TabBar } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, LINE, DOMAIN_COLORS } from "../theme";
+import { Btn, SectionTitle, Note, Card, Pill, TabBar, Input, Select } from "../ui";
+import { SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS } from "../theme";
 import { WeeklyBarChart, HorizontalBarChart, LineChart, Legend } from "../components/charts";
 import EditEntityModal from "../components/EditEntityModal";
 import {
   tasksCompletedPerWeek, domainDistribution, goalCycleTimes, alignmentRateOverTime,
   toolUsageCounts, eventLog, eventsToCSV,
 } from "../lib/trends";
-import { unlinkedPlans, standaloneTasks } from "../lib/graph";
-import { domainLabel, tierLabel } from "../constants";
+import { unlinkedPlans, standaloneTasks, goalProgress } from "../lib/graph";
+import { domainLabel, tierLabel, TIERS, defaultContentTypeForDomain, toolLocationFor } from "../constants";
 import { triageCapture } from "../lib/claude";
+import { findOrCreatePlan } from "../lib/placeCapture";
 
 const TOP_DOMAIN_SERIES = 6;
 
@@ -48,6 +49,12 @@ function TrendsTab({ secretary }) {
   const cycleTimes = goalCycleTimes(secretary);
   const alignment = alignmentRateOverTime(secretary, 12).map((a) => ({ week: a.week, y: a.rate, total: a.total }));
   const toolUsage = toolUsageCounts(secretary).slice(0, 10).map((t) => ({ label: t.toolLocation, count: t.count, color: INKBLUE }));
+  const goalProgressRows = (secretary.goals || [])
+    .filter((g) => g.status === "active")
+    .map((g) => ({ label: g.title, ...goalProgress(g.id, secretary), color: DOMAIN_COLORS[g.domain] || MUTE }))
+    .filter((g) => g.percent !== null)
+    .sort((a, b) => a.percent - b.percent)
+    .map((g) => ({ label: g.label, count: g.percent, color: g.color }));
 
   return (
     <div>
@@ -57,6 +64,14 @@ function TrendsTab({ secretary }) {
         <Legend series={series} />
         <WeeklyBarChart data={data} series={series} />
       </Card>
+
+      <SectionTitle note={`${goalProgressRows.length} active, measurable`}>Goal Progress</SectionTitle>
+      <Note>How far along each active Goal is -- done Sessions and Tasks over its whole subtree, low to high.</Note>
+      {goalProgressRows.length === 0 ? (
+        <Note>No active Goal has any Sessions or Tasks under it yet to measure.</Note>
+      ) : (
+        <Card style={{ marginTop: 10 }}><HorizontalBarChart rows={goalProgressRows} max={100} /></Card>
+      )}
 
       <SectionTitle>Domain Distribution</SectionTitle>
       <Note>Everything active or done, counted under its primary domain.</Note>
@@ -133,9 +148,63 @@ function LogTab({ secretary }) {
   );
 }
 
+// The up-direction of the same collaborative loop GoalBreakdownAssist
+// covers top-down: given a Plan or Task with nowhere to go, create a new
+// Goal for it and ground it there in one step -- a Plan reassigns directly,
+// a Task needs a Plan+Session wrapper first since that's its only path to
+// a Goal (reuses findOrCreatePlan(), the same find-or-create Quick Add and
+// capture auto-placement already use).
+function PromoteToGoalForm({ kind, item, secretary, suggestedTitle, onDone, onCancel }) {
+  const [title, setTitle] = useState(suggestedTitle || item.title);
+  const [tier, setTier] = useState("weekly");
+  const [domain, setDomain] = useState(item.domain || secretary.domains[0]?.id || "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const save = async () => {
+    if (!title.trim()) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const goalId = await secretary.saveEntity("goal", {
+        title: title.trim(), tier, domain, owner: "tanner", parentGoalId: null, status: "active",
+      });
+      if (kind === "plan") {
+        await secretary.saveEntity("plan", { ...item, parentType: "goal", parentId: goalId });
+      } else {
+        const plan = await findOrCreatePlan(secretary, { domain, parentType: "goal", parentId: goalId, title: title.trim() });
+        const contentType = defaultContentTypeForDomain(domain, secretary.routingTable);
+        const sessionId = await secretary.saveEntity("session", {
+          title: title.trim(), planId: plan.id, domain, contentType, toolLocation: toolLocationFor(contentType, secretary.routingTable),
+          taskIds: [], done: false,
+        });
+        await secretary.saveEntity("task", { ...item, sessionId });
+      }
+      onDone?.();
+    } catch (err) {
+      setError(err.message || "Could not create that Goal.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 8, borderTop: `1px solid ${LINE}`, paddingTop: 10 }}>
+      <Input value={title} onChange={setTitle} placeholder="New Goal title…" width={200} onEnter={save} />
+      <Select value={tier} onChange={setTier} options={TIERS} width={110} />
+      <Select value={domain} onChange={setDomain} options={secretary.domains} width={150} />
+      <Btn small primary color={INKBLUE} disabled={saving || !title.trim()} onClick={save}>{saving ? "…" : "Create & attach"}</Btn>
+      <Btn small color={MUTE} onClick={onCancel} disabled={saving}>Cancel</Btn>
+      {error && <p style={{ fontFamily: MONO, fontSize: 11, color: BRICK, width: "100%", margin: 0 }}>{error}</p>}
+    </div>
+  );
+}
+
 function UnlinkedRow({ kind, item, secretary, onEdit }) {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
+  const [suggestedTitle, setSuggestedTitle] = useState(null);
+  const [promoting, setPromoting] = useState(false);
 
   const askSecretary = async () => {
     setSuggesting(true);
@@ -148,6 +217,7 @@ function UnlinkedRow({ kind, item, secretary, onEdit }) {
       } else {
         setSuggestion(draft.alignment?.note || "No clear Goal match -- may be genuine drift, or the groundwork for a new one.");
       }
+      if (draft.title) setSuggestedTitle(draft.title);
     } catch (err) {
       setSuggestion(err.message || "Could not reach Secretary just now.");
     } finally {
@@ -157,17 +227,24 @@ function UnlinkedRow({ kind, item, secretary, onEdit }) {
 
   return (
     <Card>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
         <div>
           <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500 }}>{item.title}</div>
           <Pill color={DOMAIN_COLORS[item.domain] || MUTE}>{domainLabel(item.domain, secretary.domains)}</Pill>
         </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {kind === "plan" && <Btn small onClick={askSecretary} disabled={suggesting}>{suggesting ? "…" : "Ask Secretary"}</Btn>}
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <Btn small onClick={askSecretary} disabled={suggesting}>{suggesting ? "…" : "Ask Secretary"}</Btn>
+          <Btn small color={INKBLUE} onClick={() => setPromoting((p) => !p)}>{promoting ? "Cancel" : "Promote to Goal…"}</Btn>
           <Btn small primary color={INKBLUE} onClick={() => onEdit(kind, item)}>Edit</Btn>
         </div>
       </div>
       {suggestion && <p style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginTop: 8 }}>{suggestion}</p>}
+      {promoting && (
+        <PromoteToGoalForm
+          kind={kind} item={item} secretary={secretary} suggestedTitle={suggestedTitle}
+          onDone={() => setPromoting(false)} onCancel={() => setPromoting(false)}
+        />
+      )}
     </Card>
   );
 }
