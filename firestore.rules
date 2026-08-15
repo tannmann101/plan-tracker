@@ -209,6 +209,16 @@ service cloud.firestore {
       return d.entries is list;
     }
 
+    // Ideas are deliberately pre-commitment scratch, not part of the Goal
+    // graph -- just a title tied to a Goal, no domain/content-type/status.
+    // They live outside traceFor()/the rollup entirely and are never
+    // event-logged, same "plain document" treatment as captures.
+    function isValidIdea(d) {
+      return d.title is string && d.title.size() > 0 &&
+        d.goalId is string && d.goalId.size() > 0 &&
+        d.createdAt is number;
+    }
+
     match /goals/{id} {
       allow read: if isAllowed();
       allow delete: if isOwner();
@@ -253,6 +263,12 @@ service cloud.firestore {
     match /config/{id} {
       allow read: if isAllowed();
       allow create, update: if isOwner() && isValidConfig(request.resource.data);
+    }
+
+    match /ideas/{id} {
+      allow read: if isAllowed();
+      allow delete: if isOwner();
+      allow create, update: if isOwner() && isValidIdea(request.resource.data);
     }
   }
 }

@@ -113,6 +113,13 @@ const validConfig = (overrides = {}) => ({
   ...overrides,
 });
 
+const validIdea = (overrides = {}) => ({
+  title: "Maybe try a room-by-room checklist",
+  goalId: "goal1",
+  createdAt: now(),
+  ...overrides,
+});
+
 // -- Owner (Tanner) can write every entity type ------------------------
 
 for (const [name, path, payload] of [
@@ -123,6 +130,7 @@ for (const [name, path, payload] of [
   ["task", "tasks/task1", validTask()],
   ["capture", "captures/capture1", validCapture()],
   ["config doc", "config/routingTable", validConfig()],
+  ["idea", "ideas/idea1", validIdea()],
 ]) {
   try {
     await assertSucceeds(setDoc(doc(tannerDb, path), payload));
@@ -153,6 +161,7 @@ for (const [name, path] of [
   ["event", "events/evt1"],
   ["capture", "captures/capture1"],
   ["config doc", "config/routingTable"],
+  ["idea", "ideas/idea1"],
 ]) {
   try {
     const snap = await assertSucceeds(getDoc(doc(rochelleDb, path)));
@@ -448,6 +457,30 @@ try {
   check("config with a wrong-typed entries is rejected", true);
 } catch (e) {
   check("config with a wrong-typed entries is rejected", false);
+}
+
+// -- Ideas: lightweight scratch notes tied to a Goal --
+
+try {
+  const { goalId: _gid, ...missingGoalId } = validIdea();
+  await assertFails(setDoc(doc(tannerDb, "ideas/idea-missing-goal"), missingGoalId));
+  check("idea missing a required field is rejected", true);
+} catch (e) {
+  check("idea missing a required field is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(rochelleDb, "ideas/idea2"), validIdea({ title: "Rochelle's idea" })));
+  check("viewer (Rochelle) cannot create an idea", true);
+} catch (e) {
+  check("viewer (Rochelle) cannot create an idea", false);
+}
+try {
+  await assertSucceeds(deleteDoc(doc(tannerDb, "ideas/idea1")));
+  const snap = await getDoc(doc(rochelleDb, "ideas/idea1"));
+  check("owner can delete an idea", !snap.exists());
+} catch (e) {
+  check("owner can delete an idea", false);
+  console.error(e.message);
 }
 
 // -- Owner can delete --

@@ -17,6 +17,23 @@ export async function findOrCreatePlan(secretary, { domain, parentType = null, p
   return { id };
 }
 
+// Grounds a bare Task under a Goal -- a Task's only route to a Goal is
+// through a Session's Plan, so this find-or-creates both in one call.
+// Shared by Trends' Promote-to-Goal (task kind) and the Plan Workspace's
+// Idea-to-Task conversion, so a repeated promotion/conversion in the same
+// Goal reuses one holding Session instead of spawning a new one each time.
+export async function findOrCreateGroundedSession(secretary, { domain, goalId, goalTitle }) {
+  const plan = await findOrCreatePlan(secretary, { domain, parentType: "goal", parentId: goalId, title: goalTitle });
+  const existing = (secretary.sessions || []).find((s) => s.planId === plan.id && !s.done);
+  if (existing) return existing;
+  const contentType = defaultContentTypeForDomain(domain, secretary.routingTable);
+  const sessionId = await secretary.saveEntity("session", {
+    title: goalTitle, planId: plan.id, domain, contentType,
+    toolLocation: toolLocationFor(contentType, secretary.routingTable), taskIds: [], done: false,
+  });
+  return { id: sessionId };
+}
+
 // The ungrounded holding Plan Quick Add and capture auto-placement fall back
 // to when no Goal/Project is specified or matched -- groundwork logged
 // before something exists yet for it to serve (see the v2 schema
