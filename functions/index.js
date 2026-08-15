@@ -22,12 +22,29 @@ const DOMAIN_IDS = [
   'writing', 'contemplation', 'ecology-practices',
 ];
 const TIER_IDS = ['yearly', 'quarterly', 'monthly', 'weekly'];
-const CONTENT_TYPE_IDS = [
-  'scheduling', 'quick-capture', 'structured-teaching', 'reflective-dialogic',
-  'reading', 'systems-architecture', 'execution-finance', 'execution-tech-admin',
-  'execution-practices', 'weekly-recap', 'week-at-a-glance', 'long-form-writing',
-  'communication', 'reference-media', 'phone-native',
-];
+
+// Content-type categories are domain-scoped, not shared -- kept in sync by
+// hand with src/constants.js' DEFAULT_ROUTING_TABLE (grouped here by domain,
+// same grouping firestore.rules' contentTypeDomainPrefix() enforces server-
+// side) so Claude picks a contentType that actually belongs to whichever
+// domain it also picks.
+const CONTENT_TYPES_BY_DOMAIN = {
+  finances: ['fin-scheduling', 'fin-execution', 'fin-review', 'fin-research', 'fin-capture', 'fin-comm'],
+  material: ['mat-capture', 'mat-scheduling', 'mat-research', 'mat-inventory', 'mat-deprovision', 'mat-comm'],
+  teacher: ['tch-dialogic', 'tch-teaching-prep', 'tch-reading', 'tch-curriculum', 'tch-scheduling', 'tch-reference'],
+  'tech-admin': ['adm-execution', 'adm-scheduling', 'adm-inventory', 'adm-capture', 'adm-comm'],
+  career: ['car-scheduling', 'car-development', 'car-execution', 'car-comm', 'car-reflection'],
+  projects: ['prj-capture', 'prj-planning', 'prj-scheduling', 'prj-execution', 'prj-writeup'],
+  collab: ['col-dialogic', 'col-scheduling', 'col-consent', 'col-execution', 'col-comm'],
+  cleaning: ['cln-scheduling', 'cln-execution', 'cln-capture'],
+  repair: ['rep-capture', 'rep-scheduling', 'rep-research', 'rep-execution', 'rep-comm'],
+  planning: ['pln-systems', 'pln-scheduling', 'pln-reflection', 'pln-capture'],
+  'weekly-meeting': ['wkm-recap', 'wkm-glance', 'wkm-prep', 'wkm-followup'],
+  reading: ['rdg-engagement', 'rdg-scheduling', 'rdg-reference', 'rdg-reflection', 'rdg-capture'],
+  writing: ['wrt-drafting', 'wrt-research', 'wrt-scheduling', 'wrt-capture'],
+  contemplation: ['ctm-reflection', 'ctm-reading', 'ctm-scheduling', 'ctm-capture'],
+  'ecology-practices': ['eco-execution', 'eco-scheduling', 'eco-capture', 'eco-reflection'],
+};
 
 function requireOwner(request) {
   const email = request.auth?.token?.email;
@@ -115,14 +132,17 @@ Schema:
 {
   "goals": [{ "title": string, "tier": one of ${JSON.stringify(TIER_IDS)}, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "existingGoalId": string or null }],
   "plans": [{ "title": string, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "goalTitle": string or null }],
-  "sessions": [{ "title": string, "planTitle": string, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "contentType": one of ${JSON.stringify(CONTENT_TYPE_IDS)}, "targetDay": string or null }],
+  "sessions": [{ "title": string, "planTitle": string, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "contentType": string (must be one of that session's domain's content-types, see below), "targetDay": string or null }],
   "tasks": [{ "title": string, "sessionTitle": string, "date": string or null }]
 }
+
+Content-types are domain-specific -- a session's contentType MUST come from its own domain's list, never another domain's:
+${JSON.stringify(CONTENT_TYPES_BY_DOMAIN, null, 2)}
 
 Rules:
 - "goals" are any yearly/quarterly/monthly/weekly goals visible or referenced on the page, at whatever tiers actually appear -- don't invent tiers that aren't there. If a goal on the page matches one in existingGoals by title/meaning, set existingGoalId to that goal's id and still include the entry (so the client can match it up); otherwise existingGoalId is null.
 - "plans" are this week's plans of action; goalTitle links a plan to a goal's title from the "goals" array (or an existingGoals title) when the page shows that link, else null.
-- "sessions" are the individual planned sessions under a plan; planTitle must match a "plans" title exactly. Pick contentType by what kind of activity the session actually is (see the routing table's vocabulary) -- e.g. a reading session is "reading", a scheduling block is "scheduling", a finance task is "execution-finance". targetDay is an ISO date (YYYY-MM-DD) if the page states or implies one, else null.
+- "sessions" are the individual planned sessions under a plan; planTitle must match a "plans" title exactly. Pick the domain first, then pick contentType from that domain's list above by what kind of activity the session actually is -- e.g. a reading session in the reading domain is "rdg-engagement", a scheduling block in finances is "fin-scheduling", a finance execution task is "fin-execution". targetDay is an ISO date (YYYY-MM-DD) if the page states or implies one, else null.
 - "tasks" are concrete action items under a session; sessionTitle must match a "sessions" title exactly. date is an ISO date if stated/implied, else null.
 - If the page doesn't clearly contain an item type, return an empty array for it -- do not invent content.
 - Dates: infer year from context if only month/day is given; if no year is inferable, omit the date field (use null) rather than guessing.
@@ -179,7 +199,7 @@ Schema:
   "level": one of ["task", "session", "plan", "goal", "project"] or null (null only if relevance is "unmanaged"),
   "title": string (a clean, short title for the item),
   "domain": one of ${JSON.stringify(DOMAIN_IDS)} or null,
-  "contentType": one of ${JSON.stringify(CONTENT_TYPE_IDS)} or null (only relevant when level is "session"),
+  "contentType": string or null (only relevant when level is "session" -- and when set, MUST come from that domain's own content-type list, never another domain's, see below),
   "alignment": {
     "type": one of ["existing-goal", "new-goal-suggestion", "new-project-suggestion", "drift"],
     "goalId": string or null (an id from existingGoals, only when type is "existing-goal"),
@@ -189,11 +209,14 @@ Schema:
   "clarifyingQuestion": string or null (a single genuine follow-up question, only when confidence is "low" and one more answer would resolve it)
 }
 
+Content-types are domain-specific -- when level is "session" and you set a contentType, it MUST come from the chosen domain's own list, never another domain's:
+${JSON.stringify(CONTENT_TYPES_BY_DOMAIN, null, 2)}
+
 Rules:
 - "relevance": "unmanaged" means this belongs to the ordinary unmanaged ~20-25% of life and should be logged and discarded, not placed -- level, domain, contentType, alignment should reflect that (level null, alignment.type "drift").
 - "level": Task for a single concrete action; Session for a themed working block; Plan for a multi-session effort; Goal for a yearly/quarterly/monthly/weekly aim; Project for an atypical personal initiative outside existing goals (especially one that touches shared/family resources).
 - "alignment": prefer "existing-goal" (with goalId) whenever the capture clearly serves a goal in existingGoals. Use "new-goal-suggestion" or "new-project-suggestion" when it looks like it should become one but doesn't exist yet -- never invent the goal/project yourself, only flag it. Use "drift" when it serves nothing you can identify.
-- Only set confidence "low" when placement is genuinely ambiguous in a way one more question would resolve -- most captures should resolve at "high" confidence. Keep clarifyingQuestion short, specific, and in Secretary's voice (courteous, precise, unhurried) -- e.g. "Shall I file this under Tech/Admin, or does it belong with the Catch-All practices you keep?" Never ask a question a decisive human wouldn't need to.
+- Only set confidence "low" when placement is genuinely ambiguous in a way one more question would resolve -- most captures should resolve at "high" confidence. Keep clarifyingQuestion short, specific, and in Secretary's voice (courteous, precise, unhurried) -- e.g. "Shall I file this under Tech/Admin, or does it belong with the household's ecology of practices?" Never ask a question a decisive human wouldn't need to.
 
 existingGoals (id/title/tier/domain, for alignment matching): ${JSON.stringify(existingGoals)}
 ${priorAnswers.length ? `\nThis capture has already been through one or more rounds of clarification. Prior Q&A (most recent last): ${JSON.stringify(priorAnswers)}\nUse these answers to resolve to confidence "high" if at all possible -- avoid asking a second question unless truly necessary.` : ''}`;
