@@ -241,6 +241,19 @@ try {
   check("goal with a valid parentGoalId is allowed", false);
   console.error(e.message);
 }
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "goals/goal8"), validGoal({ targetDate: "2026-12-31" })));
+  check("goal with a valid targetDate is allowed", true);
+} catch (e) {
+  check("goal with a valid targetDate is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "goals/goal9"), validGoal({ targetDate: 20261231 })));
+  check("goal with a wrong-typed targetDate is rejected", true);
+} catch (e) {
+  check("goal with a wrong-typed targetDate is rejected", false);
+}
 
 try {
   await assertFails(setDoc(doc(tannerDb, "projects/project2"), validProject({ familyScope: "shared-house" })));
@@ -336,6 +349,25 @@ try {
 } catch (e) {
   check("task with explicit null sessionId and a denormalized domain is allowed", false);
   console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-contenttype"), validTask({ sessionId: null, domain: "reading", contentType: "rdg-capture" })));
+  check("task with a contentType matching its own domain is allowed", true);
+} catch (e) {
+  check("task with a contentType matching its own domain is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "tasks/task-contenttype-cross"), validTask({ sessionId: null, domain: "reading", contentType: "fin-scheduling" })));
+  check("task with a contentType from a different domain is rejected", true);
+} catch (e) {
+  check("task with a contentType from a different domain is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "tasks/task-contenttype-no-domain"), validTask({ sessionId: null, contentType: "rdg-capture" })));
+  check("task with a contentType but no domain is rejected", true);
+} catch (e) {
+  check("task with a contentType but no domain is rejected", false);
 }
 
 try {

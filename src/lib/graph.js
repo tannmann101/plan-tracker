@@ -115,6 +115,18 @@ export function rollupForGoal(goalId, data) {
   return { goalIds, plans: relatedPlans, sessions: relatedSessions, tasks: relatedTasks, events: relatedEvents };
 }
 
+// Automatic sense of "how far along" a Goal is: done Sessions + done Tasks,
+// over total Sessions + Tasks, across the Goal's whole subtree (built on
+// rollupForGoal(), same gather every other Goal view already uses).
+// percent is null (not 0) when there's nothing under the Goal yet to
+// measure -- an empty Goal isn't "0% done," it's "no data."
+export function goalProgress(goalId, data) {
+  const { sessions, tasks } = rollupForGoal(goalId, data);
+  const total = sessions.length + tasks.length;
+  const done = sessions.filter((s) => s.done).length + tasks.filter((t) => t.done).length;
+  return { done, total, percent: total ? Math.round((done / total) * 100) : null };
+}
+
 // Whether an entity is tagged with a given domain, primary or secondary --
 // used by Domains dashboards and Trends so a cross-domain item shows up
 // everywhere it's tagged, not just under its primary domain.

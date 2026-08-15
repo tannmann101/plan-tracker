@@ -74,7 +74,9 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
     defaults.contentType || defaultContentTypeForDomain(defaults.domain || secretary.domains[0]?.id || "", secretary.routingTable)
   );
   const [sessionId, setSessionId] = useState(defaults.sessionId || "");
-  const [planParent, setPlanParent] = useState(null);
+  const [planParent, setPlanParent] = useState(
+    defaults.parentType && defaults.parentId ? { parentType: defaults.parentType, parentId: defaults.parentId } : null
+  );
   const [initiator, setInitiator] = useState("me");
   const [familyScope, setFamilyScope] = useState("personal");
   const [saving, setSaving] = useState(false);
@@ -89,6 +91,7 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
   };
 
   const contentTypeOptions = contentTypesForDomain(domain, secretary.routingTable).map((r) => ({ id: r.id, label: contentTypeLabel(r.id, secretary.routingTable) }));
+  const taskContentTypeOptions = [{ id: "", label: "-- none --" }, ...contentTypeOptions];
   const sessionsInDomain = (secretary.sessions || []).filter((s) => s.domain === domain && !s.done);
 
   const save = async () => {
@@ -98,7 +101,7 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
     try {
       if (type === "task") {
         await secretary.saveEntity("task", {
-          title: title.trim(), domain, sessionId: sessionId || null, done: false, date: date || null,
+          title: title.trim(), domain, contentType: contentType || null, sessionId: sessionId || null, done: false, date: date || null,
         });
       } else if (type === "session") {
         let planId = defaults.planId || null;
@@ -149,6 +152,9 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
         <>
           <Field label="Date">
             <Input value={date} onChange={setDate} placeholder="YYYY-MM-DD" />
+          </Field>
+          <Field label="Content-type (optional)">
+            <Select value={contentType} onChange={setContentType} options={taskContentTypeOptions} />
           </Field>
           {sessionsInDomain.length > 0 && (
             <Field label="Attach to a Session (optional)">

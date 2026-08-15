@@ -3,6 +3,45 @@ import { Modal, IconButton } from "../ui";
 import { SANS, MONO, SERIF, INK, MUTE, LINE, INKBLUE } from "../theme";
 import { traceFor } from "../lib/graph";
 
+// Inline, horizontal counterpart to TraceChain -- same traceFor() steps,
+// rendered as a breadcrumb directly on a card instead of a vertical chain
+// inside a modal, so the Goal a Task/Session/Plan serves (or that it
+// doesn't yet serve one) is visible without tapping anything. Drops the
+// entity's own first step for task/session/plan, since the card's title
+// already says that.
+export function GoalChainLine({ type, entity, data, onNavigateGoal }) {
+  const steps = traceFor(type, entity, data);
+  const chain = steps.slice(1); // drop the entity's own title, already shown by the card
+  if (chain.length === 0) {
+    // A Goal with an empty chain is simply a root -- already conveyed by
+    // the Goals tree's own nesting, not a gap worth flagging. Every other
+    // type genuinely should trace to a Goal, so an empty chain there does
+    // mean "ungrounded."
+    if (type === "goal") return null;
+    return <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, marginTop: 6 }}>not yet linked to a Goal</div>;
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, marginTop: 6 }}>
+      {chain.map((step, i) => (
+        <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+          {i > 0 && <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE }}>›</span>}
+          {step.goalId && onNavigateGoal ? (
+            <button
+              type="button"
+              onClick={() => onNavigateGoal(step.goalId)}
+              style={{ fontFamily: MONO, fontSize: 10.5, color: INKBLUE, border: "none", background: "none", padding: 0, cursor: "pointer", textDecoration: "underline" }}
+            >
+              {step.label}
+            </button>
+          ) : (
+            <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE }}>{step.label}</span>
+          )}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // Small info icon every Task/Session/Plan/Goal card carries -- tapping it
 // shows the chain up to a root Goal (or Project) without digging through
 // the event log. This is the concrete implementation of the transparency
