@@ -3,19 +3,33 @@ import { signOut } from "firebase/auth";
 import { Btn, SectionTitle, Note, Card, Input } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, LINE } from "../theme";
 import { auth } from "../firebase";
-import { DEFAULT_ROUTING_TABLE, DEFAULT_DOMAINS } from "../constants";
+import { DEFAULT_ROUTING_TABLE, DEFAULT_DOMAINS, contentTypesForDomain } from "../constants";
+
+// Categories are domain-exclusive, so a new entry's id must carry its
+// domain's own prefix -- derived from whatever that domain's existing
+// entries already use, or a fallback for a domain with none yet.
+function domainPrefixFor(domainId, rows) {
+  const existing = contentTypesForDomain(domainId, rows)[0];
+  if (existing?.id.includes("-")) return existing.id.slice(0, existing.id.indexOf("-") + 1);
+  return `${domainId.slice(0, 3).toLowerCase()}-`;
+}
 
 function RoutingTableEditor({ secretary, isOwner }) {
   const [rows, setRows] = useState(secretary.routingTable?.length ? secretary.routingTable : DEFAULT_ROUTING_TABLE);
   const [saving, setSaving] = useState(false);
-  const [newId, setNewId] = useState("");
+  const domains = secretary.domains?.length ? secretary.domains : DEFAULT_DOMAINS;
+  const [newDomain, setNewDomain] = useState(domains[0]?.id || "");
+  const [newSuffix, setNewSuffix] = useState("");
 
   const update = (id, patch) => setRows((r) => r.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   const remove = (id) => setRows((r) => r.filter((row) => row.id !== id));
   const add = () => {
-    if (!newId.trim()) return;
-    setRows((r) => [...r, { id: newId.trim(), label: newId.trim(), toolLocation: "", external: false }]);
-    setNewId("");
+    const suffix = newSuffix.trim();
+    if (!suffix || !newDomain) return;
+    const id = `${domainPrefixFor(newDomain, rows)}${suffix}`;
+    if (rows.some((row) => row.id === id)) return;
+    setRows((r) => [...r, { id, domain: newDomain, label: suffix, toolLocation: "", external: false }]);
+    setNewSuffix("");
   };
   const save = async () => {
     setSaving(true);
@@ -28,27 +42,44 @@ function RoutingTableEditor({ secretary, isOwner }) {
 
   return (
     <div>
-      {rows.map((row) => (
-        <Card key={row.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-          <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, width: 150, flex: "none" }}>{row.id}</span>
-          {isOwner ? (
-            <>
-              <Input value={row.label} onChange={(v) => update(row.id, { label: v })} width={220} />
-              <Input value={row.toolLocation} onChange={(v) => update(row.id, { toolLocation: v })} placeholder="Tool / location" width={220} />
-              <Btn small color={MUTE} onClick={() => remove(row.id)}>Remove</Btn>
-            </>
-          ) : (
-            <>
-              <span style={{ fontFamily: SANS, fontSize: 13, color: INK }}>{row.label}</span>
-              <span style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>→ {row.toolLocation}</span>
-            </>
-          )}
-        </Card>
-      ))}
+      {domains.map((d) => {
+        const domainRows = contentTypesForDomain(d.id, rows);
+        return (
+          <div key={d.id} style={{ marginBottom: 16 }}>
+            <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>{d.label}</div>
+            {domainRows.length === 0 && <Note>No categories yet.</Note>}
+            {domainRows.map((row) => (
+              <Card key={row.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+                <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, width: 150, flex: "none" }}>{row.id}</span>
+                {isOwner ? (
+                  <>
+                    <Input value={row.label} onChange={(v) => update(row.id, { label: v })} width={220} />
+                    <Input value={row.toolLocation} onChange={(v) => update(row.id, { toolLocation: v })} placeholder="Tool / location" width={220} />
+                    <Btn small color={MUTE} onClick={() => remove(row.id)}>Remove</Btn>
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontFamily: SANS, fontSize: 13, color: INK }}>{row.label}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>→ {row.toolLocation}</span>
+                  </>
+                )}
+              </Card>
+            ))}
+          </div>
+        );
+      })}
       {isOwner && (
         <>
-          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-            <Input value={newId} onChange={setNewId} placeholder="New content-type id…" width={220} onEnter={add} />
+          <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <select
+              value={newDomain}
+              onChange={(e) => setNewDomain(e.target.value)}
+              style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8 }}
+            >
+              {domains.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
+            </select>
+            <span style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>{domainPrefixFor(newDomain, rows)}</span>
+            <Input value={newSuffix} onChange={setNewSuffix} placeholder="new-category-suffix" width={200} onEnter={add} />
             <Btn small onClick={add}>Add entry</Btn>
           </div>
           <div style={{ marginTop: 12 }}>
@@ -132,15 +163,18 @@ export default function Settings({ secretary, isOwner, onBack }) {
         Only Tanner's account can write. This is fixed in the app's Firestore rules, not adjustable here.
       </Note>
 
-      <SectionTitle note="content-type → tool/location">Routing Table</SectionTitle>
-      <Note>How each Session's content-type resolves to a physical or digital location. Editing this changes future placements only.</Note>
+      <SectionTitle note="content-type → tool/location, grouped by domain">Routing Table</SectionTitle>
+      <Note>
+        Each domain has its own exclusive set of content-type categories -- none are shared across domains. A Session's content-type
+        resolves to a physical or digital location. Editing this changes future placements only.
+      </Note>
       <RoutingTableEditor secretary={secretary} isOwner={isOwner} />
 
-      <SectionTitle note="the five domains">Domain Definitions</SectionTitle>
+      <SectionTitle note="the fifteen domains">Domain Definitions</SectionTitle>
       <DomainsEditor secretary={secretary} isOwner={isOwner} />
 
       <p style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, marginTop: 24, borderTop: `1px solid ${LINE}`, paddingTop: 14 }}>
-        Tech/Admin and Catch-All have no dedicated tool yet -- their Sessions log generically inside Secretary until one is built. That's a manual call, not something this app migrates automatically.
+        Most domains have no dedicated tool yet -- their Sessions log generically inside Secretary until one is built. That's a manual call, not something this app migrates automatically.
       </p>
     </div>
   );

@@ -49,13 +49,38 @@ service cloud.firestore {
       return ['pending', 'granted', 'declined'];
     }
 
+    // Content-type categories are domain-scoped, not shared -- kept in sync
+    // by hand with src/constants.js' DEFAULT_ROUTING_TABLE. Every id carries
+    // its domain's prefix (fin-, mat-, tch-, ...), which contentTypeDomainPrefix()
+    // below uses to enforce that a Session's contentType actually belongs to
+    // its own domain, not just any real category.
     function contentTypeValues() {
       return [
-        'scheduling', 'quick-capture', 'structured-teaching', 'reflective-dialogic',
-        'reading', 'systems-architecture', 'execution-finance', 'execution-tech-admin',
-        'execution-practices', 'weekly-recap', 'week-at-a-glance', 'long-form-writing',
-        'communication', 'reference-media', 'phone-native'
+        'fin-scheduling', 'fin-execution', 'fin-review', 'fin-research', 'fin-capture', 'fin-comm',
+        'mat-capture', 'mat-scheduling', 'mat-research', 'mat-inventory', 'mat-deprovision', 'mat-comm',
+        'tch-dialogic', 'tch-teaching-prep', 'tch-reading', 'tch-curriculum', 'tch-scheduling', 'tch-reference',
+        'adm-execution', 'adm-scheduling', 'adm-inventory', 'adm-capture', 'adm-comm',
+        'car-scheduling', 'car-development', 'car-execution', 'car-comm', 'car-reflection',
+        'prj-capture', 'prj-planning', 'prj-scheduling', 'prj-execution', 'prj-writeup',
+        'col-dialogic', 'col-scheduling', 'col-consent', 'col-execution', 'col-comm',
+        'cln-scheduling', 'cln-execution', 'cln-capture',
+        'rep-capture', 'rep-scheduling', 'rep-research', 'rep-execution', 'rep-comm',
+        'pln-systems', 'pln-scheduling', 'pln-reflection', 'pln-capture',
+        'wkm-recap', 'wkm-glance', 'wkm-prep', 'wkm-followup',
+        'rdg-engagement', 'rdg-scheduling', 'rdg-reference', 'rdg-reflection', 'rdg-capture',
+        'wrt-drafting', 'wrt-research', 'wrt-scheduling', 'wrt-capture',
+        'ctm-reflection', 'ctm-reading', 'ctm-scheduling', 'ctm-capture',
+        'eco-execution', 'eco-scheduling', 'eco-capture', 'eco-reflection'
       ];
+    }
+
+    function contentTypeDomainPrefix(domain) {
+      return {
+        'finances': 'fin-', 'material': 'mat-', 'teacher': 'tch-', 'tech-admin': 'adm-',
+        'career': 'car-', 'projects': 'prj-', 'collab': 'col-', 'cleaning': 'cln-',
+        'repair': 'rep-', 'planning': 'pln-', 'weekly-meeting': 'wkm-', 'reading': 'rdg-',
+        'writing': 'wrt-', 'contemplation': 'ctm-', 'ecology-practices': 'eco-'
+      }[domain];
     }
 
     function entityTypeValues() {
@@ -124,6 +149,7 @@ service cloud.firestore {
         d.domain in domainValues() &&
         hasValidSecondaryDomains(d) &&
         d.contentType in contentTypeValues() &&
+        d.contentType.matches(contentTypeDomainPrefix(d.domain) + '.*') &&
         d.toolLocation is string &&
         (!('taskIds' in d) || d.taskIds is list) &&
         (!('targetDay' in d) || d.targetDay is string) &&

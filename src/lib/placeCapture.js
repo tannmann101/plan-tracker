@@ -1,4 +1,4 @@
-import { toolLocationFor, domainLabel } from "../constants";
+import { toolLocationFor, domainLabel, defaultContentTypeForDomain } from "../constants";
 
 // Finds an existing Plan matching this exact title/domain/parent combination,
 // or creates one. Shared by placeCapture's "Captured" plan and Quick Add's
@@ -57,7 +57,11 @@ export async function placeCapture(secretary, captureId, text, draft) {
   }
 
   const domain = draft.domain || "planning";
-  const contentType = draft.contentType || "quick-capture";
+  // Content-types are domain-exclusive -- a draft's contentType is only
+  // trusted when it actually belongs to the domain being placed into,
+  // otherwise fall back to that domain's own default category.
+  const draftEntry = (secretary.routingTable || []).find((r) => r.id === draft.contentType);
+  const contentType = draftEntry?.domain === domain ? draft.contentType : defaultContentTypeForDomain(domain, secretary.routingTable);
   const toolLocation = toolLocationFor(contentType, secretary.routingTable);
   const title = draft.title || text.slice(0, 80);
 

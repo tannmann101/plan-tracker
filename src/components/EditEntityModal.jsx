@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Modal, Btn, Input, Select } from "../ui";
 import { SERIF, MONO, INK, MUTE, INKBLUE, BRICK, LINE } from "../theme";
 import {
-  CONTENT_TYPE_IDS, contentTypeLabel, toolLocationFor, LIFECYCLE_STATUSES,
+  contentTypesForDomain, defaultContentTypeForDomain, contentTypeLabel, toolLocationFor, LIFECYCLE_STATUSES,
   INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES,
 } from "../constants";
 
@@ -66,7 +66,9 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
   const [domain, setDomain] = useState(entity.domain || secretary.domains[0]?.id || "");
   const [secondaryDomains, setSecondaryDomains] = useState(entity.secondaryDomains || []);
   const [status, setStatus] = useState(entity.status || "active");
-  const [contentType, setContentType] = useState(entity.contentType || CONTENT_TYPE_IDS[0]);
+  const [contentType, setContentType] = useState(
+    entity.contentType || defaultContentTypeForDomain(entity.domain || secretary.domains[0]?.id || "", secretary.routingTable)
+  );
   const [targetDay, setTargetDay] = useState(entity.targetDay || "");
   const [date, setDate] = useState(entity.date || "");
   const [sessionId, setSessionId] = useState(entity.sessionId || "");
@@ -80,7 +82,15 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const contentTypeOptions = CONTENT_TYPE_IDS.map((id) => ({ id, label: contentTypeLabel(id, secretary.routingTable) }));
+  // Categories are domain-exclusive -- switching domains re-picks a sensible
+  // default from the new domain's own list rather than carrying over a
+  // content-type that no longer belongs to it.
+  const changeDomain = (nextDomain) => {
+    setDomain(nextDomain);
+    if (type === "session") setContentType(defaultContentTypeForDomain(nextDomain, secretary.routingTable));
+  };
+
+  const contentTypeOptions = contentTypesForDomain(domain, secretary.routingTable).map((r) => ({ id: r.id, label: contentTypeLabel(r.id, secretary.routingTable) }));
   const plansInDomain = (secretary.plans || []).filter((p) => p.domain === domain);
   const sessionsInDomain = (secretary.sessions || []).filter((s) => s.domain === domain);
 
@@ -129,7 +139,7 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
       </Field>
 
       <Field label="Domain">
-        <Select value={domain} onChange={setDomain} options={secretary.domains} />
+        <Select value={domain} onChange={changeDomain} options={secretary.domains} />
       </Field>
 
       <Field label="Secondary domains (optional -- ⌘/Ctrl-click for more than one)">

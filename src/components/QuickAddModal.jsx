@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal, Btn, Input, Select } from "../ui";
 import { SERIF, MONO, INK, MUTE, INKBLUE, LINE, BRICK } from "../theme";
-import { CONTENT_TYPE_IDS, contentTypeLabel, toolLocationFor, INITIATORS, FAMILY_SCOPES, todayISO } from "../constants";
+import { contentTypesForDomain, defaultContentTypeForDomain, contentTypeLabel, toolLocationFor, INITIATORS, FAMILY_SCOPES, todayISO } from "../constants";
 import { findOrCreatePlan, quickPlanTitle } from "../lib/placeCapture";
 
 const TYPE_LABELS = { task: "Task", session: "Session", plan: "Plan", project: "Project" };
@@ -70,7 +70,9 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
   const [domain, setDomain] = useState(defaults.domain || secretary.domains[0]?.id || "");
   const [date, setDate] = useState(defaults.date || (type === "task" ? todayISO() : ""));
   const [targetDay, setTargetDay] = useState(defaults.targetDay || "");
-  const [contentType, setContentType] = useState(defaults.contentType || CONTENT_TYPE_IDS[0]);
+  const [contentType, setContentType] = useState(
+    defaults.contentType || defaultContentTypeForDomain(defaults.domain || secretary.domains[0]?.id || "", secretary.routingTable)
+  );
   const [sessionId, setSessionId] = useState(defaults.sessionId || "");
   const [planParent, setPlanParent] = useState(null);
   const [initiator, setInitiator] = useState("me");
@@ -78,7 +80,15 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
-  const contentTypeOptions = CONTENT_TYPE_IDS.map((id) => ({ id, label: contentTypeLabel(id, secretary.routingTable) }));
+  // Categories are domain-exclusive -- switching domains re-picks a sensible
+  // default from the new domain's own list rather than carrying over a
+  // content-type that no longer belongs to it.
+  const changeDomain = (nextDomain) => {
+    setDomain(nextDomain);
+    setContentType(defaultContentTypeForDomain(nextDomain, secretary.routingTable));
+  };
+
+  const contentTypeOptions = contentTypesForDomain(domain, secretary.routingTable).map((r) => ({ id: r.id, label: contentTypeLabel(r.id, secretary.routingTable) }));
   const sessionsInDomain = (secretary.sessions || []).filter((s) => s.domain === domain && !s.done);
 
   const save = async () => {
@@ -132,7 +142,7 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
       </Field>
 
       <Field label="Domain">
-        <Select value={domain} onChange={setDomain} options={secretary.domains} />
+        <Select value={domain} onChange={changeDomain} options={secretary.domains} />
       </Field>
 
       {type === "task" && (

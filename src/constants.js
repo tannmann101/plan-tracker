@@ -232,23 +232,115 @@ export const PARENT_TYPES = ["goal", "project"];
 // without a code change. `external` marks entries that point at a sibling
 // app's real deployed site (currently only finance); everything else is a
 // physical location or app that Secretary just labels, not integrates with.
+//
+// Categories are domain-scoped, not shared -- each domain gets its own
+// exclusive set (no id or label reused across domains), since "reading
+// engagement" and "bill scheduling" aren't the same kind of thing even when
+// they'd resolve to the same calendar. A cross-cutting concept (scheduling,
+// communication) still gets its own worded-for-that-domain entry per domain
+// rather than one universal category everyone shares.
 
 export const DEFAULT_ROUTING_TABLE = [
-  { id: "scheduling", label: "Scheduling / time-blocking", toolLocation: "Google Calendar", external: false },
-  { id: "quick-capture", label: "Quick, unsorted capture", toolLocation: "Travel notebook", external: false },
-  { id: "structured-teaching", label: "Structured teaching/presentation", toolLocation: "Whiteboard (dinner table)", external: false },
-  { id: "reflective-dialogic", label: "Reflective/dialogic conversation", toolLocation: "Thread Notebook", external: false },
-  { id: "reading", label: "Reading engagement", toolLocation: "Reading notebook", external: false },
-  { id: "systems-architecture", label: "Systems/architecture thinking", toolLocation: "Scratch notebook", external: false },
-  { id: "execution-finance", label: "Execution/tracking -- finance", toolLocation: "Finance Tracker", external: true, linkUrl: "https://tannmann101.github.io/budget-ledger/" },
-  { id: "execution-tech-admin", label: "Execution/tracking -- tech/admin", toolLocation: "Reserved notebook (generic log)", external: false },
-  { id: "execution-practices", label: "Execution/tracking -- practices", toolLocation: "Reserved notebook (generic log)", external: false },
-  { id: "weekly-recap", label: "Weekly recap + planning", toolLocation: "Weekly meeting notebook", external: false },
-  { id: "week-at-a-glance", label: "Week-at-a-glance", toolLocation: "Weekly view notebook", external: false },
-  { id: "long-form-writing", label: "Long-form writing/drafting/curriculum", toolLocation: "M365", external: false },
-  { id: "communication", label: "Communication", toolLocation: "Gmail, Outlook, iMessage, Discord", external: false },
-  { id: "reference-media", label: "Reference/media consumption", toolLocation: "YouTube, X, Facebook, Libby, Hoopla, Bible apps", external: false },
-  { id: "phone-native", label: "Phone-native", toolLocation: "Link capture, sharing, content viewing, bill/finance surface", external: false },
+  // -- finances --
+  { id: "fin-scheduling", domain: "finances", label: "Bill / payment scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "fin-execution", domain: "finances", label: "Execution / tracking", toolLocation: "Finance Tracker", external: true, linkUrl: "https://tannmann101.github.io/budget-ledger/" },
+  { id: "fin-review", domain: "finances", label: "Budget review & planning", toolLocation: "Finance Tracker", external: true, linkUrl: "https://tannmann101.github.io/budget-ledger/" },
+  { id: "fin-research", domain: "finances", label: "Investment research", toolLocation: "Scratch notebook", external: false },
+  { id: "fin-capture", domain: "finances", label: "Quick expense capture", toolLocation: "Travel notebook", external: false },
+  { id: "fin-comm", domain: "finances", label: "Financial communication", toolLocation: "Gmail, Outlook, iMessage, Discord", external: false },
+
+  // -- material --
+  { id: "mat-capture", domain: "material", label: "Quick provisioning capture", toolLocation: "Travel notebook", external: false },
+  { id: "mat-scheduling", domain: "material", label: "Purchase timing", toolLocation: "Google Calendar", external: false },
+  { id: "mat-research", domain: "material", label: "Product research", toolLocation: "Scratch notebook", external: false },
+  { id: "mat-inventory", domain: "material", label: "Inventory check", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "mat-deprovision", domain: "material", label: "Trash / sell / deprovision decision", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "mat-comm", domain: "material", label: "Vendor / marketplace communication", toolLocation: "Gmail, Outlook, iMessage, Discord", external: false },
+
+  // -- teacher --
+  { id: "tch-dialogic", domain: "teacher", label: "Reflective / dialogic conversation", toolLocation: "Thread Notebook", external: false },
+  { id: "tch-teaching-prep", domain: "teacher", label: "Structured teaching / presentation prep", toolLocation: "Whiteboard (dinner table)", external: false },
+  { id: "tch-reading", domain: "teacher", label: "Reading engagement", toolLocation: "Reading notebook", external: false },
+  { id: "tch-curriculum", domain: "teacher", label: "Long-form curriculum drafting", toolLocation: "M365", external: false },
+  { id: "tch-scheduling", domain: "teacher", label: "Lesson scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "tch-reference", domain: "teacher", label: "Reference / media for teaching", toolLocation: "YouTube, X, Facebook, Libby, Hoopla, Bible apps", external: false },
+
+  // -- tech-admin --
+  { id: "adm-execution", domain: "tech-admin", label: "Account / device execution & tracking", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "adm-scheduling", domain: "tech-admin", label: "Renewal / registration scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "adm-inventory", domain: "tech-admin", label: "Passive inventory check", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "adm-capture", domain: "tech-admin", label: "Quick admin capture", toolLocation: "Travel notebook", external: false },
+  { id: "adm-comm", domain: "tech-admin", label: "Admin / vendor communication", toolLocation: "Gmail, Outlook, iMessage, Discord", external: false },
+
+  // -- career --
+  { id: "car-scheduling", domain: "career", label: "Meeting / interview scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "car-development", domain: "career", label: "Professional development", toolLocation: "Scratch notebook", external: false },
+  { id: "car-execution", domain: "career", label: "Work execution & tracking", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "car-comm", domain: "career", label: "Work communication", toolLocation: "Gmail, Outlook, iMessage, Discord", external: false },
+  { id: "car-reflection", domain: "career", label: "Career reflection", toolLocation: "Thread Notebook", external: false },
+
+  // -- projects --
+  { id: "prj-capture", domain: "projects", label: "Quick idea capture", toolLocation: "Travel notebook", external: false },
+  { id: "prj-planning", domain: "projects", label: "Project planning / systems thinking", toolLocation: "Scratch notebook", external: false },
+  { id: "prj-scheduling", domain: "projects", label: "Work session scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "prj-execution", domain: "projects", label: "Execution & tracking", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "prj-writeup", domain: "projects", label: "Long-form writeup", toolLocation: "M365", external: false },
+
+  // -- collab (Collaborative Projects with Rochelle) --
+  { id: "col-dialogic", domain: "collab", label: "Joint planning conversation", toolLocation: "Thread Notebook", external: false },
+  { id: "col-scheduling", domain: "collab", label: "Shared work session scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "col-consent", domain: "collab", label: "Consent / buy-in discussion", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "col-execution", domain: "collab", label: "Execution & tracking", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "col-comm", domain: "collab", label: "Coordination messages", toolLocation: "Gmail, Outlook, iMessage, Discord", external: false },
+
+  // -- cleaning --
+  { id: "cln-scheduling", domain: "cleaning", label: "Cleaning session scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "cln-execution", domain: "cleaning", label: "Cleaning session tracking", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "cln-capture", domain: "cleaning", label: "Quick cleaning-task capture", toolLocation: "Travel notebook", external: false },
+
+  // -- repair --
+  { id: "rep-capture", domain: "repair", label: "Quick repair-need capture", toolLocation: "Travel notebook", external: false },
+  { id: "rep-scheduling", domain: "repair", label: "Repair appointment scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "rep-research", domain: "repair", label: "Repair research / troubleshooting", toolLocation: "Scratch notebook", external: false },
+  { id: "rep-execution", domain: "repair", label: "Repair tracking", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "rep-comm", domain: "repair", label: "Repair-vendor communication", toolLocation: "Gmail, Outlook, iMessage, Discord", external: false },
+
+  // -- planning --
+  { id: "pln-systems", domain: "planning", label: "Systems / architecture thinking", toolLocation: "Scratch notebook", external: false },
+  { id: "pln-scheduling", domain: "planning", label: "Time-blocking", toolLocation: "Google Calendar", external: false },
+  { id: "pln-reflection", domain: "planning", label: "Planning reflection", toolLocation: "Thread Notebook", external: false },
+  { id: "pln-capture", domain: "planning", label: "Quick planning capture", toolLocation: "Travel notebook", external: false },
+
+  // -- weekly-meeting --
+  { id: "wkm-recap", domain: "weekly-meeting", label: "Weekly recap + planning", toolLocation: "Weekly meeting notebook", external: false },
+  { id: "wkm-glance", domain: "weekly-meeting", label: "Week-at-a-glance", toolLocation: "Weekly view notebook", external: false },
+  { id: "wkm-prep", domain: "weekly-meeting", label: "Meeting prep", toolLocation: "Scratch notebook", external: false },
+  { id: "wkm-followup", domain: "weekly-meeting", label: "Meeting follow-up", toolLocation: "Thread Notebook", external: false },
+
+  // -- reading --
+  { id: "rdg-engagement", domain: "reading", label: "Reading engagement", toolLocation: "Reading notebook", external: false },
+  { id: "rdg-scheduling", domain: "reading", label: "Reading time scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "rdg-reference", domain: "reading", label: "Reference / media consumption", toolLocation: "YouTube, X, Facebook, Libby, Hoopla, Bible apps", external: false },
+  { id: "rdg-reflection", domain: "reading", label: "Reading reflection", toolLocation: "Thread Notebook", external: false },
+  { id: "rdg-capture", domain: "reading", label: "Quick reading-list capture", toolLocation: "Travel notebook", external: false },
+
+  // -- writing --
+  { id: "wrt-drafting", domain: "writing", label: "Long-form writing / drafting", toolLocation: "M365", external: false },
+  { id: "wrt-research", domain: "writing", label: "Research for writing", toolLocation: "Scratch notebook", external: false },
+  { id: "wrt-scheduling", domain: "writing", label: "Writing session scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "wrt-capture", domain: "writing", label: "Quick idea capture", toolLocation: "Travel notebook", external: false },
+
+  // -- contemplation --
+  { id: "ctm-reflection", domain: "contemplation", label: "Reflective / dialogic conversation", toolLocation: "Thread Notebook", external: false },
+  { id: "ctm-reading", domain: "contemplation", label: "Contemplative reading", toolLocation: "Reading notebook", external: false },
+  { id: "ctm-scheduling", domain: "contemplation", label: "Contemplation time scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "ctm-capture", domain: "contemplation", label: "Quick capture", toolLocation: "Travel notebook", external: false },
+
+  // -- ecology-practices --
+  { id: "eco-execution", domain: "ecology-practices", label: "Practice-log execution / tracking", toolLocation: "Reserved notebook (generic log)", external: false },
+  { id: "eco-scheduling", domain: "ecology-practices", label: "Practice scheduling", toolLocation: "Google Calendar", external: false },
+  { id: "eco-capture", domain: "ecology-practices", label: "Quick capture", toolLocation: "Travel notebook", external: false },
+  { id: "eco-reflection", domain: "ecology-practices", label: "Practice reflection", toolLocation: "Thread Notebook", external: false },
 ];
 
 export const CONTENT_TYPE_IDS = DEFAULT_ROUTING_TABLE.map((r) => r.id);
@@ -256,6 +348,20 @@ export const CONTENT_TYPE_IDS = DEFAULT_ROUTING_TABLE.map((r) => r.id);
 export const contentTypeLabel = (id, table = DEFAULT_ROUTING_TABLE) => table.find((r) => r.id === id)?.label || id;
 export const toolLocationFor = (contentTypeId, table = DEFAULT_ROUTING_TABLE) =>
   table.find((r) => r.id === contentTypeId)?.toolLocation || "";
+
+// The categories available for a given domain -- what every content-type
+// dropdown filters to, so a Session's category options are always exclusive
+// to whichever domain is selected rather than one shared universal list.
+export const contentTypesForDomain = (domainId, table = DEFAULT_ROUTING_TABLE) =>
+  table.filter((r) => r.domain === domainId);
+
+// A sensible starting category when a domain is picked (or changed) without
+// one already chosen -- prefers a "quick capture"-style entry if the domain
+// has one, else just the domain's first category.
+export const defaultContentTypeForDomain = (domainId, table = DEFAULT_ROUTING_TABLE) => {
+  const options = contentTypesForDomain(domainId, table);
+  return options.find((o) => o.id.endsWith("-capture"))?.id || options[0]?.id || "";
+};
 
 // -- Capture / triage --------------------------------------------------
 

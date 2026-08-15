@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note, Card, Input, Select } from "../ui";
 import { MONO, MUTE, BRICK, INKBLUE, LINE } from "../theme";
-import { TIERS, DEFAULT_DOMAINS, CONTENT_TYPE_IDS, DEFAULT_ROUTING_TABLE, toolLocationFor, contentTypeLabel } from "../constants";
+import { TIERS, DEFAULT_DOMAINS, contentTypesForDomain, defaultContentTypeForDomain, toolLocationFor, contentTypeLabel } from "../constants";
 import { parseWeeklyPhoto, fileToImagePayload } from "../lib/claude";
-
-const CONTENT_TYPE_OPTIONS = CONTENT_TYPE_IDS.map((id) => ({ id, label: contentTypeLabel(id, DEFAULT_ROUTING_TABLE) }));
 
 let tmpId = 0;
 const nextTmpId = () => `tmp-${++tmpId}`;
@@ -32,7 +30,13 @@ export default function WeeklyMeetingImport({ secretary, onBack }) {
       setRows({
         goals: (result.goals || []).map((g) => ({ tmpId: nextTmpId(), include: true, title: g.title, tier: g.tier, domain: g.domain, existingGoalId: g.existingGoalId || null })),
         plans: (result.plans || []).map((p) => ({ tmpId: nextTmpId(), include: true, title: p.title, domain: p.domain, goalTitle: p.goalTitle || "" })),
-        sessions: (result.sessions || []).map((s) => ({ tmpId: nextTmpId(), include: true, title: s.title, planTitle: s.planTitle, domain: s.domain, contentType: s.contentType, targetDay: s.targetDay || "" })),
+        sessions: (result.sessions || []).map((s) => {
+          // Claude is prompted to keep contentType within its domain's own
+          // list, but this guards against a stray mismatch getting through.
+          const validForDomain = contentTypesForDomain(s.domain, secretary.routingTable).some((r) => r.id === s.contentType);
+          const contentType = validForDomain ? s.contentType : defaultContentTypeForDomain(s.domain, secretary.routingTable);
+          return { tmpId: nextTmpId(), include: true, title: s.title, planTitle: s.planTitle, domain: s.domain, contentType, targetDay: s.targetDay || "" };
+        }),
         tasks: (result.tasks || []).map((t) => ({ tmpId: nextTmpId(), include: true, title: t.title, sessionTitle: t.sessionTitle, date: t.date || "" })),
       });
     } catch (err) {
@@ -45,6 +49,14 @@ export default function WeeklyMeetingImport({ secretary, onBack }) {
   const update = (list, tmpIdVal, patch) => {
     setRows((r) => ({ ...r, [list]: r[list].map((row) => (row.tmpId === tmpIdVal ? { ...row, ...patch } : row)) }));
   };
+
+  // Categories are domain-exclusive -- changing a session row's domain
+  // re-picks a sensible default from the new domain's own list.
+  const changeSessionDomain = (tmpIdVal, nextDomain) => {
+    update("sessions", tmpIdVal, { domain: nextDomain, contentType: defaultContentTypeForDomain(nextDomain, secretary.routingTable) });
+  };
+  const sessionContentTypeOptions = (domain) =>
+    contentTypesForDomain(domain, secretary.routingTable).map((r) => ({ id: r.id, label: contentTypeLabel(r.id, secretary.routingTable) }));
 
   const goalTitleOptions = () => {
     const fromExisting = (secretary.goals || []).map((g) => g.title);
@@ -170,8 +182,8 @@ export default function WeeklyMeetingImport({ secretary, onBack }) {
             <Card key={s.tmpId} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
               <input type="checkbox" checked={s.include} onChange={(e) => update("sessions", s.tmpId, { include: e.target.checked })} />
               <Input value={s.title} onChange={(v) => update("sessions", s.tmpId, { title: v })} width={180} />
-              <Select value={s.domain} onChange={(v) => update("sessions", s.tmpId, { domain: v })} options={domains} width={140} />
-              <Select value={s.contentType} onChange={(v) => update("sessions", s.tmpId, { contentType: v })} options={CONTENT_TYPE_OPTIONS} width={190} />
+              <Select value={s.domain} onChange={(v) => changeSessionDomain(s.tmpId, v)} options={domains} width={140} />
+              <Select value={s.contentType} onChange={(v) => update("sessions", s.tmpId, { contentType: v })} options={sessionContentTypeOptions(s.domain)} width={190} />
               <Input value={s.targetDay || ""} onChange={(v) => update("sessions", s.tmpId, { targetDay: v })} placeholder="YYYY-MM-DD" width={110} />
               <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE }}>{toolLocationFor(s.contentType, secretary.routingTable)}</span>
             </Card>

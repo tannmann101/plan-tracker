@@ -71,7 +71,7 @@ const validSession = (overrides = {}) => ({
   title: "Clean the kitchen",
   planId: "plan1",
   domain: "ecology-practices",
-  contentType: "quick-capture",
+  contentType: "eco-capture",
   toolLocation: "Travel notebook",
   taskIds: [],
   targetDay: "2026-08-17",
@@ -109,7 +109,7 @@ const validCapture = (overrides = {}) => ({
 });
 
 const validConfig = (overrides = {}) => ({
-  entries: [{ id: "scheduling", label: "Scheduling / time-blocking", toolLocation: "Google Calendar" }],
+  entries: [{ id: "eco-scheduling", domain: "ecology-practices", label: "Practice scheduling", toolLocation: "Google Calendar" }],
   ...overrides,
 });
 
@@ -273,6 +273,22 @@ try {
   check("session with a wrong-typed done is rejected", true);
 } catch (e) {
   check("session with a wrong-typed done is rejected", false);
+}
+
+// Categories are domain-exclusive: a real content-type id from a different
+// domain must still be rejected, not just gibberish.
+try {
+  await assertFails(setDoc(doc(tannerDb, "sessions/session-cross-domain"), validSession({ domain: "ecology-practices", contentType: "fin-scheduling" })));
+  check("session with a contentType from a different domain is rejected", true);
+} catch (e) {
+  check("session with a contentType from a different domain is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "sessions/session-matching-domain"), validSession({ domain: "finances", contentType: "fin-scheduling" })));
+  check("session with a contentType matching its own domain is allowed", true);
+} catch (e) {
+  check("session with a contentType matching its own domain is allowed", false);
+  console.error(e.message);
 }
 
 try {

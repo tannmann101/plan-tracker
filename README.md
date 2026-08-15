@@ -67,6 +67,23 @@ full descriptions and links. Replaces the original 5-domain MVP taxonomy,
 whose single Catch-All domain lumped together everything that's now its own
 specific role.
 
+## Routing table: domain-exclusive categories
+
+A Session's `content_type` comes from its own domain's category list, never
+another domain's -- there's no shared, universal category anymore. Each
+domain has its own several-option set (roughly 3-6 entries), prefixed with a
+short domain code (`fin-`, `mat-`, `tch-`, `adm-`, `car-`, `prj-`, `col-`,
+`cln-`, `rep-`, `pln-`, `wkm-`, `rdg-`, `wrt-`, `ctm-`, `eco-`) so a
+category's domain is always unambiguous from its id alone. `firestore.rules`
+enforces this server-side (`contentTypeDomainPrefix()` checks a Session's
+`content_type` actually carries its own `domain`'s prefix), and every form
+that offers a content-type choice (Quick Add, the edit modal, the
+weekly-meeting import, Settings' routing-table editor) filters its options
+to the currently-selected domain. See `src/constants.js`
+(`DEFAULT_ROUTING_TABLE`, `contentTypesForDomain()`,
+`defaultContentTypeForDomain()`) or Settings, which groups the editable
+table by domain and prefixes any new entry automatically.
+
 ## Weekly-meeting pipeline
 
 Upload a photo of your handwritten weekly-meeting notebook page (This Week →
