@@ -22,7 +22,11 @@ service cloud.firestore {
     // Shared vocabularies -- kept as functions so the entity schemas below
     // and their event-log counterparts can't quietly drift apart.
     function domainValues() {
-      return ['finances', 'material', 'teacher', 'tech-admin', 'catchall'];
+      return [
+        'finances', 'material', 'teacher', 'tech-admin', 'career', 'projects',
+        'collab', 'cleaning', 'repair', 'planning', 'weekly-meeting', 'reading',
+        'writing', 'contemplation', 'ecology-practices'
+      ];
     }
 
     function tierValues() {
@@ -62,10 +66,18 @@ service cloud.firestore {
       return ['pending-triage', 'holding', 'placed', 'drift', 'discarded'];
     }
 
+    // Every entity may carry secondaryDomains alongside its required primary
+    // domain -- not deep-validated per element (same looseness already used
+    // for sessionIds/taskIds), just checked to be a list when present.
+    function hasValidSecondaryDomains(d) {
+      return !('secondaryDomains' in d) || d.secondaryDomains is list;
+    }
+
     function isValidGoal(d) {
       return d.title is string && d.title.size() > 0 &&
         d.tier in tierValues() &&
         d.domain in domainValues() &&
+        hasValidSecondaryDomains(d) &&
         d.owner in ['tanner', 'rochelle'] &&
         (!('parentGoalId' in d) || d.parentGoalId == null || d.parentGoalId is string) &&
         d.status in statusValues() &&
@@ -75,6 +87,8 @@ service cloud.firestore {
 
     function isValidProject(d) {
       return d.title is string && d.title.size() > 0 &&
+        d.domain in domainValues() &&
+        hasValidSecondaryDomains(d) &&
         d.initiator in initiatorValues() &&
         d.familyScope in familyScopeValues() &&
         d.status in statusValues() &&
@@ -83,11 +97,21 @@ service cloud.firestore {
         d.updatedAt is number;
     }
 
+    // parentType/parentId are optional together -- either both omitted/null
+    // (an ungrounded Plan, logged before a Goal/Project exists for it to
+    // serve) or both set. This is the mechanism for groundwork that later
+    // gets retroactively attached once a Goal emerges from it.
     function isValidPlan(d) {
       return d.title is string && d.title.size() > 0 &&
-        d.parentType in ['goal', 'project'] &&
-        d.parentId is string && d.parentId.size() > 0 &&
+        ((
+          (!('parentType' in d) || d.parentType == null) &&
+          (!('parentId' in d) || d.parentId == null)
+        ) || (
+          d.parentType in ['goal', 'project'] &&
+          d.parentId is string && d.parentId.size() > 0
+        )) &&
         d.domain in domainValues() &&
+        hasValidSecondaryDomains(d) &&
         (!('sessionIds' in d) || d.sessionIds is list) &&
         d.status in statusValues() &&
         d.createdAt is number &&
@@ -98,6 +122,7 @@ service cloud.firestore {
       return d.title is string && d.title.size() > 0 &&
         d.planId is string && d.planId.size() > 0 &&
         d.domain in domainValues() &&
+        hasValidSecondaryDomains(d) &&
         d.contentType in contentTypeValues() &&
         d.toolLocation is string &&
         (!('taskIds' in d) || d.taskIds is list) &&
@@ -107,9 +132,13 @@ service cloud.firestore {
         d.updatedAt is number;
     }
 
+    // sessionId is optional -- a bare Task can stand alone (most quick-adds
+    // won't have a Session picked out yet) and gets attached to one later.
     function isValidTask(d) {
       return d.title is string && d.title.size() > 0 &&
-        d.sessionId is string && d.sessionId.size() > 0 &&
+        (!('sessionId' in d) || d.sessionId == null || (d.sessionId is string && d.sessionId.size() > 0)) &&
+        (!('domain' in d) || d.domain in domainValues()) &&
+        hasValidSecondaryDomains(d) &&
         d.done is bool &&
         (!('date' in d) || d.date is string) &&
         d.createdAt is number &&

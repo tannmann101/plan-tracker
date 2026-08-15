@@ -22,12 +22,19 @@ export const ownerForEmail = (email) => (email === "rochelleygardner@gmail.com" 
 // there's exactly one place that can ever drift out of sync with the rules.
 export const isOwnerEmail = (email) => email === "tannerwesgardner@gmail.com";
 
-// -- The five domains ------------------------------------------------------
+// -- The fifteen domains ----------------------------------------------------
 // id/label/description are the seed for config/domains -- Settings can
 // rewrite copy and links without touching code. `generic` marks domains that
 // have no dedicated tool yet and fall back to logging inside Secretary
-// itself (Tech/Admin, Catch-All); `linkUrl`/`linkLabel` point at a sibling
-// app's deployed site for domains that federate out instead.
+// itself; `linkUrl`/`linkLabel` point at a sibling app's deployed site for
+// domains that federate out instead.
+//
+// Replaces the original 5-domain MVP taxonomy (which lumped everything
+// non-Finance/Material/Teacher/Tech-admin into one "Catch-All" domain) with
+// the specific roles/areas actually in play, per the v2 rework. `projects`
+// is a domain distinct from the Project *entity type* -- most Project
+// entities will carry this domain, but the two are orthogonal axes (a
+// Project can be domain=cleaning just as easily as domain=projects).
 
 export const DEFAULT_DOMAINS = [
   {
@@ -63,9 +70,89 @@ export const DEFAULT_DOMAINS = [
     generic: true,
   },
   {
-    id: "catchall",
-    label: "Catch-All",
-    description: "Ecology of practices -- self-maintenance across physical, mental, spiritual, relational, and practical. No dedicated tool yet -- logs generically here, same as Tech/Admin.",
+    id: "career",
+    label: "Career / Work",
+    description: "Vocational work -- the job itself, professional development, decisions that often also touch a financial or personal goal. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "projects",
+    label: "Projects",
+    description: "One-off personally-initiated work that doesn't fit neatly elsewhere -- most Project entities will carry this domain. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "collab",
+    label: "Collaborative Projects (Rochelle)",
+    description: "Projects undertaken jointly with Rochelle -- distinct from personal Projects since these always touch shared resources. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "cleaning",
+    label: "Cleaning",
+    description: "Household cleaning -- routines and one-off sessions. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "repair",
+    label: "Repair",
+    description: "Fixing what's broken -- the house, devices, vehicles, anything else. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "planning",
+    label: "Planning",
+    description: "Planning as its own activity -- systems-thinking about the plan itself, not the work the plan produces. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "weekly-meeting",
+    label: "Weekly Meeting",
+    description: "Running the weekly meeting and the Weekly View themselves -- prep, follow-up, and upkeep of the ritual, not the items it produces. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "reading",
+    label: "Reading",
+    description: "Reading engagement -- tracked here, executed in the reading notebook per the routing table. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "writing",
+    label: "Writing",
+    description: "Essays and other long-form writing/drafting. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "contemplation",
+    label: "Contemplation",
+    description: "Reflective, unhurried thinking -- distinct from Planning's systems-thinking and Reading's engagement with a text. No dedicated tool yet.",
+    linkLabel: "",
+    linkUrl: "",
+    generic: true,
+  },
+  {
+    id: "ecology-practices",
+    label: "Ecology of Practices",
+    description: "Self-maintenance practices across physical, mental, spiritual, relational, and practical areas -- the narrower, renamed successor to the old Catch-All domain. No dedicated tool yet.",
     linkLabel: "",
     linkUrl: "",
     generic: true,
@@ -74,6 +161,11 @@ export const DEFAULT_DOMAINS = [
 
 export const DOMAIN_IDS = DEFAULT_DOMAINS.map((d) => d.id);
 export const domainLabel = (id, domains = DEFAULT_DOMAINS) => domains.find((d) => d.id === id)?.label || id;
+
+// Every domain an entity is tagged with -- primary first, then any
+// secondaryDomains. Used wherever a Domains dashboard or Trends panel needs
+// to show/count an item under all of its domains, not just its primary one.
+export const allDomainsFor = (entity) => [entity.domain, ...(entity.secondaryDomains || [])].filter(Boolean);
 
 // -- Goal tiers --------------------------------------------------------
 

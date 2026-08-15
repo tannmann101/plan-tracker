@@ -16,6 +16,7 @@ import Today from "./pages/Today";
 import ThisWeek from "./pages/ThisWeek";
 import Goals from "./pages/Goals";
 import Domains from "./pages/Domains";
+import Trends from "./pages/Trends";
 import Inbox from "./pages/Inbox";
 import WeeklyMeetingImport from "./pages/WeeklyMeetingImport";
 import WeeklyView from "./pages/WeeklyView";
@@ -29,8 +30,17 @@ function Shell({ user }) {
   const [richCaptureOpen, setRichCaptureOpen] = useState(false);
   const [confirmCapture, setConfirmCapture] = useState(null);
   const [captureBusy, setCaptureBusy] = useState(false);
+  const [goalsFocusId, setGoalsFocusId] = useState(null);
 
   const goBack = () => setScreen("hub");
+
+  // Threaded down through every page that renders a card with a "why is
+  // this here" trace, so tapping a Goal in that chain jumps straight to it
+  // in the Goals tree instead of just naming it.
+  const navigateGoal = useCallback((goalId) => {
+    setGoalsFocusId(goalId);
+    setScreen("goals");
+  }, []);
 
   const existingGoalsContext = useCallback(
     () => (secretary.goals || []).map((g) => ({ id: g.id, title: g.title, tier: g.tier, domain: g.domain })),
@@ -110,13 +120,15 @@ function Shell({ user }) {
         ) : screen === "hub" ? (
           <Hub secretary={secretary} isOwner={isOwner} onNavigate={setScreen} reviewCount={reviewCount} />
         ) : screen === "today" ? (
-          <Today secretary={secretary} isOwner={isOwner} onBack={goBack} />
+          <Today secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
         ) : screen === "thisweek" ? (
-          <ThisWeek secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigate={setScreen} />
+          <ThisWeek secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigate={setScreen} onNavigateGoal={navigateGoal} />
         ) : screen === "goals" ? (
-          <Goals secretary={secretary} isOwner={isOwner} onBack={goBack} />
+          <Goals secretary={secretary} isOwner={isOwner} onBack={goBack} focusGoalId={goalsFocusId} onFocusHandled={() => setGoalsFocusId(null)} />
         ) : screen === "domains" ? (
-          <Domains secretary={secretary} isOwner={isOwner} onBack={goBack} />
+          <Domains secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
+        ) : screen === "trends" ? (
+          <Trends secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
         ) : screen === "inbox" ? (
           <Inbox secretary={secretary} isOwner={isOwner} onBack={goBack} />
         ) : screen === "weeklyimport" ? (
@@ -124,7 +136,7 @@ function Shell({ user }) {
         ) : screen === "weeklyview" ? (
           <WeeklyView secretary={secretary} onBack={() => setScreen("thisweek")} />
         ) : screen === "search" ? (
-          <SearchPage secretary={secretary} onBack={goBack} />
+          <SearchPage secretary={secretary} onBack={goBack} onNavigateGoal={navigateGoal} />
         ) : screen === "settings" ? (
           <Settings secretary={secretary} isOwner={isOwner} onBack={goBack} />
         ) : null}

@@ -6,8 +6,10 @@ import { domainLabel } from "../constants";
 // Shared card for Tasks and Sessions on Today/This Week/Domains -- always a
 // card (never a bare checklist row), always showing domain + tool_location +
 // notes, with the completion checkbox and "why is this here" trace both
-// directly on the card.
-export function EntityCard({ type, entity, domains, data, onToggleDone, readOnly, note }) {
+// directly on the card. Tapping the card body (not the checkbox, not the
+// info icon) opens the edit form when onEdit is given -- this is what makes
+// a mis-categorized item fixable from wherever you notice it.
+export function EntityCard({ type, entity, domains, data, onToggleDone, readOnly, note, onEdit, onNavigateGoal }) {
   const domainColor = DOMAIN_COLORS[entity.domain] || MUTE;
   const done = !!entity.done;
   return (
@@ -17,20 +19,27 @@ export function EntityCard({ type, entity, domains, data, onToggleDone, readOnly
       ) : (
         <div style={{ width: 19, height: 19, flex: "none" }} />
       )}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      <div
+        style={{ flex: 1, minWidth: 0, cursor: !readOnly && onEdit ? "pointer" : "default" }}
+        onClick={!readOnly && onEdit ? () => onEdit(type, entity) : undefined}
+      >
         <div style={{
           fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500,
           textDecoration: done ? "line-through" : "none", lineHeight: 1.4,
         }}>{entity.title}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
           {entity.domain && <Pill color={domainColor} tint={softTint(domainColor)}>{domainLabel(entity.domain, domains)}</Pill>}
+          {(entity.secondaryDomains || []).map((id) => {
+            const c = DOMAIN_COLORS[id] || MUTE;
+            return <Pill key={id} color={c} tint={softTint(c)}>{domainLabel(id, domains)}</Pill>;
+          })}
           {type === "session" && entity.toolLocation && <Pill>{entity.toolLocation}</Pill>}
           {entity.targetDay && <Pill color={MUTE}>{entity.targetDay}</Pill>}
           {entity.date && <Pill color={MUTE}>{entity.date}</Pill>}
         </div>
         {note && <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginTop: 6 }}>{note}</div>}
       </div>
-      <InfoIcon type={type} entity={entity} data={data} />
+      <InfoIcon type={type} entity={entity} data={data} onNavigateGoal={onNavigateGoal} />
     </Card>
   );
 }

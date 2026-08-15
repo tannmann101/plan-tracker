@@ -34,7 +34,7 @@ const now = () => Date.now();
 const validGoal = (overrides = {}) => ({
   title: "Clean the house",
   tier: "monthly",
-  domain: "catchall",
+  domain: "ecology-practices",
   owner: "tanner",
   parentGoalId: null,
   status: "active",
@@ -45,6 +45,7 @@ const validGoal = (overrides = {}) => ({
 
 const validProject = (overrides = {}) => ({
   title: "Shine the floors",
+  domain: "projects",
   initiator: "me",
   familyScope: "touches-family",
   consentStatus: "pending",
@@ -58,7 +59,7 @@ const validPlan = (overrides = {}) => ({
   title: "Clean the house -- per room",
   parentType: "goal",
   parentId: "goal1",
-  domain: "catchall",
+  domain: "ecology-practices",
   sessionIds: [],
   status: "active",
   createdAt: now(),
@@ -69,7 +70,7 @@ const validPlan = (overrides = {}) => ({
 const validSession = (overrides = {}) => ({
   title: "Clean the kitchen",
   planId: "plan1",
-  domain: "catchall",
+  domain: "ecology-practices",
   contentType: "quick-capture",
   toolLocation: "Travel notebook",
   taskIds: [],
@@ -93,7 +94,7 @@ const validTask = (overrides = {}) => ({
 const validEvent = (overrides = {}) => ({
   entityType: "task",
   entityId: "task1",
-  domain: "catchall",
+  domain: "ecology-practices",
   from: null,
   to: "done",
   at: now(),
@@ -279,6 +280,84 @@ try {
   check("task with an empty title is rejected", true);
 } catch (e) {
   check("task with an empty title is rejected", false);
+}
+
+// -- v2 schema relaxations: ungrounded Plans, standalone Tasks, secondaryDomains --
+
+try {
+  const { parentType: _pt, parentId: _pid, ...ungroundedPlan } = validPlan({ sessionIds: [] });
+  await assertSucceeds(setDoc(doc(tannerDb, "plans/plan-ungrounded"), ungroundedPlan));
+  check("plan with no parentType/parentId (ungrounded) is allowed", true);
+} catch (e) {
+  check("plan with no parentType/parentId (ungrounded) is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "plans/plan-ungrounded2"), validPlan({ parentType: null, parentId: null })));
+  check("plan with explicit null parentType/parentId is allowed", true);
+} catch (e) {
+  check("plan with explicit null parentType/parentId is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "plans/plan-bad-parent"), validPlan({ parentType: "goal", parentId: null })));
+  check("plan with parentType set but parentId missing is rejected", true);
+} catch (e) {
+  check("plan with parentType set but parentId missing is rejected", false);
+}
+
+try {
+  const { sessionId: _sid, ...standaloneTask } = validTask();
+  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-standalone"), standaloneTask));
+  check("task with no sessionId (standalone) is allowed", true);
+} catch (e) {
+  check("task with no sessionId (standalone) is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-standalone2"), validTask({ sessionId: null, domain: "reading" })));
+  check("task with explicit null sessionId and a denormalized domain is allowed", true);
+} catch (e) {
+  check("task with explicit null sessionId and a denormalized domain is allowed", false);
+  console.error(e.message);
+}
+
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "goals/goal-secondary"), validGoal({ secondaryDomains: ["career", "planning"] })));
+  check("goal with valid secondaryDomains is allowed", true);
+} catch (e) {
+  check("goal with valid secondaryDomains is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "goals/goal-bad-secondary"), validGoal({ secondaryDomains: "career" })));
+  check("goal with a wrong-typed secondaryDomains is rejected", true);
+} catch (e) {
+  check("goal with a wrong-typed secondaryDomains is rejected", false);
+}
+
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "projects/project-domained"), validProject()));
+  check("project with a valid domain is allowed", true);
+} catch (e) {
+  check("project with a valid domain is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "projects/project-bad-domain"), validProject({ domain: "not-a-real-domain" })));
+  check("project with an out-of-vocabulary domain is rejected", true);
+} catch (e) {
+  check("project with an out-of-vocabulary domain is rejected", false);
+}
+
+for (const id of ["career", "projects", "collab", "cleaning", "repair", "planning", "weekly-meeting", "reading", "writing", "contemplation"]) {
+  try {
+    await assertSucceeds(setDoc(doc(tannerDb, `goals/goal-domain-${id}`), validGoal({ domain: id })));
+    check(`goal with new domain "${id}" is allowed`, true);
+  } catch (e) {
+    check(`goal with new domain "${id}" is allowed`, false);
+    console.error(e.message);
+  }
 }
 
 // -- Events: append-only, schema-validated --

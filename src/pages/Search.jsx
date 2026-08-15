@@ -6,7 +6,7 @@ import { InfoIcon } from "../components/InfoModal";
 import { searchAll } from "../lib/graph";
 import { domainLabel, lifecycleStatusLabel } from "../constants";
 
-export default function Search({ secretary, onBack }) {
+export default function Search({ secretary, onBack, onNavigateGoal }) {
   const [query, setQuery] = useState("");
   const results = searchAll(query, secretary);
 
@@ -25,7 +25,7 @@ export default function Search({ secretary, onBack }) {
           ) : results.map(({ type, entity }) => {
             if (type === "task" || type === "session") {
               return (
-                <EntityCard key={`${type}-${entity.id}`} type={type} entity={entity} domains={secretary.domains} data={secretary} onToggleDone={(e, next) => toggleDone(type, e, next)} />
+                <EntityCard key={`${type}-${entity.id}`} type={type} entity={entity} domains={secretary.domains} data={secretary} onToggleDone={(e, next) => toggleDone(type, e, next)} onNavigateGoal={onNavigateGoal} />
               );
             }
             return (
@@ -39,7 +39,7 @@ export default function Search({ secretary, onBack }) {
                     {entity.status && <Pill color={MUTE}>{lifecycleStatusLabel(entity.status)}</Pill>}
                   </div>
                 </div>
-                {type !== "project" && <InfoIcon type={type} entity={entity} data={secretary} />}
+                {type !== "project" && <InfoIcon type={type} entity={entity} data={secretary} onNavigateGoal={onNavigateGoal} />}
               </Card>
             );
           })}

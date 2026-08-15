@@ -69,12 +69,12 @@ export function traceFor(type, entity, data) {
   }
   if (type === "plan") plan = entity;
   if (plan) {
-    steps.push({ label: plan.title, detail: `Plan -- ${plan.domain}` });
+    steps.push({ label: plan.title, detail: plan.parentType ? `Plan -- ${plan.domain}` : `Plan -- ${plan.domain} (not yet linked)` });
     if (plan.parentType === "goal") {
       const goal = goals.find((g) => g.id === plan.parentId);
       if (goal) {
         for (const g of goalAncestors(goal, goals)) {
-          steps.push({ label: g.title, detail: `Goal -- ${g.tier}, ${g.domain}` });
+          steps.push({ label: g.title, detail: `Goal -- ${g.tier}, ${g.domain}`, goalId: g.id });
         }
       }
     } else if (plan.parentType === "project") {
@@ -86,7 +86,7 @@ export function traceFor(type, entity, data) {
   }
   if (type === "goal") {
     for (const g of goalAncestors(entity, goals)) {
-      steps.push({ label: g.title, detail: `Goal -- ${g.tier}, ${g.domain}` });
+      steps.push({ label: g.title, detail: `Goal -- ${g.tier}, ${g.domain}`, goalId: g.id });
     }
   }
   return steps;
@@ -113,6 +113,28 @@ export function rollupForGoal(goalId, data) {
       (e.entityType === "task" && taskIds.has(e.entityId)))
     .sort((a, b) => a.at - b.at);
   return { goalIds, plans: relatedPlans, sessions: relatedSessions, tasks: relatedTasks, events: relatedEvents };
+}
+
+// Whether an entity is tagged with a given domain, primary or secondary --
+// used by Domains dashboards and Trends so a cross-domain item shows up
+// everywhere it's tagged, not just under its primary domain.
+export function matchesDomain(entity, domainId) {
+  return entity.domain === domainId || (entity.secondaryDomains || []).includes(domainId);
+}
+
+// A Plan is "grounded" once it serves a Goal or Project -- ungrounded Plans
+// are groundwork logged before that link exists yet (see the v2 schema
+// relaxation), and are what the Unlinked-work review surfaces.
+export function isGrounded(plan) {
+  return !!(plan.parentType && plan.parentId);
+}
+
+export function unlinkedPlans(plans) {
+  return (plans || []).filter((p) => !isGrounded(p));
+}
+
+export function standaloneTasks(tasks) {
+  return (tasks || []).filter((t) => !t.sessionId);
 }
 
 export function searchAll(query, data) {
