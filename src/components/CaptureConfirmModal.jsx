@@ -4,6 +4,9 @@ import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, LINE } from "../theme";
 import { domainLabel, contentTypeLabel } from "../constants";
 import { triageCapture } from "../lib/claude";
 import { placeCapture } from "../lib/placeCapture";
+import QuickAddModal from "./QuickAddModal";
+
+const PLACEABLE_TYPES = ["task", "session", "plan", "project"];
 
 // Secretary's confirmation step, for whenever triage genuinely can't
 // resolve on its own -- a short conversation, not a single accept/reject
@@ -17,6 +20,7 @@ export default function CaptureConfirmModal({ capture, secretary, onClose }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [done, setDone] = useState(null);
+  const [placingManually, setPlacingManually] = useState(false);
 
   const existingGoals = (secretary.goals || []).map((g) => ({ id: g.id, title: g.title, tier: g.tier, domain: g.domain }));
 
@@ -119,11 +123,27 @@ export default function CaptureConfirmModal({ capture, secretary, onClose }) {
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: "#8B3A2B", marginTop: 10 }}>{error}</p>}
 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16, borderTop: `1px solid ${LINE}`, paddingTop: 14 }}>
-        {!draft?.clarifyingQuestion && <Btn primary color={INKBLUE} disabled={loading} onClick={accept}>Accept placement</Btn>}
+        {!draft?.clarifyingQuestion && (
+          <>
+            <Btn primary color={INKBLUE} disabled={loading} onClick={accept}>Accept placement</Btn>
+            <Btn color={INKBLUE} disabled={loading} onClick={() => setPlacingManually(true)}>Place manually…</Btn>
+          </>
+        )}
         <Btn color={MUTE} disabled={loading} onClick={markDrift}>Set aside (drift)</Btn>
         <Btn color={MUTE} disabled={loading} onClick={saveForLater}>Save for later instead</Btn>
         <Btn color={MUTE} disabled={loading} onClick={onClose}>Not now</Btn>
       </div>
+
+      {placingManually && (
+        <QuickAddModal
+          secretary={secretary}
+          types={PLACEABLE_TYPES}
+          defaultType={PLACEABLE_TYPES.includes(draft?.level) ? draft.level : "task"}
+          defaults={{ title: capture.rawText, domain: draft?.domain || secretary.domains[0]?.id, contentType: draft?.contentType }}
+          onSaved={() => secretary.saveCapture({ id: capture.id, status: "placed", rawText: capture.rawText, triageDraft: draft })}
+          onClose={() => { setPlacingManually(false); setDone("placed"); }}
+        />
+      )}
     </Modal>
   );
 }
