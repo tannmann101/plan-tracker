@@ -17,6 +17,7 @@ import ThisWeek from "./pages/ThisWeek";
 import Goals from "./pages/Goals";
 import Domains from "./pages/Domains";
 import Trends from "./pages/Trends";
+import PlanWorkspace from "./pages/PlanWorkspace";
 import Inbox from "./pages/Inbox";
 import WeeklyMeetingImport from "./pages/WeeklyMeetingImport";
 import WeeklyView from "./pages/WeeklyView";
@@ -129,6 +130,8 @@ function Shell({ user }) {
           <Domains secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
         ) : screen === "trends" ? (
           <Trends secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
+        ) : screen === "workspace" ? (
+          <PlanWorkspace secretary={secretary} isOwner={isOwner} onBack={goBack} />
         ) : screen === "inbox" ? (
           <Inbox secretary={secretary} isOwner={isOwner} onBack={goBack} />
         ) : screen === "weeklyimport" ? (

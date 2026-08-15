@@ -8,6 +8,7 @@ const CARDS = [
   { id: "goals", title: "Goals", blurb: "Yearly down to weekly, and the rollup report." },
   { id: "domains", title: "Domains", blurb: "The roles you keep, one dashboard each." },
   { id: "trends", title: "Trends", blurb: "What's getting done, how aligned it is, and the log of it all." },
+  { id: "workspace", title: "Plan Workspace", blurb: "Rough out ideas for a Goal, then turn them into real Sessions and Tasks." },
 ];
 
 function countFor(id, secretary) {
@@ -25,6 +26,7 @@ function countFor(id, secretary) {
     return (secretary.goals || []).filter((g) => g.status === "active").length;
   }
   if (id === "domains") return (secretary.domains || []).length;
+  if (id === "workspace") return (secretary.ideas || []).length;
   return null;
 }
 

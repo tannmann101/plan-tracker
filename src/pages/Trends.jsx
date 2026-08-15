@@ -8,9 +8,9 @@ import {
   toolUsageCounts, eventLog, eventsToCSV,
 } from "../lib/trends";
 import { unlinkedPlans, standaloneTasks, goalProgress } from "../lib/graph";
-import { domainLabel, tierLabel, TIERS, defaultContentTypeForDomain, toolLocationFor } from "../constants";
+import { domainLabel, tierLabel, TIERS } from "../constants";
 import { triageCapture } from "../lib/claude";
-import { findOrCreatePlan } from "../lib/placeCapture";
+import { findOrCreateGroundedSession } from "../lib/placeCapture";
 
 const TOP_DOMAIN_SERIES = 6;
 
@@ -152,8 +152,8 @@ function LogTab({ secretary }) {
 // covers top-down: given a Plan or Task with nowhere to go, create a new
 // Goal for it and ground it there in one step -- a Plan reassigns directly,
 // a Task needs a Plan+Session wrapper first since that's its only path to
-// a Goal (reuses findOrCreatePlan(), the same find-or-create Quick Add and
-// capture auto-placement already use).
+// a Goal (reuses findOrCreateGroundedSession(), the same find-or-create
+// helper the Plan Workspace's Idea-to-Task conversion uses).
 function PromoteToGoalForm({ kind, item, secretary, suggestedTitle, onDone, onCancel }) {
   const [title, setTitle] = useState(suggestedTitle || item.title);
   const [tier, setTier] = useState("weekly");
@@ -172,13 +172,8 @@ function PromoteToGoalForm({ kind, item, secretary, suggestedTitle, onDone, onCa
       if (kind === "plan") {
         await secretary.saveEntity("plan", { ...item, parentType: "goal", parentId: goalId });
       } else {
-        const plan = await findOrCreatePlan(secretary, { domain, parentType: "goal", parentId: goalId, title: title.trim() });
-        const contentType = defaultContentTypeForDomain(domain, secretary.routingTable);
-        const sessionId = await secretary.saveEntity("session", {
-          title: title.trim(), planId: plan.id, domain, contentType, toolLocation: toolLocationFor(contentType, secretary.routingTable),
-          taskIds: [], done: false,
-        });
-        await secretary.saveEntity("task", { ...item, sessionId });
+        const session = await findOrCreateGroundedSession(secretary, { domain, goalId, goalTitle: title.trim() });
+        await secretary.saveEntity("task", { ...item, sessionId: session.id });
       }
       onDone?.();
     } catch (err) {

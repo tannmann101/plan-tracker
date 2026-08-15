@@ -15,6 +15,7 @@ const REFS = {
 const EVENTS_REF = collection(db, "events");
 const CAPTURES_REF = collection(db, "captures");
 const CONFIG_REF = collection(db, "config");
+const IDEAS_REF = collection(db, "ideas");
 
 // Append-only log of lifecycle transitions, written alongside every
 // goal/project/plan/session/task save/delete so the Goal rollup report can
@@ -47,6 +48,7 @@ export function useSecretary(enabled) {
   const [tasks, setTasks] = useState(null);
   const [events, setEvents] = useState(null);
   const [captures, setCaptures] = useState(null);
+  const [ideas, setIdeas] = useState(null);
   const [routingTable, setRoutingTable] = useState(DEFAULT_ROUTING_TABLE);
   const [domains, setDomains] = useState(DEFAULT_DOMAINS);
   const [status, setStatus] = useState("loading"); // loading | ready | forbidden | error
@@ -55,7 +57,7 @@ export function useSecretary(enabled) {
   const refresh = useCallback(async () => {
     setStatus((s) => (s === "ready" ? "ready" : "loading"));
     try {
-      const [goalsSnap, projectsSnap, plansSnap, sessionsSnap, tasksSnap, eventsSnap, capturesSnap, configSnap] =
+      const [goalsSnap, projectsSnap, plansSnap, sessionsSnap, tasksSnap, eventsSnap, capturesSnap, configSnap, ideasSnap] =
         await Promise.all([
           getDocs(REFS.goal),
           getDocs(REFS.project),
@@ -65,6 +67,7 @@ export function useSecretary(enabled) {
           getDocs(EVENTS_REF),
           getDocs(CAPTURES_REF),
           getDocs(CONFIG_REF),
+          getDocs(IDEAS_REF),
         ]);
       const mapDocs = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
       setGoals(mapDocs(goalsSnap));
@@ -74,6 +77,7 @@ export function useSecretary(enabled) {
       setTasks(mapDocs(tasksSnap));
       setEvents(mapDocs(eventsSnap));
       setCaptures(mapDocs(capturesSnap));
+      setIdeas(mapDocs(ideasSnap));
 
       const routingDoc = configSnap.docs.find((d) => d.id === "routingTable");
       const domainsDoc = configSnap.docs.find((d) => d.id === "domains");
@@ -227,6 +231,47 @@ export function useSecretary(enabled) {
     }
   }, []);
 
+  // Ideas are plain scratch notes tied to a Goal -- same "no event log,
+  // just a document" treatment as captures, since they sit outside the
+  // Goal→Plan→Session→Task graph until converted into a real entity.
+  const saveIdea = useCallback(async (idea) => {
+    setSaveStatus("saving");
+    try {
+      const { id, ...rest } = idea;
+      const now = Date.now();
+      let docId = id;
+      if (id) {
+        await setDoc(doc(IDEAS_REF, id), { ...rest, createdAt: rest.createdAt || now });
+      } else {
+        const ref = await addDoc(IDEAS_REF, { ...rest, createdAt: now });
+        docId = ref.id;
+      }
+      setIdeas((prevList) => {
+        const next = (prevList || []).filter((i) => i.id !== docId);
+        next.push({ id: docId, ...rest, createdAt: rest.createdAt || now });
+        return next;
+      });
+      setSaveStatus("idle");
+      return docId;
+    } catch (err) {
+      console.error("Failed to save idea", err);
+      setSaveStatus("error");
+      throw err;
+    }
+  }, []);
+
+  const deleteIdea = useCallback(async (id) => {
+    setSaveStatus("saving");
+    try {
+      await deleteDoc(doc(IDEAS_REF, id));
+      setIdeas((prevList) => (prevList || []).filter((i) => i.id !== id));
+      setSaveStatus("idle");
+    } catch (err) {
+      console.error("Failed to delete idea", err);
+      setSaveStatus("error");
+    }
+  }, []);
+
   // Settings' routing-table / domain-definitions editors -- full-array
   // replacement, not a partial merge, so an entry can be reordered or
   // removed as easily as edited.
@@ -245,7 +290,7 @@ export function useSecretary(enabled) {
   }, []);
 
   return {
-    goals, projects, plans, sessions, tasks, events, captures, routingTable, domains,
-    status, saveStatus, refresh, saveEntity, deleteEntity, saveCapture, deleteCapture, saveConfig,
+    goals, projects, plans, sessions, tasks, events, captures, ideas, routingTable, domains,
+    status, saveStatus, refresh, saveEntity, deleteEntity, saveCapture, deleteCapture, saveIdea, deleteIdea, saveConfig,
   };
 }
