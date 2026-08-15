@@ -66,7 +66,7 @@ function ParentPicker({ goals, projects, value, onChange }) {
 
 export default function QuickAddModal({ secretary, types, defaultType, defaults = {}, onClose, onSaved }) {
   const [type, setType] = useState(defaultType || types[0]);
-  const [title, setTitle] = useState("");
+  const [title, setTitle] = useState(defaults.title || "");
   const [domain, setDomain] = useState(defaults.domain || secretary.domains[0]?.id || "");
   const [date, setDate] = useState(defaults.date || (type === "task" ? todayISO() : ""));
   const [targetDay, setTargetDay] = useState(defaults.targetDay || "");
