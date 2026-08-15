@@ -73,6 +73,9 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
   const [contentType, setContentType] = useState(
     defaults.contentType || defaultContentTypeForDomain(defaults.domain || secretary.domains[0]?.id || "", secretary.routingTable)
   );
+  const [toolLocation, setToolLocation] = useState(
+    defaults.toolLocation || toolLocationFor(contentType, secretary.routingTable)
+  );
   const [sessionId, setSessionId] = useState(defaults.sessionId || "");
   const [planParent, setPlanParent] = useState(
     defaults.parentType && defaults.parentId ? { parentType: defaults.parentType, parentId: defaults.parentId } : null
@@ -84,14 +87,26 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
 
   // Categories are domain-exclusive -- switching domains re-picks a sensible
   // default from the new domain's own list rather than carrying over a
-  // content-type that no longer belongs to it.
+  // content-type that no longer belongs to it. Either way, the tool/
+  // location resets to that category's default too -- it's a real field
+  // now, editable below, not just assumed from the category silently.
+  const changeContentType = (nextContentType) => {
+    setContentType(nextContentType);
+    setToolLocation(nextContentType ? toolLocationFor(nextContentType, secretary.routingTable) : "");
+  };
   const changeDomain = (nextDomain) => {
     setDomain(nextDomain);
-    setContentType(defaultContentTypeForDomain(nextDomain, secretary.routingTable));
+    changeContentType(defaultContentTypeForDomain(nextDomain, secretary.routingTable));
   };
 
   const contentTypeOptions = contentTypesForDomain(domain, secretary.routingTable).map((r) => ({ id: r.id, label: contentTypeLabel(r.id, secretary.routingTable) }));
   const taskContentTypeOptions = [{ id: "", label: "-- none --" }, ...contentTypeOptions];
+  // Every distinct tool/location the routing table currently declares --
+  // deliberately a closed set (not free text), so the Locations page can
+  // meaningfully group items by it rather than fragmenting on typos.
+  const toolLocationOptions = [...new Set((secretary.routingTable || []).map((r) => r.toolLocation))]
+    .sort()
+    .map((loc) => ({ id: loc, label: loc }));
   const sessionsInDomain = (secretary.sessions || []).filter((s) => s.domain === domain && !s.done);
 
   const save = async () => {
@@ -101,7 +116,8 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
     try {
       if (type === "task") {
         await secretary.saveEntity("task", {
-          title: title.trim(), domain, contentType: contentType || null, sessionId: sessionId || null, done: false, date: date || null,
+          title: title.trim(), domain, contentType: contentType || null, toolLocation: contentType ? (toolLocation || null) : null,
+          sessionId: sessionId || null, done: false, date: date || null,
         });
       } else if (type === "session") {
         let planId = defaults.planId || null;
@@ -109,7 +125,6 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
           const plan = await findOrCreatePlan(secretary, { domain, title: quickPlanTitle(domain, secretary.domains) });
           planId = plan.id;
         }
-        const toolLocation = toolLocationFor(contentType, secretary.routingTable);
         await secretary.saveEntity("session", {
           title: title.trim(), planId, domain, contentType, toolLocation,
           taskIds: [], targetDay: targetDay || null, done: false,
@@ -154,8 +169,13 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
             <Input value={date} onChange={setDate} placeholder="YYYY-MM-DD" />
           </Field>
           <Field label="Content-type (optional)">
-            <Select value={contentType} onChange={setContentType} options={taskContentTypeOptions} />
+            <Select value={contentType} onChange={changeContentType} options={taskContentTypeOptions} />
           </Field>
+          {contentType && (
+            <Field label="Tool / location">
+              <Select value={toolLocation} onChange={setToolLocation} options={toolLocationOptions} />
+            </Field>
+          )}
           {sessionsInDomain.length > 0 && (
             <Field label="Attach to a Session (optional)">
               <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}>
@@ -170,14 +190,14 @@ export default function QuickAddModal({ secretary, types, defaultType, defaults 
       {type === "session" && (
         <>
           <Field label="Content-type">
-            <Select value={contentType} onChange={setContentType} options={contentTypeOptions} />
+            <Select value={contentType} onChange={changeContentType} options={contentTypeOptions} />
+          </Field>
+          <Field label="Tool / location">
+            <Select value={toolLocation} onChange={setToolLocation} options={toolLocationOptions} />
           </Field>
           <Field label="Target day">
             <Input value={targetDay} onChange={setTargetDay} placeholder="YYYY-MM-DD" />
           </Field>
-          <p style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, margin: "0 0 12px" }}>
-            → {toolLocationFor(contentType, secretary.routingTable)}
-          </p>
         </>
       )}
 

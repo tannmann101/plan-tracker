@@ -33,7 +33,7 @@ export function EntityCard({ type, entity, domains, data, onToggleDone, readOnly
             const c = DOMAIN_COLORS[id] || MUTE;
             return <Pill key={id} color={c} tint={softTint(c)}>{domainLabel(id, domains)}</Pill>;
           })}
-          {type === "session" && entity.toolLocation && <Pill>{entity.toolLocation}</Pill>}
+          {entity.toolLocation && <Pill>{entity.toolLocation}</Pill>}
           {type === "task" && entity.contentType && <Pill>{contentTypeLabel(entity.contentType, data?.routingTable)}</Pill>}
           {entity.targetDay && <Pill color={MUTE}>{entity.targetDay}</Pill>}
           {entity.date && <Pill color={MUTE}>{entity.date}</Pill>}
