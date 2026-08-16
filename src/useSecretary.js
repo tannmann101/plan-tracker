@@ -3,7 +3,7 @@ import {
   collection, getDocs, doc, setDoc, deleteDoc, addDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { DEFAULT_DOMAINS, DEFAULT_RESOURCES, DEFAULT_PRACTICE_CATEGORIES } from "./constants";
+import { DEFAULT_DOMAINS, DEFAULT_RESOURCES, DEFAULT_PRACTICE_CATEGORIES, DEFAULT_DISCIPLINE_TYPES } from "./constants";
 import { itemFallsInWindow } from "./lib/graph";
 
 const REFS = {
@@ -53,6 +53,7 @@ export function useSecretary(enabled) {
   const [domains, setDomains] = useState(DEFAULT_DOMAINS);
   const [resources, setResources] = useState(DEFAULT_RESOURCES);
   const [practiceCategories, setPracticeCategories] = useState(DEFAULT_PRACTICE_CATEGORIES);
+  const [disciplineTypes, setDisciplineTypes] = useState(DEFAULT_DISCIPLINE_TYPES);
   const [status, setStatus] = useState("loading"); // loading | ready | forbidden | error
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | error
 
@@ -84,9 +85,11 @@ export function useSecretary(enabled) {
       const domainsDoc = configSnap.docs.find((d) => d.id === "domains");
       const resourcesDoc = configSnap.docs.find((d) => d.id === "resources");
       const practiceCategoriesDoc = configSnap.docs.find((d) => d.id === "practiceCategories");
+      const disciplineTypesDoc = configSnap.docs.find((d) => d.id === "disciplineTypes");
       setDomains(domainsDoc?.data()?.entries || DEFAULT_DOMAINS);
       setResources(resourcesDoc?.data()?.entries || DEFAULT_RESOURCES);
       setPracticeCategories(practiceCategoriesDoc?.data()?.entries || DEFAULT_PRACTICE_CATEGORIES);
+      setDisciplineTypes(disciplineTypesDoc?.data()?.entries || DEFAULT_DISCIPLINE_TYPES);
 
       setStatus("ready");
     } catch (err) {
@@ -249,7 +252,6 @@ export function useSecretary(enabled) {
         await logEvent({
           entityType: "discipline",
           entityId: docId,
-          ...(payload.domain ? { domain: payload.domain } : {}),
           from: prev ? (prev.focused ? "focused" : "paused") : null,
           to: transition,
           at: now,
@@ -279,7 +281,6 @@ export function useSecretary(enabled) {
         await logEvent({
           entityType: "discipline",
           entityId: id,
-          ...(prev.domain ? { domain: prev.domain } : {}),
           from: prev.focused ? "focused" : "paused",
           to: "deleted",
           at: Date.now(),
@@ -400,6 +401,7 @@ export function useSecretary(enabled) {
       if (id === "domains") setDomains(entries);
       if (id === "resources") setResources(entries);
       if (id === "practiceCategories") setPracticeCategories(entries);
+      if (id === "disciplineTypes") setDisciplineTypes(entries);
       setSaveStatus("idle");
     } catch (err) {
       console.error(`Failed to save config/${id}`, err);
@@ -410,7 +412,7 @@ export function useSecretary(enabled) {
 
   return {
     kinds, items, practiceHabits, disciplines, pendingOperations, chatMessages, events, captures,
-    domains, resources, practiceCategories,
+    domains, resources, practiceCategories, disciplineTypes,
     status, saveStatus, refresh,
     saveEntity, deleteEntity, savePracticeHabit, deletePracticeHabit, saveDiscipline, deleteDiscipline,
     saveCapture, deleteCapture, savePendingOperation, deletePendingOperation, saveChatMessage, saveConfig,

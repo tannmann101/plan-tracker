@@ -6,7 +6,7 @@ import { Field, TagsInput, MultiCheckList, DisciplineMilestonesEditor } from "..
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import { Timeline } from "../components/charts";
-import { KIND_STATUSES, weekStartISO, addDaysISO, domainLabel, DEFAULT_DISCIPLINE_MILESTONES } from "../constants";
+import { KIND_STATUSES, weekStartISO, addDaysISO, DEFAULT_DISCIPLINE_MILESTONES, disciplineTypeLabel } from "../constants";
 import { practiceItemFor, allTagsInUse, disciplineStreak } from "../lib/graph";
 
 const TOP_TABS = [
@@ -19,6 +19,7 @@ function slugify(label) {
 }
 
 const WEEKDAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+const OTHER_TYPE_ID = "__other__";
 
 // §9.1 -- category management, habit definitions, and the weekly tracker
 // grid. The grid never keeps its own completion state: every cell reads/
@@ -221,17 +222,20 @@ function DisciplinesSection({ secretary }) {
 
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState("");
-  const [domain, setDomain] = useState(secretary.domains[0]?.id || "");
+  const [type, setType] = useState(secretary.disciplineTypes[0]?.id || "");
+  const [otherTypeText, setOtherTypeText] = useState("");
   const [resources, setResources] = useState([]);
   const [tags, setTags] = useState([]);
   const [milestones, setMilestones] = useState(DEFAULT_DISCIPLINE_MILESTONES);
 
   const tagSuggestions = allTagsInUse(secretary);
+  const typeOptions = [...secretary.disciplineTypes, { id: OTHER_TYPE_ID, label: "Other…" }];
 
   const resetForm = () => {
     setEditingId(null);
     setTitle("");
-    setDomain(secretary.domains[0]?.id || "");
+    setType(secretary.disciplineTypes[0]?.id || "");
+    setOtherTypeText("");
     setResources([]);
     setTags([]);
     setMilestones(DEFAULT_DISCIPLINE_MILESTONES);
@@ -240,7 +244,8 @@ function DisciplinesSection({ secretary }) {
   const startEdit = (d) => {
     setEditingId(d.id);
     setTitle(d.title);
-    setDomain(d.domain);
+    setType(d.type);
+    setOtherTypeText("");
     setResources(d.resources || []);
     setTags(d.tags || []);
     setMilestones(d.milestones || []);
@@ -248,11 +253,23 @@ function DisciplinesSection({ secretary }) {
 
   const save = async () => {
     const t = title.trim();
-    if (!t || !domain) return;
+    if (!t || !type) return;
+
+    let finalType = type;
+    if (type === OTHER_TYPE_ID) {
+      const label = otherTypeText.trim();
+      if (!label) return;
+      const id = slugify(label);
+      if (!secretary.disciplineTypes.some((dt) => dt.id === id)) {
+        await secretary.saveConfig("disciplineTypes", [...secretary.disciplineTypes, { id, label }]);
+      }
+      finalType = id;
+    }
+
     const editing = editingId ? disciplines.find((d) => d.id === editingId) : null;
     await secretary.saveDiscipline({
       id: editingId || undefined,
-      title: t, domain, resources, tags, milestones,
+      title: t, type: finalType, resources, tags, milestones,
       focused: editing?.focused ?? true,
       resolved: editing?.resolved || false,
       startedAt: editing?.startedAt || Date.now(),
@@ -277,9 +294,14 @@ function DisciplinesSection({ secretary }) {
           <Field label="Name">
             <Input value={title} onChange={setTitle} placeholder="e.g. Quit smoking" />
           </Field>
-          <Field label="Domain">
-            <Select value={domain} onChange={setDomain} options={secretary.domains} />
+          <Field label="Type">
+            <Select value={type} onChange={setType} options={typeOptions} />
           </Field>
+          {type === OTHER_TYPE_ID && (
+            <Field label="New type name">
+              <Input value={otherTypeText} onChange={setOtherTypeText} placeholder="e.g. Spiritual" />
+            </Field>
+          )}
           <Field label="Milestones (days since last reset)">
             <DisciplineMilestonesEditor value={milestones} onChange={setMilestones} />
           </Field>
@@ -290,7 +312,7 @@ function DisciplinesSection({ secretary }) {
             <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
           </Field>
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn primary color={BRICK} disabled={!title.trim() || !domain} onClick={save}>
+            <Btn primary color={BRICK} disabled={!title.trim() || !type || (type === OTHER_TYPE_ID && !otherTypeText.trim())} onClick={save}>
               {editingId ? "Save changes" : "Add habit to break"}
             </Btn>
             {editingId && <Btn color={MUTE} onClick={resetForm}>Cancel</Btn>}
@@ -316,7 +338,7 @@ function DisciplinesSection({ secretary }) {
                       {d.title}
                     </button>
                     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
-                      <Pill color={DOMAIN_COLORS[d.domain] || MUTE} tint={softTint(DOMAIN_COLORS[d.domain] || MUTE)}>{domainLabel(d.domain, secretary.domains)}</Pill>
+                      <Pill color={MUTE}>{disciplineTypeLabel(d.type, secretary.disciplineTypes)}</Pill>
                       {d.focused && <Pill color={BRICK} tint={softTint(BRICK)}>in focus</Pill>}
                     </div>
                   </div>

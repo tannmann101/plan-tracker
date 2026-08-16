@@ -61,7 +61,7 @@ const validPracticeHabit = (overrides = {}) => ({
 
 const validDiscipline = (overrides = {}) => ({
   title: "Quit smoking",
-  domain: "practices",
+  type: "physical",
   milestones: [{ id: "m1", label: "3 days", days: 3 }],
   focused: true,
   resolved: false,
@@ -321,17 +321,24 @@ try {
 }
 
 try {
-  const { domain: _dom, ...missingDomain } = validDiscipline();
-  await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-missing-domain"), missingDomain));
+  const { type: _type, ...missingType } = validDiscipline();
+  await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-missing-type"), missingType));
   check("discipline missing a required field is rejected", true);
 } catch (e) {
   check("discipline missing a required field is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-bad-domain"), validDiscipline({ domain: "not-a-real-domain" })));
-  check("discipline with an out-of-vocabulary domain is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-empty-type"), validDiscipline({ type: "" })));
+  check("discipline with an empty type is rejected", true);
 } catch (e) {
-  check("discipline with an out-of-vocabulary domain is rejected", false);
+  check("discipline with an empty type is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "disciplines/discipline-custom-type"), validDiscipline({ type: "spiritual" })));
+  check("discipline with a custom (household-added) type is allowed", true);
+} catch (e) {
+  check("discipline with a custom (household-added) type is allowed", false);
+  console.error(e.message);
 }
 try {
   await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-bad-milestones"), validDiscipline({ milestones: "not-a-list" })));
