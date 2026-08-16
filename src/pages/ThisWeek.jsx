@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Btn, SectionTitle, Note, TabBar, ExpandableRail } from "../ui";
 import { MUTE, INK, MONO, INKBLUE, DOMAIN_COLORS } from "../theme";
 import { EntityCard } from "../components/EntityCard";
-import { TimeGridDay } from "../components/TimeGrid";
+import { TimeGridDay, TimeRangeControl, useTimeGridPrefs } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import CalendarMonthView from "../components/CalendarMonthView";
@@ -20,8 +20,6 @@ const LAYOUT_TABS = [
 ];
 
 const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const START_HOUR = 6;
-const END_HOUR = 21;
 
 // §7 -- Week/Month toggle, indefinite forward/back navigation in both
 // modes, a Monday-start week grid distinguishing floating from timed
@@ -30,6 +28,7 @@ const END_HOUR = 21;
 export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate }) {
   const [view, setView] = useState("week");
   const [layout, setLayout] = useState("blocked");
+  const [gridPrefs, setGridPrefs] = useTimeGridPrefs();
   const [weekStart, setWeekStart] = useState(() => weekStartISO());
   const [adding, setAdding] = useState(false);
   const [addDefaults, setAddDefaults] = useState(null);
@@ -62,6 +61,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
         <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
           <TabBar tabs={VIEW_TABS} active={view} onChange={setView} />
           {view === "week" && <TabBar tabs={LAYOUT_TABS} active={layout} onChange={setLayout} />}
+          {view === "week" && layout === "blocked" && <TimeRangeControl prefs={gridPrefs} onChange={setGridPrefs} />}
           <Btn small primary color={INKBLUE} onClick={() => openAdd({ targetDay: weekStart })}>+ Add</Btn>
         </div>
       </div>
@@ -82,7 +82,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                       key={d} iso={d} label={`${WEEKDAY_LABELS[i]} ${d.slice(5)}`} isToday={false}
                       floatingItems={byDay[d].filter((i) => i.timing?.floating !== false || !i.timing?.time)}
                       timedItems={byDay[d].filter((i) => i.timing?.floating === false && i.timing?.time)}
-                      startHour={START_HOUR} endHour={END_HOUR}
+                      startHour={gridPrefs.startHour} endHour={gridPrefs.endHour} pxPerHour={gridPrefs.pxPerHour}
                       onToggleDone={toggleDone} onEdit={openEdit} onSlotClick={onSlotClick}
                     />
                   ))}

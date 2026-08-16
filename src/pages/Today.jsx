@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Btn, SectionTitle, Note, Pill, ProgressBar, ExpandableRail, TabBar } from "../ui";
 import { MONO, SANS, INK, MUTE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
-import { TimeGridDay } from "../components/TimeGrid";
+import { TimeGridDay, TimeRangeControl, useTimeGridPrefs } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import { todayISO, addDaysISO } from "../constants";
@@ -12,8 +12,6 @@ const VIEW_TABS = [
   { id: "blocked", label: "Time-blocked" },
   { id: "list", label: "List" },
 ];
-const START_HOUR = 6;
-const END_HOUR = 21;
 
 function dayLabel(iso, today) {
   if (iso === today) return "Today";
@@ -33,6 +31,7 @@ function nextDays(today, count) {
 export default function Today({ secretary, onBack, onNavigateKind }) {
   const today = todayISO();
   const [view, setView] = useState("blocked");
+  const [gridPrefs, setGridPrefs] = useTimeGridPrefs();
   const [adding, setAdding] = useState(false);
   const [addDefaults, setAddDefaults] = useState({ targetDay: today });
   const [editing, setEditing] = useState(null);
@@ -59,8 +58,9 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
       <Btn small onClick={onBack} color={MUTE}>← Back</Btn>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <SectionTitle note={today}>Today</SectionTitle>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
           <TabBar tabs={VIEW_TABS} active={view} onChange={setView} />
+          {view === "blocked" && <TimeRangeControl prefs={gridPrefs} onChange={setGridPrefs} />}
           <Btn small primary color={INKBLUE} onClick={() => openAdd({ targetDay: today })}>+ Add</Btn>
         </div>
       </div>
@@ -74,7 +74,7 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
                   key={d} iso={d} label={dayLabel(d, today)} isToday={d === today}
                   floatingItems={itemsByDay[d].filter((i) => i.timing?.floating !== false || !i.timing?.time)}
                   timedItems={itemsByDay[d].filter((i) => i.timing?.floating === false && i.timing?.time)}
-                  startHour={START_HOUR} endHour={END_HOUR}
+                  startHour={gridPrefs.startHour} endHour={gridPrefs.endHour} pxPerHour={gridPrefs.pxPerHour}
                   onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
                   onSlotClick={onSlotClick}
                 />

@@ -1,8 +1,87 @@
+import { useState } from "react";
 import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, DOMAIN_COLORS, softTint } from "../theme";
 import { Checkbox } from "../ui";
 
-const PX_PER_HOUR = 52;
-const MIN_BLOCK_PX = 20;
+const MIN_BLOCK_PX = 16;
+
+// Range (which hours show) and zoom (how tall an hour is) are a per-person
+// display preference, not household data -- kept in localStorage rather
+// than Firestore, and shared between Today and Week since they're the same
+// mental "how do I like my day laid out" setting. Both pages read/write
+// through this one hook so they can't drift out of sync with each other.
+const PREFS_KEY = "secretary.timeGridPrefs";
+const DEFAULT_PREFS = { startHour: 6, endHour: 21, pxPerHour: 52 };
+export const ZOOM_LEVELS = [
+  { id: "compact", label: "Compact", pxPerHour: 34 },
+  { id: "normal", label: "Normal", pxPerHour: 52 },
+  { id: "spacious", label: "Spacious", pxPerHour: 76 },
+];
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return DEFAULT_PREFS;
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_PREFS, ...parsed };
+  } catch {
+    return DEFAULT_PREFS;
+  }
+}
+
+export function useTimeGridPrefs() {
+  const [prefs, setPrefs] = useState(loadPrefs);
+  const update = (patch) => {
+    setPrefs((prev) => {
+      const next = { ...prev, ...patch };
+      try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch { /* best-effort */ }
+      return next;
+    });
+  };
+  return [prefs, update];
+}
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, h) => ({ id: h, label: minutesLabelForHour(h) }));
+
+function minutesLabelForHour(h) {
+  const ampm = h < 12 ? "am" : "pm";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}${ampm}`;
+}
+
+// The range/zoom controls themselves -- a compact row of native selects
+// (start hour, end hour) plus a 3-way zoom toggle, meant to sit right next
+// to the Time-blocked/List tab on Today and Week.
+export function TimeRangeControl({ prefs, onChange }) {
+  const setStart = (h) => onChange({ startHour: Math.min(Number(h), prefs.endHour - 1) });
+  const setEnd = (h) => onChange({ endHour: Math.max(Number(h), prefs.startHour + 1) });
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 11 }}>
+      <select value={prefs.startHour} onChange={(e) => setStart(e.target.value)} style={selectStyle}>
+        {HOUR_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+      <span style={{ color: MUTE }}>–</span>
+      <select value={prefs.endHour} onChange={(e) => setEnd(e.target.value)} style={selectStyle}>
+        {HOUR_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+      </select>
+      <div style={{ display: "inline-flex", gap: 2, marginLeft: 4 }}>
+        {ZOOM_LEVELS.map((z) => (
+          <button
+            key={z.id} type="button" title={z.label}
+            onClick={() => onChange({ pxPerHour: z.pxPerHour })}
+            style={{
+              border: `1px solid ${prefs.pxPerHour === z.pxPerHour ? INKBLUE : LINE}`,
+              background: prefs.pxPerHour === z.pxPerHour ? INKBLUE : "transparent",
+              color: prefs.pxPerHour === z.pxPerHour ? "#fff" : MUTE,
+              fontFamily: MONO, fontSize: 10, padding: "3px 7px", borderRadius: 999, cursor: "pointer",
+            }}
+          >{z.label[0]}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const selectStyle = { fontFamily: MONO, fontSize: 11, padding: "3px 5px", border: `1px solid ${LINE}`, borderRadius: 6, background: "#fff" };
 
 function timeToMinutes(t) {
   const [h, m] = t.split(":").map(Number);
@@ -58,10 +137,10 @@ function layoutTimedItems(timedItems) {
 // column) and Week (seven), so the actual "time blocking" behavior --
 // placement, overlap warnings, click-an-empty-slot-to-add -- exists once.
 export function TimeGridDay({
-  iso, label, isToday, floatingItems, timedItems, startHour, endHour,
+  iso, label, isToday, floatingItems, timedItems, startHour, endHour, pxPerHour = 52,
   onToggleDone, onEdit, onSlotClick,
 }) {
-  const gridHeight = (endHour - startHour) * PX_PER_HOUR;
+  const gridHeight = (endHour - startHour) * pxPerHour;
   const laid = layoutTimedItems(timedItems);
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
 
@@ -85,7 +164,7 @@ export function TimeGridDay({
             key={h}
             onClick={onSlotClick ? () => onSlotClick(iso, h) : undefined}
             style={{
-              position: "absolute", left: 0, right: 0, top: i * PX_PER_HOUR, height: PX_PER_HOUR,
+              position: "absolute", left: 0, right: 0, top: i * pxPerHour, height: pxPerHour,
               borderTop: i === 0 ? "none" : `1px solid ${LINE}`, cursor: onSlotClick ? "pointer" : "default",
             }}
           >
@@ -96,8 +175,8 @@ export function TimeGridDay({
         ))}
 
         {laid.map(({ item, start, end, column, columns, overlapping }) => {
-          const top = Math.max(0, (start - startHour * 60) / 60) * PX_PER_HOUR;
-          const height = Math.max(MIN_BLOCK_PX, ((end - start) / 60) * PX_PER_HOUR);
+          const top = Math.max(0, (start - startHour * 60) / 60) * pxPerHour;
+          const height = Math.max(MIN_BLOCK_PX, ((end - start) / 60) * pxPerHour);
           const widthPct = 100 / columns;
           const domainColor = DOMAIN_COLORS[item.domain] || INKBLUE;
           const color = overlapping ? BRICK : domainColor;

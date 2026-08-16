@@ -3,10 +3,10 @@ import { Modal, Btn, Input, Select } from "../ui";
 import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK } from "../theme";
 import {
   KIND_TYPES, ITEM_TYPES, kindTypeLabel, itemTypeLabel, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, todayISO,
-  DURATION_OPTIONS, DEFAULT_DURATION_MINUTES,
+  DEFAULT_DURATION_MINUTES,
 } from "../constants";
 import { allTagsInUse } from "../lib/graph";
-import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker } from "./formFields";
+import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker, DurationInput } from "./formFields";
 
 // §2.1's two-column picker table -- Practice has no Item counterpart, and
 // Errand/Other have no Kind counterpart, so several cells are blank.
@@ -228,7 +228,7 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
                         <Input type="time" value={time} onChange={setTime} />
                       </Field>
                       <Field label="Duration">
-                        <Select value={durationMinutes} onChange={setDurationMinutes} options={DURATION_OPTIONS} />
+                        <DurationInput value={durationMinutes} onChange={setDurationMinutes} />
                       </Field>
                     </>
                   )}
