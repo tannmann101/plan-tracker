@@ -1,25 +1,25 @@
 import { useState, useCallback, useEffect } from "react";
 import {
-  collection, getDocs, doc, setDoc, deleteDoc, addDoc, updateDoc, arrayUnion, arrayRemove,
+  collection, getDocs, doc, setDoc, deleteDoc, addDoc,
 } from "firebase/firestore";
 import { db } from "./firebase";
-import { DEFAULT_ROUTING_TABLE, DEFAULT_DOMAINS } from "./constants";
+import { DEFAULT_DOMAINS, DEFAULT_RESOURCES, DEFAULT_PRACTICE_CATEGORIES } from "./constants";
+import { itemFallsInWindow } from "./lib/graph";
 
 const REFS = {
-  goal: collection(db, "goals"),
-  project: collection(db, "projects"),
-  plan: collection(db, "plans"),
-  session: collection(db, "sessions"),
-  task: collection(db, "tasks"),
+  kind: collection(db, "kinds"),
+  item: collection(db, "items"),
 };
+const PRACTICE_HABITS_REF = collection(db, "practiceHabits");
+const PENDING_OPS_REF = collection(db, "pendingOperations");
+const CHAT_REF = collection(db, "secretaryChat");
 const EVENTS_REF = collection(db, "events");
 const CAPTURES_REF = collection(db, "captures");
 const CONFIG_REF = collection(db, "config");
-const IDEAS_REF = collection(db, "ideas");
 
 // Append-only log of lifecycle transitions, written alongside every
-// goal/project/plan/session/task save/delete so the Goal rollup report can
-// be reconstructed later without a scheduled snapshot job. Best-effort: a
+// kind/item save/delete so Log (§8) and progress rollups can be
+// reconstructed later without a scheduled snapshot job. Best-effort: a
 // logging failure never blocks or fails the entity write itself.
 async function logEvent(event) {
   try {
@@ -29,11 +29,11 @@ async function logEvent(event) {
   }
 }
 
-// Goal/Project/Plan track lifecycle via `status`; Session/Task are
-// checkbox-completable via `done` instead -- this is the one field each
-// entity type transitions on, and the value the event log's from/to records.
+// Kind tracks lifecycle via `status`; Item is checkbox-completable via
+// `done` instead -- this is the one field each family transitions on, and
+// the value the event log's from/to records.
 function transitionValue(type, entity) {
-  return type === "session" || type === "task" ? String(!!entity.done) : entity.status;
+  return type === "item" ? String(!!entity.done) : entity.status;
 }
 
 // Refresh-on-open sync, not live push: the app loads everything once on
@@ -41,48 +41,48 @@ function transitionValue(type, entity) {
 // by a weekly meeting plus occasional capture, not sub-second cross-device
 // visibility.
 export function useSecretary(enabled) {
-  const [goals, setGoals] = useState(null);
-  const [projects, setProjects] = useState(null);
-  const [plans, setPlans] = useState(null);
-  const [sessions, setSessions] = useState(null);
-  const [tasks, setTasks] = useState(null);
+  const [kinds, setKinds] = useState(null);
+  const [items, setItems] = useState(null);
+  const [practiceHabits, setPracticeHabits] = useState(null);
+  const [pendingOperations, setPendingOperations] = useState(null);
+  const [chatMessages, setChatMessages] = useState(null);
   const [events, setEvents] = useState(null);
   const [captures, setCaptures] = useState(null);
-  const [ideas, setIdeas] = useState(null);
-  const [routingTable, setRoutingTable] = useState(DEFAULT_ROUTING_TABLE);
   const [domains, setDomains] = useState(DEFAULT_DOMAINS);
+  const [resources, setResources] = useState(DEFAULT_RESOURCES);
+  const [practiceCategories, setPracticeCategories] = useState(DEFAULT_PRACTICE_CATEGORIES);
   const [status, setStatus] = useState("loading"); // loading | ready | forbidden | error
   const [saveStatus, setSaveStatus] = useState("idle"); // idle | saving | error
 
   const refresh = useCallback(async () => {
     setStatus((s) => (s === "ready" ? "ready" : "loading"));
     try {
-      const [goalsSnap, projectsSnap, plansSnap, sessionsSnap, tasksSnap, eventsSnap, capturesSnap, configSnap, ideasSnap] =
+      const [kindsSnap, itemsSnap, habitsSnap, opsSnap, chatSnap, eventsSnap, capturesSnap, configSnap] =
         await Promise.all([
-          getDocs(REFS.goal),
-          getDocs(REFS.project),
-          getDocs(REFS.plan),
-          getDocs(REFS.session),
-          getDocs(REFS.task),
+          getDocs(REFS.kind),
+          getDocs(REFS.item),
+          getDocs(PRACTICE_HABITS_REF),
+          getDocs(PENDING_OPS_REF),
+          getDocs(CHAT_REF),
           getDocs(EVENTS_REF),
           getDocs(CAPTURES_REF),
           getDocs(CONFIG_REF),
-          getDocs(IDEAS_REF),
         ]);
       const mapDocs = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      setGoals(mapDocs(goalsSnap));
-      setProjects(mapDocs(projectsSnap));
-      setPlans(mapDocs(plansSnap));
-      setSessions(mapDocs(sessionsSnap));
-      setTasks(mapDocs(tasksSnap));
+      setKinds(mapDocs(kindsSnap));
+      setItems(mapDocs(itemsSnap));
+      setPracticeHabits(mapDocs(habitsSnap));
+      setPendingOperations(mapDocs(opsSnap));
+      setChatMessages(mapDocs(chatSnap));
       setEvents(mapDocs(eventsSnap));
       setCaptures(mapDocs(capturesSnap));
-      setIdeas(mapDocs(ideasSnap));
 
-      const routingDoc = configSnap.docs.find((d) => d.id === "routingTable");
       const domainsDoc = configSnap.docs.find((d) => d.id === "domains");
-      setRoutingTable(routingDoc?.data()?.entries || DEFAULT_ROUTING_TABLE);
+      const resourcesDoc = configSnap.docs.find((d) => d.id === "resources");
+      const practiceCategoriesDoc = configSnap.docs.find((d) => d.id === "practiceCategories");
       setDomains(domainsDoc?.data()?.entries || DEFAULT_DOMAINS);
+      setResources(resourcesDoc?.data()?.entries || DEFAULT_RESOURCES);
+      setPracticeCategories(practiceCategoriesDoc?.data()?.entries || DEFAULT_PRACTICE_CATEGORIES);
 
       setStatus("ready");
     } catch (err) {
@@ -97,20 +97,16 @@ export function useSecretary(enabled) {
   }, [enabled, refresh]);
 
   // Small lookups so saveEntity/deleteEntity can stay generic across the
-  // five entity types -- wrapped in useCallback (rather than plain object
+  // two families -- wrapped in useCallback (rather than plain object
   // literals) purely so their own dependency arrays stay exhaustive-deps
   // clean, since the two callbacks below only reference these, not the
   // individual state variables, directly.
-  const getSetter = useCallback((type) => ({
-    goal: setGoals, project: setProjects, plan: setPlans, session: setSessions, task: setTasks,
-  }[type]), []);
-  const getList = useCallback((type) => ({
-    goal: goals, project: projects, plan: plans, session: sessions, task: tasks,
-  }[type]), [goals, projects, plans, sessions, tasks]);
+  const getSetter = useCallback((type) => ({ kind: setKinds, item: setItems }[type]), []);
+  const getList = useCallback((type) => ({ kind: kinds, item: items }[type]), [kinds, items]);
 
-  // Creates a new entity or overwrites an existing one in full. Each entity
-  // is its own document (no growing-array document to split), so there's no
-  // partial-field conflict risk worth guarding against.
+  // Creates a new Kind/Item or overwrites an existing one in full. Each
+  // entity is its own document (no growing-array document to split), so
+  // there's no partial-field conflict risk worth guarding against.
   const saveEntity = useCallback(async (type, entity) => {
     setSaveStatus("saving");
     try {
@@ -135,22 +131,24 @@ export function useSecretary(enabled) {
         });
       }
 
-      // Best-effort denormalized ordering arrays (Plan.sessionIds,
-      // Session.taskIds) -- the source of truth for "what belongs under
-      // what" is still each child's own planId/sessionId back-reference, so
-      // a failure here never breaks placement, only display order.
-      if (type === "session" && !prev && payload.planId) {
-        updateDoc(doc(REFS.plan, payload.planId), { sessionIds: arrayUnion(docId) }).catch(() => {});
-      }
-      if (type === "task" && !prev && payload.sessionId) {
-        updateDoc(doc(REFS.session, payload.sessionId), { taskIds: arrayUnion(docId) }).catch(() => {});
-      }
-
       getSetter(type)((prevList) => {
         const next = (prevList || []).filter((e) => e.id !== docId);
         next.push({ id: docId, ...payload });
         return next;
       });
+
+      // An Item scheduled into today-through-this-week auto-promotes its
+      // still-queued parent Kind into "in-progress" -- one write direction
+      // (Item save -> maybe patches its Kind), status stays fully
+      // drag-overridable afterward on the Plans kanban. Best-effort: never
+      // blocks or fails the Item save itself.
+      if (type === "item" && payload.parentKindId && itemFallsInWindow(payload.timing)) {
+        const parent = (getList("kind") || []).find((k) => k.id === payload.parentKindId);
+        if (parent && parent.status === "queued") {
+          saveEntity("kind", { ...parent, status: "in-progress" }).catch(() => {});
+        }
+      }
+
       setSaveStatus("idle");
       return docId;
     } catch (err) {
@@ -176,12 +174,6 @@ export function useSecretary(enabled) {
           at: Date.now(),
         });
       }
-      if (type === "session" && prev?.planId) {
-        updateDoc(doc(REFS.plan, prev.planId), { sessionIds: arrayRemove(id) }).catch(() => {});
-      }
-      if (type === "task" && prev?.sessionId) {
-        updateDoc(doc(REFS.session, prev.sessionId), { taskIds: arrayRemove(id) }).catch(() => {});
-      }
 
       getSetter(type)((prevList) => (prevList || []).filter((e) => e.id !== id));
       setSaveStatus("idle");
@@ -191,8 +183,45 @@ export function useSecretary(enabled) {
     }
   }, [getList, getSetter]);
 
-  // Captures aren't event-logged (they're pre-placement drafts, not
-  // entities the rollup report tracks) -- just a plain document per capture.
+  // Practice habit definitions -- never carry a completion state
+  // themselves (see lib/graph.js for the Item-is-the-single-source-of-
+  // truth sync contract with the Practices tracker).
+  const savePracticeHabit = useCallback(async (habit) => {
+    setSaveStatus("saving");
+    try {
+      const { id, ...rest } = habit;
+      const now = Date.now();
+      const docId = id || doc(PRACTICE_HABITS_REF).id;
+      await setDoc(doc(PRACTICE_HABITS_REF, docId), { ...rest, createdAt: rest.createdAt || now });
+      setPracticeHabits((prevList) => {
+        const next = (prevList || []).filter((h) => h.id !== docId);
+        next.push({ id: docId, ...rest, createdAt: rest.createdAt || now });
+        return next;
+      });
+      setSaveStatus("idle");
+      return docId;
+    } catch (err) {
+      console.error("Failed to save practice habit", err);
+      setSaveStatus("error");
+      throw err;
+    }
+  }, []);
+
+  const deletePracticeHabit = useCallback(async (id) => {
+    setSaveStatus("saving");
+    try {
+      await deleteDoc(doc(PRACTICE_HABITS_REF, id));
+      setPracticeHabits((prevList) => (prevList || []).filter((h) => h.id !== id));
+      setSaveStatus("idle");
+    } catch (err) {
+      console.error("Failed to delete practice habit", err);
+      setSaveStatus("error");
+    }
+  }, []);
+
+  // Captures are just the raw intake record now -- not event-logged (same
+  // "plain document" treatment as before), since triage always drafts a
+  // pendingOperation for review rather than writing anything directly.
   const saveCapture = useCallback(async (capture) => {
     setSaveStatus("saving");
     try {
@@ -231,56 +260,72 @@ export function useSecretary(enabled) {
     }
   }, []);
 
-  // Ideas are plain scratch notes tied to a Goal -- same "no event log,
-  // just a document" treatment as captures, since they sit outside the
-  // Goal→Plan→Session→Task graph until converted into a real entity.
-  const saveIdea = useCallback(async (idea) => {
+  // pendingOperations -- the one shared queue capture triage, Secretary
+  // chat, and weekly-import all write into. Approving/discarding is just a
+  // status patch here; actually applying an approved op (writing the real
+  // Kind/Item) is the caller's job via saveEntity, kept out of this hook so
+  // there's exactly one place that creates Kinds/Items (the Add-Form path).
+  const savePendingOperation = useCallback(async (op) => {
     setSaveStatus("saving");
     try {
-      const { id, ...rest } = idea;
+      const { id, ...rest } = op;
       const now = Date.now();
       let docId = id;
       if (id) {
-        await setDoc(doc(IDEAS_REF, id), { ...rest, createdAt: rest.createdAt || now });
+        await setDoc(doc(PENDING_OPS_REF, id), { ...rest, createdAt: rest.createdAt || now });
       } else {
-        const ref = await addDoc(IDEAS_REF, { ...rest, createdAt: now });
+        const ref = await addDoc(PENDING_OPS_REF, { ...rest, createdAt: now });
         docId = ref.id;
       }
-      setIdeas((prevList) => {
-        const next = (prevList || []).filter((i) => i.id !== docId);
+      setPendingOperations((prevList) => {
+        const next = (prevList || []).filter((o) => o.id !== docId);
         next.push({ id: docId, ...rest, createdAt: rest.createdAt || now });
         return next;
       });
       setSaveStatus("idle");
       return docId;
     } catch (err) {
-      console.error("Failed to save idea", err);
+      console.error("Failed to save pending operation", err);
       setSaveStatus("error");
       throw err;
     }
   }, []);
 
-  const deleteIdea = useCallback(async (id) => {
+  const deletePendingOperation = useCallback(async (id) => {
     setSaveStatus("saving");
     try {
-      await deleteDoc(doc(IDEAS_REF, id));
-      setIdeas((prevList) => (prevList || []).filter((i) => i.id !== id));
+      await deleteDoc(doc(PENDING_OPS_REF, id));
+      setPendingOperations((prevList) => (prevList || []).filter((o) => o.id !== id));
       setSaveStatus("idle");
     } catch (err) {
-      console.error("Failed to delete idea", err);
+      console.error("Failed to delete pending operation", err);
       setSaveStatus("error");
     }
   }, []);
 
-  // Settings' routing-table / domain-definitions editors -- full-array
+  // Secretary chat -- lightweight message log, append-only from the UI's
+  // perspective (no edit/delete surface needed for a chat transcript).
+  const saveChatMessage = useCallback(async (message) => {
+    try {
+      const ref = await addDoc(CHAT_REF, { ...message, at: message.at || Date.now() });
+      setChatMessages((prevList) => [...(prevList || []), { id: ref.id, ...message, at: message.at || Date.now() }]);
+      return ref.id;
+    } catch (err) {
+      console.error("Failed to save chat message", err);
+      throw err;
+    }
+  }, []);
+
+  // Domains / Resources / Practice-categories editors -- full-array
   // replacement, not a partial merge, so an entry can be reordered or
   // removed as easily as edited.
   const saveConfig = useCallback(async (id, entries) => {
     setSaveStatus("saving");
     try {
       await setDoc(doc(CONFIG_REF, id), { entries });
-      if (id === "routingTable") setRoutingTable(entries);
       if (id === "domains") setDomains(entries);
+      if (id === "resources") setResources(entries);
+      if (id === "practiceCategories") setPracticeCategories(entries);
       setSaveStatus("idle");
     } catch (err) {
       console.error(`Failed to save config/${id}`, err);
@@ -290,7 +335,11 @@ export function useSecretary(enabled) {
   }, []);
 
   return {
-    goals, projects, plans, sessions, tasks, events, captures, ideas, routingTable, domains,
-    status, saveStatus, refresh, saveEntity, deleteEntity, saveCapture, deleteCapture, saveIdea, deleteIdea, saveConfig,
+    kinds, items, practiceHabits, pendingOperations, chatMessages, events, captures,
+    domains, resources, practiceCategories,
+    status, saveStatus, refresh,
+    saveEntity, deleteEntity, savePracticeHabit, deletePracticeHabit,
+    saveCapture, deleteCapture, savePendingOperation, deletePendingOperation, saveChatMessage, saveConfig,
   };
 }
+

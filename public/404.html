@@ -1,0 +1,21 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script>
+      // GitHub Pages serves this file for any path it doesn't recognize as
+      // a real static file -- there's no server-side rewrite available, so
+      // this redirects to the app's index with the attempted path encoded
+      // in a query param. index.html's own inline script reads it back and
+      // restores it via history.replaceState before React mounts, so a
+      // deep link (or a hard refresh on /week, /plans, etc.) still lands
+      // on the right tab instead of a 404. Standard SPA-on-GitHub-Pages
+      // pattern, no framework/dependency involved.
+      var base = "/plan-tracker/";
+      var path = location.pathname.slice(base.length);
+      var extra = location.search ? "&" + location.search.slice(1) : "";
+      location.replace(base + "?redirect=" + encodeURIComponent(path) + extra + location.hash);
+    </script>
+  </head>
+  <body></body>
+</html>

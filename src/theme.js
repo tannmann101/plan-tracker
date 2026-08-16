@@ -80,36 +80,27 @@ export const softTint = (color) => NAMED_SOFT_TINTS[color] || `color-mix(in srgb
 
 // One accent per domain -- distinct from the lifecycle-status palette below
 // so a domain pill never reads as a status pill. Order matches
-// DEFAULT_DOMAINS in src/constants.js.
+// DEFAULT_DOMAINS in src/constants.js. Picked as the 7 most distinct hues
+// from the larger palette built up for the old 15-domain set rather than
+// inventing new colors -- WINE/INDIGO/TEAL/OLIVE/MAGENTA_PLUM/SEAGREEN/
+// REDBROWN/BRICK are no longer referenced here but stay defined above in
+// case a future domain needs one.
 export const DOMAIN_COLORS = {
-  finances: MOSS,
-  material: BRASS,
-  teacher: PLUM,
-  "tech-admin": SLATE,
-  career: INKBLUE,
+  creative: PLUM,
+  vocation: SLATE,
+  education: BRASS,
+  "head-of-household": MOSS,
   projects: TERRACOTTA,
-  collab: WINE,
-  cleaning: DEEPTEAL,
-  repair: OCHRE,
-  planning: INDIGO,
-  "weekly-meeting": TEAL,
-  reading: OLIVE,
-  writing: MAGENTA_PLUM,
-  contemplation: SEAGREEN,
-  "ecology-practices": REDBROWN,
+  practices: DEEPTEAL,
+  goals: OCHRE,
 };
 
+// Matches KIND_STATUSES in src/constants.js -- the Plans kanban's column
+// accents, reused wherever a Kind's status shows as a pill.
 export const STATUS_COLORS = {
-  active: INKBLUE,
+  "not-started": MUTE,
+  queued: SLATE,
+  "in-progress": INKBLUE,
+  "almost-done": BRASS,
   done: MOSS,
-  dropped: MUTE,
-};
-
-// Tier accents for the Goals tree -- coarsest (yearly) to finest (weekly),
-// reusing the domain/status palette rather than adding a fourth hue family.
-export const TIER_COLORS = {
-  yearly: INKBLUE,
-  quarterly: PLUM,
-  monthly: BRASS,
-  weekly: MOSS,
 };

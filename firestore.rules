@@ -1,9 +1,10 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Both household accounts can read everything -- Rochelle's access is
-    // meant to be full (the whole Goal hierarchy, every domain), just
-    // read-only. Writes are gated separately by isOwner().
+    // Both household accounts have identical read/write access -- there is
+    // no owner/viewer split anymore (the redesign explicitly removes it).
+    // The two-account allow-list itself stays: still nobody else can sign
+    // in and touch this data.
     function isAllowed() {
       return request.auth != null &&
         request.auth.token.email in [
@@ -12,29 +13,22 @@ service cloud.firestore {
         ];
     }
 
-    // Secretary is Tanner's own head-of-household layer -- only his account
-    // may write. This is the one place that role is decided; keep it in
-    // sync with isOwnerEmail() in src/constants.js by hand.
-    function isOwner() {
-      return isAllowed() && request.auth.token.email == 'tannerwesgardner@gmail.com';
-    }
-
     // Shared vocabularies -- kept as functions so the entity schemas below
     // and their event-log counterparts can't quietly drift apart.
     function domainValues() {
-      return [
-        'finances', 'material', 'teacher', 'tech-admin', 'career', 'projects',
-        'collab', 'cleaning', 'repair', 'planning', 'weekly-meeting', 'reading',
-        'writing', 'contemplation', 'ecology-practices'
-      ];
+      return ['creative', 'vocation', 'education', 'head-of-household', 'projects', 'practices', 'goals'];
     }
 
-    function tierValues() {
-      return ['yearly', 'quarterly', 'monthly', 'weekly'];
+    function kindTypeValues() {
+      return ['project', 'goal', 'practice'];
     }
 
-    function statusValues() {
-      return ['active', 'done', 'dropped'];
+    function itemTypeValues() {
+      return ['task', 'session', 'prep', 'errand', 'other'];
+    }
+
+    function kindStatusValues() {
+      return ['not-started', 'queued', 'in-progress', 'almost-done', 'done'];
     }
 
     function initiatorValues() {
@@ -49,139 +43,103 @@ service cloud.firestore {
       return ['pending', 'granted', 'declined'];
     }
 
-    // Content-type categories are domain-scoped, not shared -- kept in sync
-    // by hand with src/constants.js' DEFAULT_ROUTING_TABLE. Every id carries
-    // its domain's prefix (fin-, mat-, tch-, ...), which contentTypeDomainPrefix()
-    // below uses to enforce that a Session's contentType actually belongs to
-    // its own domain, not just any real category.
-    function contentTypeValues() {
-      return [
-        'fin-scheduling', 'fin-execution', 'fin-review', 'fin-research', 'fin-capture', 'fin-comm',
-        'mat-capture', 'mat-scheduling', 'mat-research', 'mat-inventory', 'mat-deprovision', 'mat-comm',
-        'tch-dialogic', 'tch-teaching-prep', 'tch-reading', 'tch-curriculum', 'tch-scheduling', 'tch-reference',
-        'adm-execution', 'adm-scheduling', 'adm-inventory', 'adm-capture', 'adm-comm',
-        'car-scheduling', 'car-development', 'car-execution', 'car-comm', 'car-reflection',
-        'prj-capture', 'prj-planning', 'prj-scheduling', 'prj-execution', 'prj-writeup',
-        'col-dialogic', 'col-scheduling', 'col-consent', 'col-execution', 'col-comm',
-        'cln-scheduling', 'cln-execution', 'cln-capture',
-        'rep-capture', 'rep-scheduling', 'rep-research', 'rep-execution', 'rep-comm',
-        'pln-systems', 'pln-scheduling', 'pln-reflection', 'pln-capture',
-        'wkm-recap', 'wkm-glance', 'wkm-prep', 'wkm-followup',
-        'rdg-engagement', 'rdg-scheduling', 'rdg-reference', 'rdg-reflection', 'rdg-capture',
-        'wrt-drafting', 'wrt-research', 'wrt-scheduling', 'wrt-capture',
-        'ctm-reflection', 'ctm-reading', 'ctm-scheduling', 'ctm-capture',
-        'eco-execution', 'eco-scheduling', 'eco-capture', 'eco-reflection'
-      ];
-    }
-
-    function contentTypeDomainPrefix(domain) {
-      return {
-        'finances': 'fin-', 'material': 'mat-', 'teacher': 'tch-', 'tech-admin': 'adm-',
-        'career': 'car-', 'projects': 'prj-', 'collab': 'col-', 'cleaning': 'cln-',
-        'repair': 'rep-', 'planning': 'pln-', 'weekly-meeting': 'wkm-', 'reading': 'rdg-',
-        'writing': 'wrt-', 'contemplation': 'ctm-', 'ecology-practices': 'eco-'
-      }[domain];
+    function createdViaValues() {
+      return ['add-form', 'capture', 'secretary-chat', 'weekly-import'];
     }
 
     function entityTypeValues() {
-      return ['goal', 'project', 'plan', 'session', 'task'];
+      return ['kind', 'item'];
     }
 
     function captureStatusValues() {
-      return ['pending-triage', 'holding', 'placed', 'drift', 'discarded'];
+      return ['triaging', 'proposed', 'discarded'];
     }
 
-    // Every entity may carry secondaryDomains alongside its required primary
-    // domain -- not deep-validated per element (same looseness already used
-    // for sessionIds/taskIds), just checked to be a list when present.
-    function hasValidSecondaryDomains(d) {
-      return !('secondaryDomains' in d) || d.secondaryDomains is list;
+    function pendingOpTypeValues() {
+      return ['create-kind', 'create-item', 'update-kind', 'update-item'];
     }
 
-    function isValidGoal(d) {
+    function pendingOpStatusValues() {
+      return ['pending', 'approved', 'discarded'];
+    }
+
+    // A handful of fields are shared, loosely-typed lists across both Kind
+    // and Item (secondaryDomains, resources, tags) -- not deep-validated
+    // per element, same looseness the prior rework used for sessionIds/
+    // taskIds: checked to be a list when present, nothing more.
+    function isOptionalList(d, key) {
+      return !(key in d) || d[key] is list;
+    }
+
+    // timing is a nested map (targetDay/time/dueDate/floating/milestones)
+    // left loose here on purpose -- it's meant to be tentative/incomplete
+    // at creation and fleshed out later (Plans, Workspace), so the schema
+    // shouldn't force a shape on it prematurely.
+    function isValidTiming(d) {
+      return !('timing' in d) || d.timing == null || d.timing is map;
+    }
+
+    // Kind: Project / Goal / Practice -- the anchor entity. parentKindId
+    // enables Goal-tier nesting and Project/sub-Project hierarchies without
+    // a fixed tier field; status drives the Plans kanban.
+    function isValidKind(d) {
       return d.title is string && d.title.size() > 0 &&
-        d.tier in tierValues() &&
+        d.kindType in kindTypeValues() &&
         d.domain in domainValues() &&
-        hasValidSecondaryDomains(d) &&
-        d.owner in ['tanner', 'rochelle'] &&
-        (!('parentGoalId' in d) || d.parentGoalId == null || d.parentGoalId is string) &&
-        (!('targetDate' in d) || d.targetDate == null || d.targetDate is string) &&
-        d.status in statusValues() &&
-        d.createdAt is number &&
-        d.updatedAt is number;
-    }
-
-    function isValidProject(d) {
-      return d.title is string && d.title.size() > 0 &&
-        d.domain in domainValues() &&
-        hasValidSecondaryDomains(d) &&
-        d.initiator in initiatorValues() &&
-        d.familyScope in familyScopeValues() &&
-        d.status in statusValues() &&
+        isOptionalList(d, 'secondaryDomains') &&
+        isOptionalList(d, 'resources') &&
+        isOptionalList(d, 'tags') &&
+        (!('parentKindId' in d) || d.parentKindId == null || d.parentKindId is string) &&
+        d.status in kindStatusValues() &&
+        isValidTiming(d) &&
+        (!('initiator' in d) || d.initiator in initiatorValues()) &&
+        (!('familyScope' in d) || d.familyScope in familyScopeValues()) &&
         (!('consentStatus' in d) || d.consentStatus in consentStatusValues()) &&
+        (!('retro' in d) || d.retro is bool) &&
+        (!('createdVia' in d) || d.createdVia in createdViaValues()) &&
         d.createdAt is number &&
         d.updatedAt is number;
     }
 
-    // parentType/parentId are optional together -- either both omitted/null
-    // (an ungrounded Plan, logged before a Goal/Project exists for it to
-    // serve) or both set. This is the mechanism for groundwork that later
-    // gets retroactively attached once a Goal emerges from it.
-    function isValidPlan(d) {
+    // Item: Task / Session / Prep / Errand / Other -- may float unattached
+    // (parentKindId null) or attach to a Kind. isRecurringPracticeItem +
+    // practiceHabitId are the sync point with practiceHabits (see
+    // src/lib/graph.js's practice-item helpers for the write contract).
+    function isValidItem(d) {
       return d.title is string && d.title.size() > 0 &&
-        ((
-          (!('parentType' in d) || d.parentType == null) &&
-          (!('parentId' in d) || d.parentId == null)
-        ) || (
-          d.parentType in ['goal', 'project'] &&
-          d.parentId is string && d.parentId.size() > 0
-        )) &&
+        d.itemType in itemTypeValues() &&
         d.domain in domainValues() &&
-        hasValidSecondaryDomains(d) &&
-        (!('sessionIds' in d) || d.sessionIds is list) &&
-        d.status in statusValues() &&
-        d.createdAt is number &&
-        d.updatedAt is number;
-    }
-
-    function isValidSession(d) {
-      return d.title is string && d.title.size() > 0 &&
-        d.planId is string && d.planId.size() > 0 &&
-        d.domain in domainValues() &&
-        hasValidSecondaryDomains(d) &&
-        d.contentType in contentTypeValues() &&
-        d.contentType.matches(contentTypeDomainPrefix(d.domain) + '.*') &&
-        d.toolLocation is string &&
-        (!('taskIds' in d) || d.taskIds is list) &&
-        (!('targetDay' in d) || d.targetDay is string) &&
+        isOptionalList(d, 'secondaryDomains') &&
+        isOptionalList(d, 'resources') &&
+        isOptionalList(d, 'tags') &&
+        (!('parentKindId' in d) || d.parentKindId == null || d.parentKindId is string) &&
+        isValidTiming(d) &&
         d.done is bool &&
+        (!('completedAt' in d) || d.completedAt == null || d.completedAt is number) &&
+        (!('isRecurringPracticeItem' in d) || d.isRecurringPracticeItem is bool) &&
+        (!('practiceHabitId' in d) || d.practiceHabitId == null || d.practiceHabitId is string) &&
+        (!('retro' in d) || d.retro is bool) &&
+        (!('createdVia' in d) || d.createdVia in createdViaValues()) &&
         d.createdAt is number &&
         d.updatedAt is number;
     }
 
-    // sessionId is optional -- a bare Task can stand alone (most quick-adds
-    // won't have a Session picked out yet) and gets attached to one later.
-    // contentType is likewise optional and, like Session's, only valid
-    // within its own domain -- and only meaningful once domain is present,
-    // which the domain-membership check here already enforces.
-    function isValidTask(d) {
+    // practiceHabits are the habit *definition* only -- never a completion
+    // record. A given habit+day's completion lives on exactly one Item
+    // (isRecurringPracticeItem + practiceHabitId above), not here.
+    function isValidPracticeHabit(d) {
       return d.title is string && d.title.size() > 0 &&
-        (!('sessionId' in d) || d.sessionId == null || (d.sessionId is string && d.sessionId.size() > 0)) &&
-        (!('domain' in d) || d.domain in domainValues()) &&
-        (!('contentType' in d) || d.contentType == null ||
-          (d.domain in domainValues() && d.contentType in contentTypeValues() &&
-           d.contentType.matches(contentTypeDomainPrefix(d.domain) + '.*'))) &&
-        (!('toolLocation' in d) || d.toolLocation == null || d.toolLocation is string) &&
-        hasValidSecondaryDomains(d) &&
-        d.done is bool &&
-        (!('date' in d) || d.date is string) &&
-        d.createdAt is number &&
-        d.updatedAt is number;
+        d.categoryId is string && d.categoryId.size() > 0 &&
+        (!('frequency' in d) || d.frequency is map) &&
+        isOptionalList(d, 'resources') &&
+        isOptionalList(d, 'tags') &&
+        (!('active' in d) || d.active is bool) &&
+        d.createdAt is number;
     }
 
-    // Append-only log of lifecycle transitions across every entity type,
-    // written alongside every save/delete so the Goal rollup report has
-    // something to pull from without a scheduled snapshot job.
+    // Append-only log of lifecycle transitions across Kinds/Items, written
+    // alongside every save/delete so Log (§8) and progress rollups have
+    // something to reconstruct from without a scheduled snapshot job.
     function isValidEvent(d) {
       return d.entityType in entityTypeValues() &&
         d.entityId is string && d.entityId.size() > 0 &&
@@ -191,85 +149,94 @@ service cloud.firestore {
         d.at is number;
     }
 
-    // Captures carry an AI-drafted triageDraft (see functions/index.js's
-    // triageCapture) whose internal shape is intentionally left loose here --
-    // it's a draft only ever committed client-side after Tanner accepts it,
-    // never trusted as-is to place an entity.
+    // Captures are just the raw intake record now (text or photo) -- triage
+    // always drafts a pendingOperation for review rather than writing a
+    // Kind/Item directly, so there's no triageDraft/placement shape to
+    // validate here anymore.
     function isValidCapture(d) {
       return d.status in captureStatusValues() &&
         (!('rawText' in d) || d.rawText is string) &&
         (!('rawImageURL' in d) || d.rawImageURL is string) &&
-        (!('triageDraft' in d) || d.triageDraft is map) &&
         d.createdAt is number;
     }
 
-    // config/routingTable and config/domains hold the editable copies of
-    // DEFAULT_ROUTING_TABLE / DEFAULT_DOMAINS from src/constants.js --
-    // Settings can rewrite either without a code change.
+    // The one shared queue every AI draft (capture triage, Secretary chat,
+    // weekly-meeting import) writes into -- never applied to kinds/items
+    // directly. `patch` is intentionally loose (a map of whatever fields
+    // the draft proposes); it's only ever committed client-side after a
+    // human approves it, same discipline the prior rework's captures used.
+    function isValidPendingOperation(d) {
+      return d.opType in pendingOpTypeValues() &&
+        (!('targetId' in d) || d.targetId == null || d.targetId is string) &&
+        d.patch is map &&
+        (!('sourceCaptureId' in d) || d.sourceCaptureId == null || d.sourceCaptureId is string) &&
+        d.sourceType in ['capture', 'chat', 'weekly-import'] &&
+        d.status in pendingOpStatusValues() &&
+        d.createdAt is number;
+    }
+
+    // Secretary chat history -- kept lightweight (role/text/timestamp + an
+    // optional link to the pendingOperation it generated), not full LLM
+    // request/response payloads.
+    function isValidChatMessage(d) {
+      return d.role in ['user', 'assistant'] &&
+        d.text is string &&
+        d.at is number &&
+        (!('pendingOperationId' in d) || d.pendingOperationId == null || d.pendingOperationId is string);
+    }
+
+    // config/domains, config/resources, config/practiceCategories hold the
+    // editable copies of DEFAULT_DOMAINS/DEFAULT_RESOURCES/
+    // DEFAULT_PRACTICE_CATEGORIES from src/constants.js -- Settings/
+    // Workspace can rewrite any of them without a code change.
     function isValidConfig(d) {
       return d.entries is list;
     }
 
-    // Ideas are deliberately pre-commitment scratch, not part of the Goal
-    // graph -- just a title tied to a Goal, no domain/content-type/status.
-    // They live outside traceFor()/the rollup entirely and are never
-    // event-logged, same "plain document" treatment as captures.
-    function isValidIdea(d) {
-      return d.title is string && d.title.size() > 0 &&
-        d.goalId is string && d.goalId.size() > 0 &&
-        d.createdAt is number;
+    match /kinds/{id} {
+      allow read: if isAllowed();
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidKind(request.resource.data);
     }
 
-    match /goals/{id} {
+    match /items/{id} {
       allow read: if isAllowed();
-      allow delete: if isOwner();
-      allow create, update: if isOwner() && isValidGoal(request.resource.data);
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidItem(request.resource.data);
     }
 
-    match /projects/{id} {
+    match /practiceHabits/{id} {
       allow read: if isAllowed();
-      allow delete: if isOwner();
-      allow create, update: if isOwner() && isValidProject(request.resource.data);
-    }
-
-    match /plans/{id} {
-      allow read: if isAllowed();
-      allow delete: if isOwner();
-      allow create, update: if isOwner() && isValidPlan(request.resource.data);
-    }
-
-    match /sessions/{id} {
-      allow read: if isAllowed();
-      allow delete: if isOwner();
-      allow create, update: if isOwner() && isValidSession(request.resource.data);
-    }
-
-    match /tasks/{id} {
-      allow read: if isAllowed();
-      allow delete: if isOwner();
-      allow create, update: if isOwner() && isValidTask(request.resource.data);
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidPracticeHabit(request.resource.data);
     }
 
     match /events/{id} {
       allow read: if isAllowed();
-      allow create: if isOwner() && isValidEvent(request.resource.data);
+      allow create: if isAllowed() && isValidEvent(request.resource.data);
     }
 
     match /captures/{id} {
       allow read: if isAllowed();
-      allow delete: if isOwner();
-      allow create, update: if isOwner() && isValidCapture(request.resource.data);
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidCapture(request.resource.data);
+    }
+
+    match /pendingOperations/{id} {
+      allow read: if isAllowed();
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidPendingOperation(request.resource.data);
+    }
+
+    match /secretaryChat/{id} {
+      allow read: if isAllowed();
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidChatMessage(request.resource.data);
     }
 
     match /config/{id} {
       allow read: if isAllowed();
-      allow create, update: if isOwner() && isValidConfig(request.resource.data);
-    }
-
-    match /ideas/{id} {
-      allow read: if isAllowed();
-      allow delete: if isOwner();
-      allow create, update: if isOwner() && isValidIdea(request.resource.data);
+      allow create, update: if isAllowed() && isValidConfig(request.resource.data);
     }
   }
 }

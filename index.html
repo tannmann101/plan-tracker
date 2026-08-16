@@ -11,6 +11,18 @@
     <link rel="icon" type="image/png" href="icons/icon-192.png" />
     <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
     <title>Secretary</title>
+    <script>
+      // Restores the real path from 404.html's redirect (see public/404.html)
+      // before React mounts and src/useRoute.js reads window.location.
+      (function () {
+        var params = new URLSearchParams(location.search);
+        var redirect = params.get("redirect");
+        if (redirect === null) return;
+        params.delete("redirect");
+        var qs = params.toString();
+        history.replaceState(null, "", "/plan-tracker/" + redirect + (qs ? "?" + qs : "") + location.hash);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -1,145 +1,143 @@
 # Secretary
 
-A head-of-household management layer: Goals (yearly → quarterly → monthly →
-weekly), Plans, Sessions, and Tasks, fed by a weekly-meeting photo import and
-a standing capture/triage inbox, with an append-only event log behind a
-running Goal rollup report.
+A head-of-household management layer built on a flat **Kind / Item** graph
+(Projects, Goals, and Practices as Kinds; Tasks, Sessions, Preps, Errands,
+and Other as Items, free-form tags, seven domains) with a standing
+propose-then-confirm AI layer -- nothing Secretary drafts (a triaged
+capture, a Secretary-chat edit, a weekly-meeting photo import) ever writes
+to a real Kind/Item without a human confirming it first.
 
-This app was rebuilt from an earlier "3-Year Plan Tracker" -- it reuses that
-project's repo, GitHub Pages deploy pipeline, and Firebase project, but owns
-an entirely different data model. Nothing from the old Items schema carries
-forward.
+This app was rebuilt from an earlier "3-Year Plan Tracker," and then rebuilt
+again from a first Goal→Plan→Session→Task version of Secretary itself -- it
+reuses the same repo, GitHub Pages deploy pipeline, and Firebase project
+each time, but the data model below is current.
 
 ## What this app owns (and doesn't)
 
-Secretary owns the household planning graph: **Goal → Plan → Session →
-Task**, plus **Project** for atypical personal initiatives that fall outside
-the Goal hierarchy (see the worked example below). It explicitly does
-**not** own:
+Secretary owns the household planning graph. It explicitly does **not**
+own:
 
-- **Finances** -- lives in [Finance Tracker](https://github.com/tannmann101/budget-ledger). Secretary tags the Finances domain and links out.
-- **The Workshop's inventory** -- a separate tool for material/inventory management. Secretary's Material domain links out; no direct integration yet.
-- **The Teacher domain's content tool** -- a separate knowledge/teaching app. Secretary has a link placeholder for it; the app itself isn't built yet.
+- **Finances** -- lives in [Finance Tracker](https://github.com/tannmann101/budget-ledger). Secretary tags the Head of Household domain and links out.
+- **The Workshop's inventory** -- a separate tool for material/inventory management.
+- **The Teacher domain's content tool** -- a separate knowledge/teaching app, not built yet.
 
-Most of the fifteen domains (below) have no dedicated tool at all yet --
-their Sessions log generically inside Secretary until one is built.
-Graduating any of them to a dedicated tool is a manual call, same as the old
-app's "no auto-migration" philosophy: nothing here silently migrates itself.
+Most domains have no dedicated tool of their own yet -- their Items log
+generically inside Secretary until one is built. Graduating any of them to
+a dedicated tool is a manual call; nothing here silently migrates itself.
 
 ## The data model
 
 | Entity | Fields |
 |---|---|
-| **Goal** | title, tier (yearly/quarterly/monthly/weekly), domain, secondary_domains[], owner, parent_goal_id (nullable), status |
-| **Project** | title, domain, secondary_domains[], initiator (me/wife), family_scope (personal/touches-family), status, consent_status (when family_scope = touches-family) |
-| **Plan** | title, parent_type (goal/project, nullable together), parent_id (nullable), domain, secondary_domains[], session_ids[] |
-| **Session** | title, plan_id, domain, secondary_domains[], content_type, tool_location (resolved from content_type via the routing table), task_ids[], target_day, done |
-| **Task** | title, session_id (nullable), domain (optional, denormalized), secondary_domains[], done, date |
+| **Kind** (Project / Goal / Practice) | title, kindType, domain, secondaryDomains[], resources[], tags[], parentKindId (nullable), status (not-started/queued/in-progress/almost-done/done), timing (dueDate/milestones), initiator/familyScope/consentStatus (Project only), retro, createdVia |
+| **Item** (Task / Session / Prep / Errand / Other) | title, itemType, domain, secondaryDomains[], resources[], tags[], parentKindId (nullable), timing (targetDay/time/dueDate/floating/milestones), done, completedAt, isRecurringPracticeItem/practiceHabitId, retro, createdVia |
 
-Worked example: Goal "clean the house" → Plan with Sessions per room → Tasks
-like "clean the shower." An atypical add-on like "shine the floors" becomes
-a Project instead -- a personal initiative that, because it touches shared
-floors, needs consent tracked before a Plan gets built around it.
+`parentKindId` is the only nesting mechanism -- a Kind can nest under
+another Kind, and an Item can attach directly to a Kind. There is no
+intermediate Plan/Session layer between an Item and the Kind it serves.
+Tags are free-form (autocomplete against whatever's already in use, no
+fixed vocabulary) and resources are a flat list (any resource usable from
+any domain) -- both replace the old domain-exclusive content-type routing
+table entirely.
 
-A Plan's parent is optional -- groundwork can be logged before a Goal or
-Project exists to serve it (an "ungrounded" Plan), surfaced in Trends'
-Unlinked-work tab and attached retroactively once something emerges to link
-it to. A Task's Session is optional the same way. Every entity also accepts
-`secondary_domains` alongside its required primary `domain`, for the rarer
-case where one item genuinely spans two roles (a Career item that's also
-Financial, say) -- Domains dashboards and Trends show it under all of them,
-counted once, under its primary domain.
+Firestore collections: `kinds`, `items`, `practiceHabits` (habit
+*definitions* only -- see Practices below), `pendingOperations` (the
+shared AI-draft queue), `secretaryChat`, `events` (append-only lifecycle
+log), `captures` (raw intake records), and `config` (`domains`,
+`resources`, `practiceCategories`).
 
-Firestore is one collection per entity type (`goals`, `projects`, `plans`,
-`sessions`, `tasks`), plus an append-only `events` log (mirroring the old
-app's `itemEvents` pattern) that the Goal rollup report and Trends are built
-from, and a `captures` collection for the standing triage inbox.
-`config/routingTable` and `config/domains` hold the editable copies of the
-content-type routing table and domain definitions (see Settings).
+## The seven domains
 
-## The fifteen domains
+Creative, Vocation, Education, Head of Household, Projects, Practices, and
+Goals. See `src/constants.js` (`DEFAULT_DOMAINS`) or Settings for full
+descriptions. Replaces the earlier fifteen-domain taxonomy and its
+domain-exclusive content-type routing table -- tags now carry whatever
+specificity a per-domain category list used to.
 
-Finances, Material Provisioning, Teacher, Tech/Admin, Career/Work,
-Projects, Collaborative Projects (with Rochelle), Cleaning, Repair,
-Planning, Weekly Meeting, Reading, Writing, Contemplation, and Ecology of
-Practices. See `src/constants.js` (`DEFAULT_DOMAINS`) or Settings for the
-full descriptions and links. Replaces the original 5-domain MVP taxonomy,
-whose single Catch-All domain lumped together everything that's now its own
-specific role.
+## Adding something
 
-## Routing table: domain-exclusive categories
+One Add Form, opened from the FAB on every page: pick Kind or Item (or,
+on Today, Item is the only option), fill in the shared fields (name,
+domain + secondary domains, resources, tags, timing), and for a Kind,
+optionally a Project's initiator/family-scope/consent. A "this already
+happened" toggle marks it done/complete retroactively without the
+forward-planning fields. Add, edit, complete/uncomplete, and delete all
+work identically for any Kind or Item from every page that shows one --
+tapping a card's body opens the same edit modal everywhere.
 
-A Session's `content_type` comes from its own domain's category list, never
-another domain's -- there's no shared, universal category anymore. Each
-domain has its own several-option set (roughly 3-6 entries), prefixed with a
-short domain code (`fin-`, `mat-`, `tch-`, `adm-`, `car-`, `prj-`, `col-`,
-`cln-`, `rep-`, `pln-`, `wkm-`, `rdg-`, `wrt-`, `ctm-`, `eco-`) so a
-category's domain is always unambiguous from its id alone. `firestore.rules`
-enforces this server-side (`contentTypeDomainPrefix()` checks a Session's
-`content_type` actually carries its own `domain`'s prefix), and every form
-that offers a content-type choice (Quick Add, the edit modal, the
-weekly-meeting import, Settings' routing-table editor) filters its options
-to the currently-selected domain. See `src/constants.js`
-(`DEFAULT_ROUTING_TABLE`, `contentTypesForDomain()`,
-`defaultContentTypeForDomain()`) or Settings, which groups the editable
-table by domain and prefixes any new entry automatically.
+## Capture, triage & the Secretary page
+
+An always-visible capture bar feeds `triageCapture` (a Cloud Function),
+which drafts a Kind-or-Item proposal and writes it straight into
+`pendingOperations` server-side -- nothing auto-places, and there's no
+client-side path that could skip the review queue. The Secretary page
+(hamburger menu) is where those proposals actually get confirmed: a review
+log (flagged if it's sat unsorted more than three days), a persistent chat
+for scheduling/sequencing/editing (propose-then-confirm, same as
+everything else), and the weekly-meeting photo import entry point.
 
 ## Weekly-meeting pipeline
 
-Upload a photo of your handwritten weekly-meeting notebook page (This Week →
-"Import weekly-meeting photo"). A Cloud Function (`parseWeeklyPhoto`) reads
-it and extracts Goals-in-context, this week's Plans, their Sessions (domain +
-content-type tagged), and Tasks. Nothing saves automatically -- you get a
-full checklist to review and edit first.
+From the Secretary page, upload a photo of the handwritten weekly-meeting
+notebook page. `parseWeeklyPhoto` reads it and drafts one pendingOperation
+per Kind/Item it finds -- same review-before-commit discipline as a typed
+capture, just seeded from a photo.
 
-## Capture, triage & alignment
+## Plans (Practices + Projects/Goals)
 
-An always-visible quick-capture bar (and a floating button for richer,
-longer captures) feeds a triage pipeline (`triageCapture` Cloud Function):
-relevance, level (Task/Session/Plan/Goal/Project), domain + content-type
-placement, and an alignment check against existing Goals. Confident
-placements happen directly; uncertain ones open a short conversational
-confirmation (Secretary can ask a genuine follow-up question) rather than
-forcing a guess into a form. Anything that doesn't align to an existing Goal
-surfaces in the Review queue -- never silently discarded.
+Two tabs. **Practices**: categories (add/remove), habit definitions, and a
+weekly tracker grid -- a habit+day's completion lives on exactly one Item
+(`isRecurringPracticeItem` + `practiceHabitId`, found-or-created on
+demand), so checking it off from the grid or from Today/Week writes the
+same record either way. **Projects & Goals**: a kanban (Still Needed →
+Queue → In Progress → Almost Done → Done) over Kinds, drag to move between
+columns; saving an Item into the current week can also auto-promote its
+still-queued parent Kind into "in-progress" as a side effect, but the
+status stays fully drag-overridable afterward.
 
-Capture is for genuinely decontextualized input -- Today, This Week/Calendar,
-and Domains all also have a direct "+ Add" for anything you already know the
-shape of, no AI triage needed. Tapping any card's body (not its checkbox)
-opens an edit form, so a mis-categorized item -- wrong domain, wrong Goal,
-wrong Plan -- is fixable from wherever you notice it, not just from a
-dedicated review screen.
+## Workspace
 
-## This Week & Calendar
+The full Kind/Item ticket board (with a done/archived filter), a due-date
+timeline, and a right rail (weekly summary, domain distribution, a
+completed-over-time chart, domain/resource filters, shortcuts). Clicking a
+ticket opens the edit modal and focuses the Secretary chat on that entity.
 
-This Week defaults to the current week's card list; a Calendar tab switches
-to a month grid for laying something out (or reviewing something past)
-further out than seven days. Both share the same "+ Add" and edit modals as
-every other day-scoped view.
+## Today & Week/Calendar
+
+Today shows a 4-day strip (Items only) plus a right rail of Goal progress
+and a "where's this landing" resource tally. Week/Calendar toggles between
+a Monday-start week grid and an indefinitely-navigable month view, full
+Kind-or-Item Add on both.
+
+## Log
+
+Hamburger-only, edit-only (no Add): every Kind and Item as a filterable,
+searchable table (title/type/date/tags), with Daily/Weekly rollup views.
 
 ## Trends
 
-The 5th Hub card: tasks completed per week by domain, domain distribution,
-a Goal alignment rate over time (the share of completed work that actually
-traces to a Goal), where work is landing across the routing table's real
-tools, and Goal cycle time for completed Goals -- plus a chronological Log
-tab (CSV export) and an Unlinked-work tab surfacing ungrounded Plans and
-standalone Tasks for retroactive attachment, optionally with an AI-suggested
-Goal match.
+Items completed per week by domain, domain distribution, an alignment rate
+over time (completed Items whose `parentKindId` chain reaches a Goal),
+resource usage, and Goal cycle time.
 
 ## Sync
 
 Refresh-on-open, not live push -- the app loads everything once when it
-opens and whenever you hit refresh. Secretary is driven by a weekly meeting
-plus occasional capture, which doesn't need the sub-second cross-device sync
-the household ledger or Workshop apps do.
+opens and whenever you hit refresh. Secretary is driven by a weekly
+meeting plus occasional capture, which doesn't need the sub-second
+cross-device sync the household ledger or Workshop apps do.
 
 ## Access
 
-Google sign-in, same two-account allow-list pattern as the sibling apps.
-Only Tanner's account can write; Rochelle's account is read-only across the
-entire Goal hierarchy and every domain (see `firestore.rules`' `isOwner()`
-vs `isAllowed()`, and `isOwnerEmail()` in `src/constants.js`).
+Google sign-in, same two-account allow-list pattern as the sibling apps --
+but both accounts now have identical read/write access (see
+`firestore.rules`' `isAllowed()`). There is no owner/viewer split.
+
+## State export
+
+Settings has an "Export state" action that downloads everything Secretary
+currently holds as both a readable `.md` report and a raw `.json` dump,
+generated client-side.
 
 ## Running locally
 
@@ -193,6 +191,16 @@ The Functions emulator needs its own dependencies installed once:
 `npm install --prefix functions`. Emulated Cloud Functions still call the
 real Anthropic API if you export `ANTHROPIC_API_KEY` in your shell before
 starting the emulator.
+
+## One-time data migration
+
+`scripts/migrate-kinds-items.mjs` moves the previous Goal/Project/Plan/
+Session/Task/Idea data over to the Kind/Item shape above (domain remapped
+to the new seven, content-type folded into tags). Run it against the
+emulator first (`npm run migrate:seed` for a seeded dry run, `npm run
+migrate:emulator` against real emulator data), review the generated
+`migration-report.md` for anything that couldn't resolve a parent, and
+only then run `npm run migrate:prod` against the live project.
 
 ## Deploying to GitHub Pages (free)
 

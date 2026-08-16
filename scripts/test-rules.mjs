@@ -31,70 +31,38 @@ const check = (label, ok) => {
 
 const now = () => Date.now();
 
-const validGoal = (overrides = {}) => ({
+const validKind = (overrides = {}) => ({
   title: "Clean the house",
-  tier: "monthly",
-  domain: "ecology-practices",
-  owner: "tanner",
-  parentGoalId: null,
-  status: "active",
+  kindType: "goal",
+  domain: "head-of-household",
+  status: "queued",
   createdAt: now(),
   updatedAt: now(),
   ...overrides,
 });
 
-const validProject = (overrides = {}) => ({
-  title: "Shine the floors",
-  domain: "projects",
-  initiator: "me",
-  familyScope: "touches-family",
-  consentStatus: "pending",
-  status: "active",
-  createdAt: now(),
-  updatedAt: now(),
-  ...overrides,
-});
-
-const validPlan = (overrides = {}) => ({
-  title: "Clean the house -- per room",
-  parentType: "goal",
-  parentId: "goal1",
-  domain: "ecology-practices",
-  sessionIds: [],
-  status: "active",
-  createdAt: now(),
-  updatedAt: now(),
-  ...overrides,
-});
-
-const validSession = (overrides = {}) => ({
-  title: "Clean the kitchen",
-  planId: "plan1",
-  domain: "ecology-practices",
-  contentType: "eco-capture",
-  toolLocation: "Travel notebook",
-  taskIds: [],
-  targetDay: "2026-08-17",
-  done: false,
-  createdAt: now(),
-  updatedAt: now(),
-  ...overrides,
-});
-
-const validTask = (overrides = {}) => ({
+const validItem = (overrides = {}) => ({
   title: "Clean the shower",
-  sessionId: "session1",
+  itemType: "task",
+  domain: "head-of-household",
   done: false,
-  date: "2026-08-17",
   createdAt: now(),
   updatedAt: now(),
+  ...overrides,
+});
+
+const validPracticeHabit = (overrides = {}) => ({
+  title: "Morning meditation",
+  categoryId: "meditative",
+  active: true,
+  createdAt: now(),
   ...overrides,
 });
 
 const validEvent = (overrides = {}) => ({
-  entityType: "task",
-  entityId: "task1",
-  domain: "ecology-practices",
+  entityType: "item",
+  entityId: "item1",
+  domain: "head-of-household",
   from: null,
   to: "done",
   at: now(),
@@ -102,121 +70,104 @@ const validEvent = (overrides = {}) => ({
 });
 
 const validCapture = (overrides = {}) => ({
-  status: "pending-triage",
+  status: "triaging",
   rawText: "buy air filters",
   createdAt: now(),
   ...overrides,
 });
 
-const validConfig = (overrides = {}) => ({
-  entries: [{ id: "eco-scheduling", domain: "ecology-practices", label: "Practice scheduling", toolLocation: "Google Calendar" }],
-  ...overrides,
-});
-
-const validIdea = (overrides = {}) => ({
-  title: "Maybe try a room-by-room checklist",
-  goalId: "goal1",
+const validPendingOperation = (overrides = {}) => ({
+  opType: "create-item",
+  targetId: null,
+  patch: { title: "buy air filters", itemType: "errand", domain: "head-of-household" },
+  sourceType: "capture",
+  status: "pending",
   createdAt: now(),
   ...overrides,
 });
 
-// -- Owner (Tanner) can write every entity type ------------------------
+const validChatMessage = (overrides = {}) => ({
+  role: "user",
+  text: "What's still open for this week?",
+  at: now(),
+  ...overrides,
+});
+
+const validConfig = (overrides = {}) => ({
+  entries: [{ id: "google-calendar", label: "Google Calendar" }],
+  ...overrides,
+});
+
+// -- Both household accounts can write every collection now -- there is no
+// owner/viewer split left (see firestore.rules' isAllowed()). ------------
 
 for (const [name, path, payload] of [
-  ["goal", "goals/goal1", validGoal()],
-  ["project", "projects/project1", validProject()],
-  ["plan", "plans/plan1", validPlan()],
-  ["session", "sessions/session1", validSession()],
-  ["task", "tasks/task1", validTask()],
+  ["kind", "kinds/kind1", validKind()],
+  ["item", "items/item1", validItem()],
+  ["practice habit", "practiceHabits/habit1", validPracticeHabit()],
   ["capture", "captures/capture1", validCapture()],
-  ["config doc", "config/routingTable", validConfig()],
-  ["idea", "ideas/idea1", validIdea()],
+  ["pending operation", "pendingOperations/op1", validPendingOperation()],
+  ["chat message", "secretaryChat/msg1", validChatMessage()],
+  ["config doc", "config/domains", validConfig()],
 ]) {
   try {
     await assertSucceeds(setDoc(doc(tannerDb, path), payload));
-    check(`owner can write a valid ${name}`, true);
+    check(`Tanner can write a valid ${name}`, true);
   } catch (e) {
-    check(`owner can write a valid ${name}`, false);
+    check(`Tanner can write a valid ${name}`, false);
     console.error(e.message);
   }
 }
 
-// events are append-only -- owner can create, not overwrite (checked later)
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "events/evt1"), validEvent()));
-  check("owner can write a valid event", true);
-} catch (e) {
-  check("owner can write a valid event", false);
-  console.error(e.message);
-}
-
-// -- Rochelle (allow-listed, but not owner) can read everything, write nothing --
-
-for (const [name, path] of [
-  ["goal", "goals/goal1"],
-  ["project", "projects/project1"],
-  ["plan", "plans/plan1"],
-  ["session", "sessions/session1"],
-  ["task", "tasks/task1"],
-  ["event", "events/evt1"],
-  ["capture", "captures/capture1"],
-  ["config doc", "config/routingTable"],
-  ["idea", "ideas/idea1"],
+for (const [name, path, payload] of [
+  ["kind", "kinds/kind2", validKind({ title: "Rochelle's goal" })],
+  ["item", "items/item2", validItem({ title: "Rochelle's task" })],
 ]) {
   try {
-    const snap = await assertSucceeds(getDoc(doc(rochelleDb, path)));
-    check(`viewer (Rochelle) can read ${name}`, snap.exists());
+    await assertSucceeds(setDoc(doc(rochelleDb, path), payload));
+    check(`Rochelle can write a valid ${name}`, true);
   } catch (e) {
-    check(`viewer (Rochelle) can read ${name}`, false);
+    check(`Rochelle can write a valid ${name}`, false);
     console.error(e.message);
   }
 }
 
+// events are append-only -- either account can create, not overwrite
+// (checked later)
 try {
-  await assertFails(setDoc(doc(rochelleDb, "goals/goal2"), validGoal({ title: "Rochelle's goal" })));
-  check("viewer (Rochelle) cannot create a goal", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "events/evt1"), validEvent()));
+  check("Tanner can write a valid event", true);
 } catch (e) {
-  check("viewer (Rochelle) cannot create a goal", false);
-}
-try {
-  await assertFails(setDoc(doc(rochelleDb, "goals/goal1"), validGoal({ status: "done" })));
-  check("viewer (Rochelle) cannot update a goal", true);
-} catch (e) {
-  check("viewer (Rochelle) cannot update a goal", false);
-}
-try {
-  await assertFails(deleteDoc(doc(rochelleDb, "tasks/task1")));
-  check("viewer (Rochelle) cannot delete a task", true);
-} catch (e) {
-  check("viewer (Rochelle) cannot delete a task", false);
+  check("Tanner can write a valid event", false);
+  console.error(e.message);
 }
 
 // -- Listing (refresh-on-open reads) works for both allow-listed accounts --
 
 try {
-  const snap = await assertSucceeds(getDocs(collection(tannerDb, "goals")));
-  check("owner can list the goals collection", snap.size === 1);
+  const snap = await assertSucceeds(getDocs(collection(rochelleDb, "kinds")));
+  check("Rochelle can list the kinds collection", snap.size >= 1);
 } catch (e) {
-  check("owner can list the goals collection", false);
+  check("Rochelle can list the kinds collection", false);
   console.error(e.message);
 }
 
 // -- Non-allow-listed / unauthenticated access is rejected --
 
 try {
-  await assertFails(getDoc(doc(strangerDb, "goals/goal1")));
+  await assertFails(getDoc(doc(strangerDb, "kinds/kind1")));
   check("non-allow-listed account is rejected (read)", true);
 } catch (e) {
   check("non-allow-listed account is rejected (read)", false);
 }
 try {
-  await assertFails(setDoc(doc(strangerDb, "goals/goal3"), validGoal()));
+  await assertFails(setDoc(doc(strangerDb, "kinds/kind3"), validKind()));
   check("non-allow-listed account is rejected (write)", true);
 } catch (e) {
   check("non-allow-listed account is rejected (write)", false);
 }
 try {
-  await assertFails(getDoc(doc(anonDb, "goals/goal1")));
+  await assertFails(getDoc(doc(anonDb, "kinds/kind1")));
   check("unauthenticated access is rejected", true);
 } catch (e) {
   check("unauthenticated access is rejected", false);
@@ -225,203 +176,135 @@ try {
 // -- Schema validation: required fields / vocab / types ------------------
 
 try {
-  const { domain: _domain, ...missingDomain } = validGoal();
-  await assertFails(setDoc(doc(tannerDb, "goals/goal4"), missingDomain));
-  check("goal missing a required field is rejected", true);
+  const { domain: _domain, ...missingDomain } = validKind();
+  await assertFails(setDoc(doc(tannerDb, "kinds/kind-missing-domain"), missingDomain));
+  check("kind missing a required field is rejected", true);
 } catch (e) {
-  check("goal missing a required field is rejected", false);
+  check("kind missing a required field is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "goals/goal5"), validGoal({ tier: "decade" })));
-  check("goal with an out-of-vocabulary tier is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "kinds/kind-bad-type"), validKind({ kindType: "habit" })));
+  check("kind with an out-of-vocabulary kindType is rejected", true);
 } catch (e) {
-  check("goal with an out-of-vocabulary tier is rejected", false);
+  check("kind with an out-of-vocabulary kindType is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "goals/goal6"), validGoal({ domain: "not-a-real-domain" })));
-  check("goal with an out-of-vocabulary domain is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "kinds/kind-bad-domain"), validKind({ domain: "not-a-real-domain" })));
+  check("kind with an out-of-vocabulary domain is rejected", true);
 } catch (e) {
-  check("goal with an out-of-vocabulary domain is rejected", false);
+  check("kind with an out-of-vocabulary domain is rejected", false);
 }
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "goals/goal7"), validGoal({ parentGoalId: "goal1", tier: "weekly" })));
-  check("goal with a valid parentGoalId is allowed", true);
+  await assertFails(setDoc(doc(tannerDb, "kinds/kind-bad-status"), validKind({ status: "someday" })));
+  check("kind with an out-of-vocabulary status is rejected", true);
 } catch (e) {
-  check("goal with a valid parentGoalId is allowed", false);
+  check("kind with an out-of-vocabulary status is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "kinds/kind-nested"), validKind({ title: "Q1 goal", parentKindId: "kind1", kindType: "goal" })));
+  check("kind with a valid parentKindId is allowed", true);
+} catch (e) {
+  check("kind with a valid parentKindId is allowed", false);
   console.error(e.message);
 }
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "goals/goal8"), validGoal({ targetDate: "2026-12-31" })));
-  check("goal with a valid targetDate is allowed", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "kinds/kind-timing"), validKind({ timing: { dueDate: "2026-12-31", milestones: [] } })));
+  check("kind with a timing map is allowed", true);
 } catch (e) {
-  check("goal with a valid targetDate is allowed", false);
+  check("kind with a timing map is allowed", false);
   console.error(e.message);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "goals/goal9"), validGoal({ targetDate: 20261231 })));
-  check("goal with a wrong-typed targetDate is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "kinds/kind-bad-timing"), validKind({ timing: "someday" })));
+  check("kind with a wrong-typed timing is rejected", true);
 } catch (e) {
-  check("goal with a wrong-typed targetDate is rejected", false);
-}
-
-try {
-  await assertFails(setDoc(doc(tannerDb, "projects/project2"), validProject({ familyScope: "shared-house" })));
-  check("project with an out-of-vocabulary familyScope is rejected", true);
-} catch (e) {
-  check("project with an out-of-vocabulary familyScope is rejected", false);
+  check("kind with a wrong-typed timing is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "projects/project3"), validProject({ consentStatus: "maybe" })));
-  check("project with an out-of-vocabulary consentStatus is rejected", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "kinds/kind-project"), validKind({
+    kindType: "project", domain: "projects", initiator: "me", familyScope: "touches-family", consentStatus: "pending",
+  })));
+  check("project kind with initiator/familyScope/consentStatus is allowed", true);
 } catch (e) {
-  check("project with an out-of-vocabulary consentStatus is rejected", false);
-}
-
-try {
-  await assertFails(setDoc(doc(tannerDb, "plans/plan2"), validPlan({ parentType: "task" })));
-  check("plan with an invalid parentType is rejected", true);
-} catch (e) {
-  check("plan with an invalid parentType is rejected", false);
-}
-
-try {
-  await assertFails(setDoc(doc(tannerDb, "sessions/session2"), validSession({ contentType: "telepathy" })));
-  check("session with an out-of-vocabulary contentType is rejected", true);
-} catch (e) {
-  check("session with an out-of-vocabulary contentType is rejected", false);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "sessions/session3"), validSession({ done: "no" })));
-  check("session with a wrong-typed done is rejected", true);
-} catch (e) {
-  check("session with a wrong-typed done is rejected", false);
-}
-
-// Categories are domain-exclusive: a real content-type id from a different
-// domain must still be rejected, not just gibberish.
-try {
-  await assertFails(setDoc(doc(tannerDb, "sessions/session-cross-domain"), validSession({ domain: "ecology-practices", contentType: "fin-scheduling" })));
-  check("session with a contentType from a different domain is rejected", true);
-} catch (e) {
-  check("session with a contentType from a different domain is rejected", false);
-}
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "sessions/session-matching-domain"), validSession({ domain: "finances", contentType: "fin-scheduling" })));
-  check("session with a contentType matching its own domain is allowed", true);
-} catch (e) {
-  check("session with a contentType matching its own domain is allowed", false);
-  console.error(e.message);
-}
-
-try {
-  await assertFails(setDoc(doc(tannerDb, "tasks/task2"), validTask({ title: "" })));
-  check("task with an empty title is rejected", true);
-} catch (e) {
-  check("task with an empty title is rejected", false);
-}
-
-// -- v2 schema relaxations: ungrounded Plans, standalone Tasks, secondaryDomains --
-
-try {
-  const { parentType: _pt, parentId: _pid, ...ungroundedPlan } = validPlan({ sessionIds: [] });
-  await assertSucceeds(setDoc(doc(tannerDb, "plans/plan-ungrounded"), ungroundedPlan));
-  check("plan with no parentType/parentId (ungrounded) is allowed", true);
-} catch (e) {
-  check("plan with no parentType/parentId (ungrounded) is allowed", false);
+  check("project kind with initiator/familyScope/consentStatus is allowed", false);
   console.error(e.message);
 }
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "plans/plan-ungrounded2"), validPlan({ parentType: null, parentId: null })));
-  check("plan with explicit null parentType/parentId is allowed", true);
+  await assertFails(setDoc(doc(tannerDb, "kinds/kind-bad-familyscope"), validKind({ kindType: "project", familyScope: "shared-house" })));
+  check("kind with an out-of-vocabulary familyScope is rejected", true);
 } catch (e) {
-  check("plan with explicit null parentType/parentId is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "plans/plan-bad-parent"), validPlan({ parentType: "goal", parentId: null })));
-  check("plan with parentType set but parentId missing is rejected", true);
-} catch (e) {
-  check("plan with parentType set but parentId missing is rejected", false);
+  check("kind with an out-of-vocabulary familyScope is rejected", false);
 }
 
 try {
-  const { sessionId: _sid, ...standaloneTask } = validTask();
-  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-standalone"), standaloneTask));
-  check("task with no sessionId (standalone) is allowed", true);
+  const { itemType: _it, ...missingType } = validItem();
+  await assertFails(setDoc(doc(tannerDb, "items/item-missing-type"), missingType));
+  check("item missing a required field is rejected", true);
 } catch (e) {
-  check("task with no sessionId (standalone) is allowed", false);
+  check("item missing a required field is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item-bad-type"), validItem({ itemType: "chore" })));
+  check("item with an out-of-vocabulary itemType is rejected", true);
+} catch (e) {
+  check("item with an out-of-vocabulary itemType is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item-parented"), validItem({ parentKindId: "kind1" })));
+  check("item with a parentKindId is allowed", true);
+} catch (e) {
+  check("item with a parentKindId is allowed", false);
   console.error(e.message);
 }
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-standalone2"), validTask({ sessionId: null, domain: "reading" })));
-  check("task with explicit null sessionId and a denormalized domain is allowed", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item-standalone"), validItem({ parentKindId: null })));
+  check("item with no parentKindId (standalone) is allowed", true);
 } catch (e) {
-  check("task with explicit null sessionId and a denormalized domain is allowed", false);
+  check("item with no parentKindId (standalone) is allowed", false);
   console.error(e.message);
 }
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-contenttype"), validTask({ sessionId: null, domain: "reading", contentType: "rdg-capture" })));
-  check("task with a contentType matching its own domain is allowed", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item-tags"), validItem({ tags: ["review", "budget"], resources: ["Google Calendar"], secondaryDomains: ["vocation"] })));
+  check("item with tags/resources/secondaryDomains lists is allowed", true);
 } catch (e) {
-  check("task with a contentType matching its own domain is allowed", false);
+  check("item with tags/resources/secondaryDomains lists is allowed", false);
   console.error(e.message);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "tasks/task-contenttype-cross"), validTask({ sessionId: null, domain: "reading", contentType: "fin-scheduling" })));
-  check("task with a contentType from a different domain is rejected", true);
+  await assertFails(setDoc(doc(tannerDb, "items/item-bad-tags"), validItem({ tags: "review" })));
+  check("item with a wrong-typed tags field is rejected", true);
 } catch (e) {
-  check("task with a contentType from a different domain is rejected", false);
+  check("item with a wrong-typed tags field is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "tasks/task-contenttype-no-domain"), validTask({ sessionId: null, contentType: "rdg-capture" })));
-  check("task with a contentType but no domain is rejected", true);
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item-practice"), validItem({
+    itemType: "session", domain: "practices", isRecurringPracticeItem: true, practiceHabitId: "habit1",
+  })));
+  check("item with isRecurringPracticeItem + practiceHabitId is allowed", true);
 } catch (e) {
-  check("task with a contentType but no domain is rejected", false);
-}
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "tasks/task-toollocation"), validTask({ sessionId: null, domain: "reading", contentType: "rdg-capture", toolLocation: "Travel notebook" })));
-  check("task with a toolLocation is allowed", true);
-} catch (e) {
-  check("task with a toolLocation is allowed", false);
+  check("item with isRecurringPracticeItem + practiceHabitId is allowed", false);
   console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item-empty-title"), validItem({ title: "" })));
+  check("item with an empty title is rejected", true);
+} catch (e) {
+  check("item with an empty title is rejected", false);
 }
 
 try {
-  await assertSucceeds(setDoc(doc(tannerDb, "goals/goal-secondary"), validGoal({ secondaryDomains: ["career", "planning"] })));
-  check("goal with valid secondaryDomains is allowed", true);
+  const { categoryId: _cid, ...missingCategory } = validPracticeHabit();
+  await assertFails(setDoc(doc(tannerDb, "practiceHabits/habit-missing-category"), missingCategory));
+  check("practice habit missing a required field is rejected", true);
 } catch (e) {
-  check("goal with valid secondaryDomains is allowed", false);
+  check("practice habit missing a required field is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "practiceHabits/habit-frequency"), validPracticeHabit({ frequency: { days: ["mon", "wed", "fri"] } })));
+  check("practice habit with a frequency map is allowed", true);
+} catch (e) {
+  check("practice habit with a frequency map is allowed", false);
   console.error(e.message);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "goals/goal-bad-secondary"), validGoal({ secondaryDomains: "career" })));
-  check("goal with a wrong-typed secondaryDomains is rejected", true);
-} catch (e) {
-  check("goal with a wrong-typed secondaryDomains is rejected", false);
-}
-
-try {
-  await assertSucceeds(setDoc(doc(tannerDb, "projects/project-domained"), validProject()));
-  check("project with a valid domain is allowed", true);
-} catch (e) {
-  check("project with a valid domain is allowed", false);
-  console.error(e.message);
-}
-try {
-  await assertFails(setDoc(doc(tannerDb, "projects/project-bad-domain"), validProject({ domain: "not-a-real-domain" })));
-  check("project with an out-of-vocabulary domain is rejected", true);
-} catch (e) {
-  check("project with an out-of-vocabulary domain is rejected", false);
-}
-
-for (const id of ["career", "projects", "collab", "cleaning", "repair", "planning", "weekly-meeting", "reading", "writing", "contemplation"]) {
-  try {
-    await assertSucceeds(setDoc(doc(tannerDb, `goals/goal-domain-${id}`), validGoal({ domain: id })));
-    check(`goal with new domain "${id}" is allowed`, true);
-  } catch (e) {
-    check(`goal with new domain "${id}" is allowed`, false);
-    console.error(e.message);
-  }
 }
 
 // -- Events: append-only, schema-validated --
@@ -444,60 +327,72 @@ try {
 } catch (e) {
   check("event with an invalid entityType is rejected", false);
 }
-try {
-  await assertFails(setDoc(doc(rochelleDb, "events/evt3"), validEvent()));
-  check("viewer (Rochelle) cannot write an event", true);
-} catch (e) {
-  check("viewer (Rochelle) cannot write an event", false);
-}
 
-// -- Config: owner-editable routing table / domain definitions --
+// -- pendingOperations: the shared AI-proposal queue --
 
 try {
-  await assertFails(setDoc(doc(rochelleDb, "config/routingTable"), validConfig()));
-  check("viewer (Rochelle) cannot write config", true);
+  await assertFails(setDoc(doc(tannerDb, "pendingOperations/op-bad-type"), validPendingOperation({ opType: "delete-item" })));
+  check("pending operation with an invalid opType is rejected", true);
 } catch (e) {
-  check("viewer (Rochelle) cannot write config", false);
+  check("pending operation with an invalid opType is rejected", false);
 }
 try {
-  await assertFails(setDoc(doc(tannerDb, "config/domains"), { entries: "not-a-list" }));
+  await assertFails(setDoc(doc(tannerDb, "pendingOperations/op-bad-patch"), validPendingOperation({ patch: "not-a-map" })));
+  check("pending operation with a wrong-typed patch is rejected", true);
+} catch (e) {
+  check("pending operation with a wrong-typed patch is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "pendingOperations/op-update"), validPendingOperation({
+    opType: "update-item", targetId: "item1", sourceType: "chat", patch: { done: true },
+  })));
+  check("update-kind/item pending operation with a targetId is allowed", true);
+} catch (e) {
+  check("update-kind/item pending operation with a targetId is allowed", false);
+  console.error(e.message);
+}
+
+// -- Captures: narrowed to raw intake only --
+
+try {
+  await assertFails(setDoc(doc(tannerDb, "captures/capture-bad-status"), validCapture({ status: "placed" })));
+  check("capture with an old (now-invalid) status is rejected", true);
+} catch (e) {
+  check("capture with an old (now-invalid) status is rejected", false);
+}
+
+// -- Config: household-editable domains/resources/practiceCategories --
+
+try {
+  await assertFails(setDoc(doc(tannerDb, "config/resources"), { entries: "not-a-list" }));
   check("config with a wrong-typed entries is rejected", true);
 } catch (e) {
   check("config with a wrong-typed entries is rejected", false);
 }
-
-// -- Ideas: lightweight scratch notes tied to a Goal --
-
 try {
-  const { goalId: _gid, ...missingGoalId } = validIdea();
-  await assertFails(setDoc(doc(tannerDb, "ideas/idea-missing-goal"), missingGoalId));
-  check("idea missing a required field is rejected", true);
+  await assertSucceeds(setDoc(doc(rochelleDb, "config/resources"), validConfig({ entries: ["Google Calendar", "Travel notebook"] })));
+  check("Rochelle can write config", true);
 } catch (e) {
-  check("idea missing a required field is rejected", false);
-}
-try {
-  await assertFails(setDoc(doc(rochelleDb, "ideas/idea2"), validIdea({ title: "Rochelle's idea" })));
-  check("viewer (Rochelle) cannot create an idea", true);
-} catch (e) {
-  check("viewer (Rochelle) cannot create an idea", false);
-}
-try {
-  await assertSucceeds(deleteDoc(doc(tannerDb, "ideas/idea1")));
-  const snap = await getDoc(doc(rochelleDb, "ideas/idea1"));
-  check("owner can delete an idea", !snap.exists());
-} catch (e) {
-  check("owner can delete an idea", false);
+  check("Rochelle can write config", false);
   console.error(e.message);
 }
 
-// -- Owner can delete --
+// -- Either account can delete --
 
 try {
-  await assertSucceeds(deleteDoc(doc(tannerDb, "tasks/task1")));
-  const snap = await getDoc(doc(rochelleDb, "tasks/task1"));
-  check("owner can delete a task", !snap.exists());
+  await assertSucceeds(deleteDoc(doc(tannerDb, "items/item1")));
+  const snap = await getDoc(doc(rochelleDb, "items/item1"));
+  check("Tanner can delete an item", !snap.exists());
 } catch (e) {
-  check("owner can delete a task", false);
+  check("Tanner can delete an item", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(deleteDoc(doc(rochelleDb, "kinds/kind1")));
+  const snap = await getDoc(doc(tannerDb, "kinds/kind1"));
+  check("Rochelle can delete a kind", !snap.exists());
+} catch (e) {
+  check("Rochelle can delete a kind", false);
   console.error(e.message);
 }
 

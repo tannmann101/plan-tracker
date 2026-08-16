@@ -1,14 +1,18 @@
 const { onCall, HttpsError } = require('firebase-functions/v2/https');
 const { defineSecret } = require('firebase-functions/params');
+const admin = require('firebase-admin');
+
+admin.initializeApp();
+const db = admin.firestore();
 
 const anthropicApiKey = defineSecret('ANTHROPIC_API_KEY');
 
-// Unlike firestore.rules' household-wide isAllowed(), Secretary's AI
-// functions are owner-only -- Rochelle's account is read-only across the
-// whole app (see isOwnerEmail() in src/constants.js), and capture/triage/the
-// weekly-meeting import are all Tanner's own workflow. Keep this in sync
-// with isOwnerEmail() by hand.
-const OWNER_EMAIL = 'tannerwesgardner@gmail.com';
+// Both household accounts have identical access now -- there is no
+// owner/viewer split left (see firestore.rules' isAllowed()). Kept as an
+// explicit allow-list here (not "any authenticated user") so a stolen/
+// misissued token for some other Google account still can't call these
+// functions. Keep in sync with firestore.rules' isAllowed() by hand.
+const HOUSEHOLD_EMAILS = ['tannerwesgardner@gmail.com', 'rochelleygardner@gmail.com'];
 
 const MODEL = 'claude-haiku-4-5-20251001';
 
@@ -16,39 +20,13 @@ const MODEL = 'claude-haiku-4-5-20251001';
 // separate Node/CommonJS deploy from the Vite/ESM client bundle, so there's
 // no shared import between them (same reasoning firestore.rules uses for
 // its own duplicated vocab).
-const DOMAIN_IDS = [
-  'finances', 'material', 'teacher', 'tech-admin', 'career', 'projects',
-  'collab', 'cleaning', 'repair', 'planning', 'weekly-meeting', 'reading',
-  'writing', 'contemplation', 'ecology-practices',
-];
-const TIER_IDS = ['yearly', 'quarterly', 'monthly', 'weekly'];
+const DOMAIN_IDS = ['creative', 'vocation', 'education', 'head-of-household', 'projects', 'practices', 'goals'];
+const KIND_TYPE_IDS = ['project', 'goal', 'practice'];
+const ITEM_TYPE_IDS = ['task', 'session', 'prep', 'errand', 'other'];
 
-// Content-type categories are domain-scoped, not shared -- kept in sync by
-// hand with src/constants.js' DEFAULT_ROUTING_TABLE (grouped here by domain,
-// same grouping firestore.rules' contentTypeDomainPrefix() enforces server-
-// side) so Claude picks a contentType that actually belongs to whichever
-// domain it also picks.
-const CONTENT_TYPES_BY_DOMAIN = {
-  finances: ['fin-scheduling', 'fin-execution', 'fin-review', 'fin-research', 'fin-capture', 'fin-comm'],
-  material: ['mat-capture', 'mat-scheduling', 'mat-research', 'mat-inventory', 'mat-deprovision', 'mat-comm'],
-  teacher: ['tch-dialogic', 'tch-teaching-prep', 'tch-reading', 'tch-curriculum', 'tch-scheduling', 'tch-reference'],
-  'tech-admin': ['adm-execution', 'adm-scheduling', 'adm-inventory', 'adm-capture', 'adm-comm'],
-  career: ['car-scheduling', 'car-development', 'car-execution', 'car-comm', 'car-reflection'],
-  projects: ['prj-capture', 'prj-planning', 'prj-scheduling', 'prj-execution', 'prj-writeup'],
-  collab: ['col-dialogic', 'col-scheduling', 'col-consent', 'col-execution', 'col-comm'],
-  cleaning: ['cln-scheduling', 'cln-execution', 'cln-capture'],
-  repair: ['rep-capture', 'rep-scheduling', 'rep-research', 'rep-execution', 'rep-comm'],
-  planning: ['pln-systems', 'pln-scheduling', 'pln-reflection', 'pln-capture'],
-  'weekly-meeting': ['wkm-recap', 'wkm-glance', 'wkm-prep', 'wkm-followup'],
-  reading: ['rdg-engagement', 'rdg-scheduling', 'rdg-reference', 'rdg-reflection', 'rdg-capture'],
-  writing: ['wrt-drafting', 'wrt-research', 'wrt-scheduling', 'wrt-capture'],
-  contemplation: ['ctm-reflection', 'ctm-reading', 'ctm-scheduling', 'ctm-capture'],
-  'ecology-practices': ['eco-execution', 'eco-scheduling', 'eco-capture', 'eco-reflection'],
-};
-
-function requireOwner(request) {
+function requireHousehold(request) {
   const email = request.auth?.token?.email;
-  if (!email || email !== OWNER_EMAIL) {
+  if (!email || !HOUSEHOLD_EMAILS.includes(email)) {
     throw new HttpsError('permission-denied', 'Not authorized.');
   }
 }
@@ -99,18 +77,121 @@ async function callClaude({ system, messages, maxTokens }) {
   return text.trim();
 }
 
-// Parses a photo of the handwritten weekly-meeting notebook page into
-// Goals-in-context, this week's Plans, their Sessions (domain + content-type
-// tagged), and Tasks. Client resolves each Session's content_type to a
-// tool_location via the (possibly Settings-edited) routing table -- this
-// function only picks the content_type, never a literal tool/location
-// string, so an edited routing table is still authoritative.
-//
-// Never auto-saved: the client shows every extracted item in a full
-// checklist for Tanner to review and edit before anything is written to
-// Firestore (see src/pages/WeeklyMeetingImport.jsx).
+// A Kind proposal's patch, normalized so every pendingOperation this file
+// writes carries a shape isValidKind (minus createdAt/updatedAt, which the
+// client fills in on approval) would accept.
+function kindPatch(draft) {
+  return {
+    title: draft.title,
+    kindType: KIND_TYPE_IDS.includes(draft.kindType) ? draft.kindType : 'project',
+    domain: DOMAIN_IDS.includes(draft.domain) ? draft.domain : 'head-of-household',
+    secondaryDomains: Array.isArray(draft.secondaryDomains) ? draft.secondaryDomains.filter((d) => DOMAIN_IDS.includes(d)) : [],
+    resources: Array.isArray(draft.resources) ? draft.resources : [],
+    tags: Array.isArray(draft.tags) ? draft.tags : [],
+    parentKindId: draft.parentKindId || null,
+    status: 'not-started',
+  };
+}
+
+function itemPatch(draft) {
+  return {
+    title: draft.title,
+    itemType: ITEM_TYPE_IDS.includes(draft.itemType) ? draft.itemType : 'task',
+    domain: DOMAIN_IDS.includes(draft.domain) ? draft.domain : 'head-of-household',
+    secondaryDomains: Array.isArray(draft.secondaryDomains) ? draft.secondaryDomains.filter((d) => DOMAIN_IDS.includes(d)) : [],
+    resources: Array.isArray(draft.resources) ? draft.resources : [],
+    tags: Array.isArray(draft.tags) ? draft.tags : [],
+    parentKindId: draft.parentKindId || null,
+    timing: draft.targetDay ? { targetDay: draft.targetDay, floating: true } : null,
+    done: false,
+  };
+}
+
+// Writes a pendingOperation -- the one path, server-side, that every AI
+// draft in this file goes through. Nothing here ever touches /kinds or
+// /items directly; that only happens client-side, after a human approves
+// the operation from the Secretary review log (§5).
+async function createPendingOperation({ opType, targetId, patch, sourceCaptureId, sourceType }) {
+  const now = Date.now();
+  const ref = await db.collection('pendingOperations').add({
+    opType,
+    targetId: targetId || null,
+    patch,
+    sourceCaptureId: sourceCaptureId || null,
+    sourceType,
+    status: 'pending',
+    createdAt: now,
+  });
+  return ref.id;
+}
+
+// Takes a raw capture (typed or pasted text) and drafts a single Kind-or-
+// Item proposal from it. The function itself creates the capture record
+// and the resulting pendingOperation server-side -- the client can't skip
+// or race past the review queue because there's no direct-write path for
+// it to take (see src/pages/Secretary.jsx's review log, which is the only
+// place this ever actually lands as a real Kind/Item).
+exports.triageCapture = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 }, async (request) => {
+  requireHousehold(request);
+
+  const text = request.data?.text;
+  if (!text || typeof text !== 'string') {
+    throw new HttpsError('invalid-argument', 'A text string is required.');
+  }
+  const existingKinds = Array.isArray(request.data?.existingKinds) ? request.data.existingKinds : [];
+
+  const now = Date.now();
+  const captureRef = await db.collection('captures').add({ status: 'triaging', rawText: text, createdAt: now });
+
+  const system = `You are Secretary, a formal, courteous, old-fashioned household secretary triaging a captured note for your employer. Decide whether it is best represented as a Kind (a Project, Goal, or Practice -- something with some duration/shape to it) or an Item (a Task, Session, Prep, Errand, or Other -- a single concrete placement). Respond with ONLY a single JSON object, no prose, no markdown fences.
+
+Schema:
+{
+  "family": "kind" or "item",
+  "title": string (a clean, short title),
+  "kindType": one of ${JSON.stringify(KIND_TYPE_IDS)} (only when family is "kind"),
+  "itemType": one of ${JSON.stringify(ITEM_TYPE_IDS)} (only when family is "item"),
+  "domain": one of ${JSON.stringify(DOMAIN_IDS)},
+  "secondaryDomains": array of zero or more other domains from the same list,
+  "tags": array of short lowercase free-form tags,
+  "targetDay": string (ISO date) or null -- only meaningful for an Item, and only when the text clearly implies one; never fabricate a date,
+  "parentKindId": string or null -- an id from existingKinds below, only if this clearly belongs under one of them,
+  "note": string (one sentence explaining the placement, in Secretary's voice)
+}
+
+existingKinds (id/title/kindType/domain, for parentKindId matching only): ${JSON.stringify(existingKinds)}`;
+
+  const messages = [{ role: 'user', content: `Captured text: ${text}` }];
+  const responseText = await callClaude({ system, messages, maxTokens: 1024 });
+
+  let draft;
+  try {
+    draft = parseJson(responseText);
+  } catch (err) {
+    console.error('Failed to parse triageCapture response as JSON', responseText, err);
+    throw new HttpsError('internal', "Claude's response wasn't valid JSON.");
+  }
+
+  const family = draft.family === 'kind' ? 'kind' : 'item';
+  const opType = family === 'kind' ? 'create-kind' : 'create-item';
+  const patch = family === 'kind' ? kindPatch(draft) : itemPatch(draft);
+  patch.createdVia = 'capture';
+  if (draft.retro) patch.retro = true;
+
+  const pendingOperationId = await createPendingOperation({ opType, patch, sourceCaptureId: captureRef.id, sourceType: 'capture' });
+  await captureRef.set({ status: 'proposed' }, { merge: true });
+
+  return { result: { captureId: captureRef.id, pendingOperationId, family, patch, note: draft.note || null } };
+});
+
+// Parses a photo of the handwritten weekly-meeting notebook page into a
+// batch of Kind/Item proposals, each landing in the pendingOperations queue
+// exactly like a triaged capture rather than being written directly --
+// same review-before-commit discipline, just seeded from a photo instead
+// of typed text (see src/pages/WeeklyMeetingImport.jsx, now reached from
+// the Secretary page per §5).
 exports.parseWeeklyPhoto = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 120 }, async (request) => {
-  requireOwner(request);
+  requireHousehold(request);
 
   const imageBase64 = request.data?.imageBase64;
   const mediaType = request.data?.mediaType;
@@ -120,34 +201,27 @@ exports.parseWeeklyPhoto = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 
   if (!mediaType || !['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(mediaType)) {
     throw new HttpsError('invalid-argument', 'A supported mediaType is required.');
   }
+  const existingKinds = Array.isArray(request.data?.existingKinds) ? request.data.existingKinds : [];
 
-  // existingGoals lets Claude attach this week's Plans to a Goal already in
-  // the system (by id) instead of guessing a title match -- optional so the
-  // very first weekly meeting (no Goals yet) still works.
-  const existingGoals = Array.isArray(request.data?.existingGoals) ? request.data.existingGoals : [];
+  const now = Date.now();
+  const captureRef = await db.collection('captures').add({ status: 'triaging', rawText: 'Weekly-meeting notebook photo import', createdAt: now });
 
   const system = `You read a photo of a handwritten household weekly-planning notebook page and extract its structure as JSON. Respond with ONLY a single JSON object, no prose, no markdown fences.
 
 Schema:
 {
-  "goals": [{ "title": string, "tier": one of ${JSON.stringify(TIER_IDS)}, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "existingGoalId": string or null }],
-  "plans": [{ "title": string, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "goalTitle": string or null }],
-  "sessions": [{ "title": string, "planTitle": string, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "contentType": string (must be one of that session's domain's content-types, see below), "targetDay": string or null }],
-  "tasks": [{ "title": string, "sessionTitle": string, "date": string or null }]
+  "kinds": [{ "title": string, "kindType": one of ${JSON.stringify(KIND_TYPE_IDS)}, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "tags": [string], "parentKindId": string or null }],
+  "items": [{ "title": string, "itemType": one of ${JSON.stringify(ITEM_TYPE_IDS)}, "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "tags": [string], "targetDay": string or null, "parentKindId": string or null }]
 }
 
-Content-types are domain-specific -- a session's contentType MUST come from its own domain's list, never another domain's:
-${JSON.stringify(CONTENT_TYPES_BY_DOMAIN, null, 2)}
-
 Rules:
-- "goals" are any yearly/quarterly/monthly/weekly goals visible or referenced on the page, at whatever tiers actually appear -- don't invent tiers that aren't there. If a goal on the page matches one in existingGoals by title/meaning, set existingGoalId to that goal's id and still include the entry (so the client can match it up); otherwise existingGoalId is null.
-- "plans" are this week's plans of action; goalTitle links a plan to a goal's title from the "goals" array (or an existingGoals title) when the page shows that link, else null.
-- "sessions" are the individual planned sessions under a plan; planTitle must match a "plans" title exactly. Pick the domain first, then pick contentType from that domain's list above by what kind of activity the session actually is -- e.g. a reading session in the reading domain is "rdg-engagement", a scheduling block in finances is "fin-scheduling", a finance execution task is "fin-execution". targetDay is an ISO date (YYYY-MM-DD) if the page states or implies one, else null.
-- "tasks" are concrete action items under a session; sessionTitle must match a "sessions" title exactly. date is an ISO date if stated/implied, else null.
-- If the page doesn't clearly contain an item type, return an empty array for it -- do not invent content.
-- Dates: infer year from context if only month/day is given; if no year is inferable, omit the date field (use null) rather than guessing.
+- "kinds" are any Projects/Goals/Practices visible or referenced on the page.
+- "items" are the individual planned Tasks/Sessions/Preps/Errands under them.
+- parentKindId may reference either another entry's id in this same response is NOT valid -- it may ONLY reference an id from existingKinds below (an already-existing Kind). If an item/kind belongs under something newly proposed in this same batch rather than an existing Kind, leave parentKindId null; the household will re-link it by hand when reviewing the proposals, since two new proposals can't reference each other before either is approved.
+- targetDay is an ISO date (YYYY-MM-DD) if the page states or implies one, else null. Infer year from context; if no year is inferable, use null rather than guessing.
+- If the page doesn't clearly contain kinds or items, return an empty array for that key -- do not invent content.
 
-existingGoals (for matching only, not to be echoed back verbatim): ${JSON.stringify(existingGoals)}`;
+existingKinds (id/title/kindType/domain, for parentKindId matching only): ${JSON.stringify(existingKinds)}`;
 
   const messages = [
     {
@@ -168,121 +242,86 @@ existingGoals (for matching only, not to be echoed back verbatim): ${JSON.string
     throw new HttpsError('internal', "Claude's response wasn't valid JSON.");
   }
 
-  return { result: parsed };
+  const created = [];
+  for (const draft of Array.isArray(parsed.kinds) ? parsed.kinds : []) {
+    const patch = kindPatch(draft);
+    patch.createdVia = 'weekly-import';
+    const id = await createPendingOperation({ opType: 'create-kind', patch, sourceCaptureId: captureRef.id, sourceType: 'weekly-import' });
+    created.push({ pendingOperationId: id, family: 'kind', patch });
+  }
+  for (const draft of Array.isArray(parsed.items) ? parsed.items : []) {
+    const patch = itemPatch(draft);
+    patch.createdVia = 'weekly-import';
+    const id = await createPendingOperation({ opType: 'create-item', patch, sourceCaptureId: captureRef.id, sourceType: 'weekly-import' });
+    created.push({ pendingOperationId: id, family: 'item', patch });
+  }
+  await captureRef.set({ status: 'proposed' }, { merge: true });
+
+  return { result: { captureId: captureRef.id, created } };
 });
 
-// Takes arbitrary captured text/context and returns a structured triage
-// decision: relevance, level, domain/content-type placement, and an
-// alignment check against existing Goals. When confidence is low, includes
-// a clarifyingQuestion so the client's confirmation modal can hold a real
-// back-and-forth instead of forcing a guess into a form field.
-//
-// This is a draft only -- src/pages/Capture.jsx never writes it to
-// Firestore until Tanner accepts (or answers through) the confirmation
-// step, same draft-then-accept discipline as roc-workspace's AIAssist.
-exports.triageCapture = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 }, async (request) => {
-  requireOwner(request);
+// The Secretary chat's single turn: takes the conversation so far (plus,
+// when opened from a ticket, that entity as scoped context) and returns a
+// reply, plus -- only when the conversation actually calls for a
+// create/edit -- a proposed operation. Same rule as everywhere else in this
+// pipeline: the function may draft a pendingOperation, but it never
+// touches /kinds or /items itself. "Propose-then-confirm always" (§5).
+exports.secretaryChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 }, async (request) => {
+  requireHousehold(request);
 
-  const text = request.data?.text;
-  if (!text || typeof text !== 'string') {
-    throw new HttpsError('invalid-argument', 'A text string is required.');
+  const history = Array.isArray(request.data?.messages) ? request.data.messages : [];
+  if (history.length === 0) {
+    throw new HttpsError('invalid-argument', 'At least one message is required.');
   }
+  const entityContext = request.data?.entityContext || null;
+  const existingKinds = Array.isArray(request.data?.existingKinds) ? request.data.existingKinds : [];
 
-  const existingGoals = Array.isArray(request.data?.existingGoals) ? request.data.existingGoals : [];
-  const priorAnswers = Array.isArray(request.data?.priorAnswers) ? request.data.priorAnswers : [];
-
-  const system = `You are Secretary, a formal, courteous, old-fashioned household secretary triaging a captured note for your employer. Respond with ONLY a single JSON object, no prose, no markdown fences.
+  const system = `You are Secretary, a formal, courteous, old-fashioned household secretary having a conversation with your employer. You can discuss scheduling, help sequence milestones, and draft new Kinds/Items or edits to existing ones -- but you never write anything yourself. Respond with ONLY a single JSON object, no prose, no markdown fences.
 
 Schema:
 {
-  "relevance": "in-system" or "unmanaged",
-  "level": one of ["task", "session", "plan", "goal", "project"] or null (null only if relevance is "unmanaged"),
-  "title": string (a clean, short title for the item),
-  "domain": one of ${JSON.stringify(DOMAIN_IDS)} or null,
-  "contentType": string or null (only relevant when level is "session" -- and when set, MUST come from that domain's own content-type list, never another domain's, see below),
-  "alignment": {
-    "type": one of ["existing-goal", "new-goal-suggestion", "new-project-suggestion", "drift"],
-    "goalId": string or null (an id from existingGoals, only when type is "existing-goal"),
-    "note": string (one sentence explaining the alignment call)
-  },
-  "confidence": "high" or "low",
-  "clarifyingQuestion": string or null (a single genuine follow-up question, only when confidence is "low" and one more answer would resolve it)
+  "reply": string (your conversational reply, in Secretary's voice -- courteous, precise, unhurried),
+  "proposedOperation": null, or:
+  {
+    "opType": one of ["create-kind", "create-item", "update-kind", "update-item"],
+    "targetId": string or null (required, and must be an id from existingKinds/entityContext, when opType starts with "update"),
+    "family": "kind" or "item",
+    "title": string, "kindType": string or null, "itemType": string or null,
+    "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "secondaryDomains": [string], "tags": [string],
+    "targetDay": string or null, "parentKindId": string or null,
+    "note": string (one sentence explaining the proposal)
+  }
 }
 
-Content-types are domain-specific -- when level is "session" and you set a contentType, it MUST come from the chosen domain's own list, never another domain's:
-${JSON.stringify(CONTENT_TYPES_BY_DOMAIN, null, 2)}
+Only set proposedOperation when the conversation actually calls for creating or changing a Kind/Item -- most turns should just be a reply with proposedOperation null. Never invent an update to something the household didn't ask to change.
 
-Rules:
-- "relevance": "unmanaged" means this belongs to the ordinary unmanaged ~20-25% of life and should be logged and discarded, not placed -- level, domain, contentType, alignment should reflect that (level null, alignment.type "drift").
-- "level": Task for a single concrete action; Session for a themed working block; Plan for a multi-session effort; Goal for a yearly/quarterly/monthly/weekly aim; Project for an atypical personal initiative outside existing goals (especially one that touches shared/family resources).
-- "alignment": prefer "existing-goal" (with goalId) whenever the capture clearly serves a goal in existingGoals. Use "new-goal-suggestion" or "new-project-suggestion" when it looks like it should become one but doesn't exist yet -- never invent the goal/project yourself, only flag it. Use "drift" when it serves nothing you can identify.
-- Only set confidence "low" when placement is genuinely ambiguous in a way one more question would resolve -- most captures should resolve at "high" confidence. Keep clarifyingQuestion short, specific, and in Secretary's voice (courteous, precise, unhurried) -- e.g. "Shall I file this under Tech/Admin, or does it belong with the household's ecology of practices?" Never ask a question a decisive human wouldn't need to.
+${entityContext ? `This conversation was opened from a specific ${entityContext.family === 'kind' ? 'Kind' : 'Item'}: ${JSON.stringify(entityContext)}. Prefer proposing updates to it (opType "update-${entityContext.family}", targetId "${entityContext.id}") when the conversation is about changing it.` : ''}
 
-existingGoals (id/title/tier/domain, for alignment matching): ${JSON.stringify(existingGoals)}
-${priorAnswers.length ? `\nThis capture has already been through one or more rounds of clarification. Prior Q&A (most recent last): ${JSON.stringify(priorAnswers)}\nUse these answers to resolve to confidence "high" if at all possible -- avoid asking a second question unless truly necessary.` : ''}`;
+existingKinds (id/title/kindType/domain, for parentKindId/targetId matching): ${JSON.stringify(existingKinds)}`;
 
-  const messages = [{ role: 'user', content: `Captured text: ${text}` }];
-
-  const responseText = await callClaude({ system, messages, maxTokens: 1024 });
-  let parsed;
-  try {
-    parsed = parseJson(responseText);
-  } catch (err) {
-    console.error('Failed to parse triageCapture response as JSON', responseText, err);
-    throw new HttpsError('internal', "Claude's response wasn't valid JSON.");
-  }
-
-  return { result: parsed };
-});
-
-// Given an existing Goal, drafts a Plan (optional) plus its Sessions and
-// Tasks -- the top-down counterpart to triageCapture's bottom-up
-// "does this deserve to be a Goal" judgment. Same draft-then-accept
-// discipline as everywhere else this pipeline touches Firestore: the
-// client shows an editable checklist and never commits anything until
-// Tanner accepts it (see src/components/GoalBreakdownAssist.jsx).
-exports.suggestGoalBreakdown = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 }, async (request) => {
-  requireOwner(request);
-
-  const goalTitle = request.data?.goalTitle;
-  const domain = request.data?.domain;
-  const tier = request.data?.tier;
-  if (!goalTitle || typeof goalTitle !== 'string') {
-    throw new HttpsError('invalid-argument', 'A goalTitle string is required.');
-  }
-  if (!domain || !DOMAIN_IDS.includes(domain)) {
-    throw new HttpsError('invalid-argument', 'A valid domain is required.');
-  }
-
-  const contentTypes = CONTENT_TYPES_BY_DOMAIN[domain] || [];
-
-  const system = `You are Secretary, a formal, courteous, old-fashioned household secretary, helping your employer break a Goal down into concrete groundwork. Respond with ONLY a single JSON object, no prose, no markdown fences.
-
-Schema:
-{
-  "plan": { "title": string } or null,
-  "sessions": [{ "title": string, "contentType": one of ${JSON.stringify(contentTypes)}, "targetDay": string or null }],
-  "tasks": [{ "title": string, "sessionTitle": string, "date": string or null }]
-}
-
-Rules:
-- The Goal already exists (given below) -- draft the Plan of action that would serve it, in this Goal's own domain, "${domain}". "plan" is null only if the Goal is better served by a handful of direct Tasks with no organizing Plan (rare -- prefer drafting a Plan).
-- "sessions" are the themed working blocks under that Plan; pick contentType from the domain's own list above -- never invent an id outside it. targetDay is an ISO date (YYYY-MM-DD) only if there's a clear reason to suggest timing (e.g. a weekly Goal implies this week); otherwise null -- don't fabricate a date just to fill the field.
-- "tasks" are concrete action items; sessionTitle must match a "sessions" title exactly (or be omitted from tasks entirely if no sessions are drafted).
-- Keep the draft modest and concrete -- 1 Plan, 1-4 Sessions, a handful of Tasks per Session at most. This is a starting point Tanner will edit before anything saves, not a finished plan.
-
-Goal: "${goalTitle}" (tier: ${tier || "unspecified"}, domain: ${domain})`;
-
-  const messages = [{ role: 'user', content: 'Draft the breakdown for this Goal per the schema in your instructions.' }];
-
+  const messages = history.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
   const responseText = await callClaude({ system, messages, maxTokens: 1536 });
+
   let parsed;
   try {
     parsed = parseJson(responseText);
   } catch (err) {
-    console.error('Failed to parse suggestGoalBreakdown response as JSON', responseText, err);
+    console.error('Failed to parse secretaryChat response as JSON', responseText, err);
     throw new HttpsError('internal', "Claude's response wasn't valid JSON.");
   }
 
-  return { result: parsed };
+  let pendingOperationId = null;
+  if (parsed.proposedOperation) {
+    const draft = parsed.proposedOperation;
+    const family = draft.family === 'kind' ? 'kind' : 'item';
+    const patch = family === 'kind' ? kindPatch(draft) : itemPatch(draft);
+    patch.createdVia = 'secretary-chat';
+    if (draft.opType?.startsWith('update') && draft.targetId) {
+      pendingOperationId = await createPendingOperation({ opType: draft.opType, targetId: draft.targetId, patch, sourceType: 'chat' });
+    } else {
+      pendingOperationId = await createPendingOperation({ opType: family === 'kind' ? 'create-kind' : 'create-item', patch, sourceType: 'chat' });
+    }
+  }
+
+  return { result: { reply: parsed.reply || '', pendingOperationId, proposedOperation: parsed.proposedOperation || null } };
 });

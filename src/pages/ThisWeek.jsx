@@ -1,118 +1,114 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note, TabBar } from "../ui";
-import { MUTE, INK, MONO, INKBLUE } from "../theme";
+import { MUTE, INK, MONO, INKBLUE, DOMAIN_COLORS } from "../theme";
 import { EntityCard } from "../components/EntityCard";
-import QuickAddModal from "../components/QuickAddModal";
+import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import CalendarMonthView from "../components/CalendarMonthView";
-import { weekStartISO } from "../constants";
-import { tasksForSession } from "../lib/graph";
+import { HorizontalBarChart } from "../components/charts";
+import { weekStartISO, domainLabel } from "../constants";
 
 const VIEW_TABS = [
   { id: "week", label: "Week" },
-  { id: "calendar", label: "Calendar" },
+  { id: "month", label: "Month" },
 ];
 
-export default function ThisWeek({ secretary, isOwner, onBack, onNavigate, onNavigateGoal }) {
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function addDaysISO(iso, n) {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// §7 -- Week/Month toggle, indefinite forward/back navigation in both
+// modes, a Monday-start week grid distinguishing floating from timed
+// Items, and full Kind-or-Item Add (unlike Today, this page isn't
+// Items-only).
+export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate }) {
   const [view, setView] = useState("week");
+  const [weekStart, setWeekStart] = useState(() => weekStartISO());
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  const weekStart = weekStartISO();
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const weekEndISO = weekEnd.toISOString().slice(0, 10);
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
+  const weekEnd = weekDays[6];
 
-  const sessions = (secretary.sessions || [])
-    .filter((s) => s.targetDay && s.targetDay >= weekStart && s.targetDay <= weekEndISO)
-    .sort((a, b) => (a.targetDay || "").localeCompare(b.targetDay || ""));
+  const weekItems = (secretary.items || []).filter((i) => i.timing?.targetDay && weekDays.includes(i.timing.targetDay));
+  const byDay = Object.fromEntries(weekDays.map((d) => [d, weekItems
+    .filter((i) => i.timing.targetDay === d)
+    .sort((a, b) => (a.timing.floating === false ? 0 : 1) - (b.timing.floating === false ? 0 : 1) || (a.timing.time || "").localeCompare(b.timing.time || ""))]));
 
-  // Standalone Tasks (no Session) placed this week by their own date --
-  // Sessions aren't the only thing that can carry a day anymore.
-  const standaloneTasks = (secretary.tasks || [])
-    .filter((t) => !t.sessionId && t.date && t.date >= weekStart && t.date <= weekEndISO);
+  const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
+  const openEdit = (fam, e) => setEditing({ family: fam, entity: e });
 
-  const byDay = {};
-  for (const s of sessions) {
-    const day = s.targetDay || "Unscheduled";
-    (byDay[day] = byDay[day] || { sessions: [], tasks: [] }).sessions.push(s);
-  }
-  for (const t of standaloneTasks) {
-    const day = t.date || "Unscheduled";
-    (byDay[day] = byDay[day] || { sessions: [], tasks: [] }).tasks.push(t);
-  }
-  const sortedDays = Object.keys(byDay).sort();
-
-  const toggleSessionDone = (entity, next) => secretary.saveEntity("session", { ...entity, done: next });
-  const toggleTaskDone = (entity, next) => secretary.saveEntity("task", { ...entity, done: next });
-  const openEdit = isOwner ? (t, e) => setEditing({ type: t, entity: e }) : null;
+  const domainCounts = {};
+  for (const i of weekItems) domainCounts[i.domain] = (domainCounts[i.domain] || 0) + 1;
+  const domainRows = Object.entries(domainCounts)
+    .sort((a, b) => b[1] - a[1])
+    .map(([id, count]) => ({ label: domainLabel(id, secretary.domains), count, color: DOMAIN_COLORS[id] || MUTE }));
 
   return (
     <div>
-      <Btn small onClick={onBack} color={MUTE}>← Hub</Btn>
+      <Btn small onClick={onBack} color={MUTE}>← Back</Btn>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-        <SectionTitle note={`${weekStart} → ${weekEndISO}`}>This Week</SectionTitle>
+        <SectionTitle note={view === "week" ? `${weekStart} → ${weekEnd}` : undefined}>Week / Calendar</SectionTitle>
         <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
           <TabBar tabs={VIEW_TABS} active={view} onChange={setView} />
-          {isOwner && view === "week" && <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>}
-          {isOwner && (
-            <>
-              <Btn small onClick={() => onNavigate("weeklyimport")}>Import weekly-meeting photo</Btn>
-              <Btn small onClick={() => onNavigate("weeklyview")}>Weekly View (copy/paste)</Btn>
-            </>
-          )}
+          <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>
         </div>
       </div>
 
-      {view === "calendar" ? (
-        <CalendarMonthView secretary={secretary} isOwner={isOwner} onNavigateGoal={onNavigateGoal} />
-      ) : sortedDays.length === 0 ? (
-        <Note>No sessions or tasks are placed for this week yet. Import this week's meeting photo, capture a plan directly under a Goal, or use "+ Add" above.</Note>
-      ) : (
-        sortedDays.map((day) => (
-          <div key={day} style={{ marginBottom: 18 }}>
-            <div style={{ fontFamily: MONO, fontSize: 11, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>{day}</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-              {byDay[day].sessions.map((session) => (
-                <div key={session.id}>
-                  <EntityCard
-                    type="session" entity={session} domains={secretary.domains} data={secretary}
-                    readOnly={!isOwner} onToggleDone={toggleSessionDone} onEdit={openEdit} onNavigateGoal={onNavigateGoal}
-                  />
-                  {tasksForSession(session.id, secretary.tasks).length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6, marginLeft: 22 }}>
-                      {tasksForSession(session.id, secretary.tasks).map((task) => (
+      <div style={{ display: "flex", gap: 22, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: "3 1 500px", minWidth: 280 }}>
+          {view === "week" ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <Btn small onClick={() => setWeekStart(addDaysISO(weekStart, -7))} color={MUTE}>← Prev week</Btn>
+                <Btn small onClick={() => setWeekStart(weekStartISO())} color={MUTE}>This week</Btn>
+                <Btn small onClick={() => setWeekStart(addDaysISO(weekStart, 7))} color={MUTE}>Next week →</Btn>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                {weekDays.map((d, i) => (
+                  <div key={d}>
+                    <div style={{ fontFamily: MONO, fontSize: 11, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                      {WEEKDAY_LABELS[i]} <span style={{ color: MUTE, fontWeight: 400 }}>{d.slice(5)}</span>
+                    </div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                      {byDay[d].length === 0 ? (
+                        <Note>—</Note>
+                      ) : byDay[d].map((item) => (
                         <EntityCard
-                          key={task.id} type="task" entity={task} domains={secretary.domains} data={secretary}
-                          readOnly={!isOwner} onToggleDone={toggleTaskDone} onEdit={openEdit} onNavigateGoal={onNavigateGoal}
+                          key={item.id} family="item" entity={item} secretary={secretary}
+                          onToggleDone={toggleDone} onEdit={openEdit} onNavigateKind={onNavigateKind}
                         />
                       ))}
                     </div>
-                  )}
-                </div>
-              ))}
-              {byDay[day].tasks.map((task) => (
-                <EntityCard
-                  key={task.id} type="task" entity={task} domains={secretary.domains} data={secretary}
-                  readOnly={!isOwner} onToggleDone={toggleTaskDone} onEdit={openEdit} onNavigateGoal={onNavigateGoal}
-                />
-              ))}
-            </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <CalendarMonthView secretary={secretary} onNavigateKind={onNavigateKind} />
+          )}
+        </div>
+
+        {view === "week" && (
+          <div style={{ flex: "1 1 220px", minWidth: 220 }}>
+            <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Domain distribution, this week</div>
+            {domainRows.length === 0 ? <Note>Nothing placed this week yet.</Note> : <HorizontalBarChart rows={domainRows} />}
           </div>
-        ))
-      )}
+        )}
+      </div>
 
       {adding && (
-        <QuickAddModal
-          secretary={secretary}
-          types={["session", "task"]}
-          defaultType="session"
-          defaults={{ targetDay: weekStart }}
-          onClose={() => setAdding(false)}
-        />
+        <AddForm secretary={secretary} defaults={{ targetDay: weekStart }} onClose={() => setAdding(false)} onNavigate={onNavigate} />
       )}
       {editing && (
-        <EditEntityModal type={editing.type} entity={editing.entity} secretary={secretary} onClose={() => setEditing(null)} />
+        <EditEntityModal
+          family={editing.family} entity={editing.entity} secretary={secretary}
+          onClose={() => setEditing(null)} onDeleted={() => setEditing(null)}
+        />
       )}
     </div>
   );
