@@ -1,65 +1,122 @@
 import { useState } from "react";
-import { Btn, SectionTitle, Note } from "../ui";
-import { MUTE, INKBLUE } from "../theme";
+import { Btn, SectionTitle, Note, Pill, ProgressBar } from "../ui";
+import { MONO, SANS, INK, MUTE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
-import QuickAddModal from "../components/QuickAddModal";
+import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import { todayISO } from "../constants";
+import { kindProgress, rootKinds } from "../lib/graph";
 
-export default function Today({ secretary, isOwner, onBack, onNavigateGoal }) {
+function dayLabel(iso, today) {
+  if (iso === today) return "Today";
+  const d = new Date(`${iso}T00:00:00`);
+  return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+}
+
+function nextDays(today, count) {
+  const days = [today];
+  for (let i = 1; i < count; i++) {
+    const d = new Date(`${today}T00:00:00`);
+    d.setDate(d.getDate() + i);
+    days.push(d.toISOString().slice(0, 10));
+  }
+  return days;
+}
+
+// §6 -- Items-only Add (a Kind add belongs on Plans/Workspace, not here), a
+// 4-day strip rather than just today, and a right rail carrying Goal
+// progress + a "where's this landing" resource tally for what's visible.
+export default function Today({ secretary, onBack, onNavigateKind }) {
   const today = todayISO();
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  const tasks = (secretary.tasks || []).filter((t) => t.date === today);
-  const sessions = (secretary.sessions || []).filter((s) => s.targetDay === today);
-  const items = [
-    ...sessions.map((s) => ({ type: "session", entity: s })),
-    ...tasks.map((t) => ({ type: "task", entity: t })),
-  ].sort((a, b) => Number(!!a.entity.done) - Number(!!b.entity.done));
+  const days = nextDays(today, 4);
+  const items = (secretary.items || []).filter((i) => days.includes(i.timing?.targetDay));
+  const itemsByDay = Object.fromEntries(days.map((d) => [d, items
+    .filter((i) => i.timing?.targetDay === d)
+    .sort((a, b) => Number(!!a.done) - Number(!!b.done) || (a.timing?.time || "").localeCompare(b.timing?.time || ""))]));
 
-  const toggleDone = (type, entity, next) => {
-    secretary.saveEntity(type, { ...entity, done: next });
-  };
+  const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
+
+  const goals = rootKinds(secretary.kinds).filter((k) => k.kindType === "goal" && k.status !== "done");
+
+  const resourceTally = {};
+  for (const i of items) for (const r of i.resources || []) resourceTally[r] = (resourceTally[r] || 0) + 1;
+  const resourceRows = Object.entries(resourceTally).sort((a, b) => b[1] - a[1]);
 
   return (
     <div>
-      <Btn small onClick={onBack} color={MUTE}>← Hub</Btn>
+      <Btn small onClick={onBack} color={MUTE}>← Back</Btn>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <SectionTitle note={today}>Today</SectionTitle>
-        {isOwner && <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>}
+        <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>
       </div>
-      {items.length === 0 ? (
-        <Note>Nothing is scheduled for today. A quiet day, or an uncaptured one -- worth a glance at This Week.</Note>
-      ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-          {items.map(({ type, entity }) => (
-            <EntityCard
-              key={`${type}-${entity.id}`}
-              type={type}
-              entity={entity}
-              domains={secretary.domains}
-              data={secretary}
-              readOnly={!isOwner}
-              onToggleDone={(e, next) => toggleDone(type, e, next)}
-              onEdit={isOwner ? (t, e) => setEditing({ type: t, entity: e }) : null}
-              onNavigateGoal={onNavigateGoal}
-            />
+
+      <div style={{ display: "flex", gap: 22, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: "2 1 420px", minWidth: 280 }}>
+          {days.map((d) => (
+            <div key={d} style={{ marginBottom: 20 }}>
+              <div style={{ fontFamily: MONO, fontSize: 11, color: d === today ? INKBLUE : INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>
+                {dayLabel(d, today)}
+              </div>
+              {itemsByDay[d].length === 0 ? (
+                <Note>Nothing placed here.</Note>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                  {itemsByDay[d].map((item) => (
+                    <EntityCard
+                      key={item.id} family="item" entity={item} secretary={secretary}
+                      onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
+                      onNavigateKind={onNavigateKind}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           ))}
         </div>
-      )}
+
+        <div style={{ flex: "1 1 220px", minWidth: 220 }}>
+          <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Goal progress</div>
+          {goals.length === 0 ? (
+            <Note>No open Goals yet.</Note>
+          ) : goals.map((g) => {
+            const progress = kindProgress(g.id, secretary);
+            return (
+              <div key={g.id} style={{ marginBottom: 14 }}>
+                <div style={{ fontFamily: SANS, fontSize: 12.5, color: INK, fontWeight: 500 }}>{g.title}</div>
+                <ProgressBar percent={progress.percent} color={DOMAIN_COLORS[g.domain] || INKBLUE} />
+              </div>
+            );
+          })}
+
+          <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", margin: "22px 0 10px" }}>Where this is landing</div>
+          {resourceRows.length === 0 ? (
+            <Note>Nothing tagged with a resource this stretch.</Note>
+          ) : (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+              {resourceRows.map(([r, count]) => (
+                <Pill key={r} color={MUTE} tint={softTint(MUTE)}>{r} · {count}</Pill>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {adding && (
-        <QuickAddModal
+        <AddForm
           secretary={secretary}
-          types={["task"]}
-          defaultType="task"
-          defaults={{ date: today }}
+          allowKinds={false}
+          defaults={{ targetDay: today }}
           onClose={() => setAdding(false)}
         />
       )}
       {editing && (
-        <EditEntityModal type={editing.type} entity={editing.entity} secretary={secretary} onClose={() => setEditing(null)} />
+        <EditEntityModal
+          family={editing.family} entity={editing.entity} secretary={secretary}
+          onClose={() => setEditing(null)} onDeleted={() => setEditing(null)}
+        />
       )}
     </div>
   );

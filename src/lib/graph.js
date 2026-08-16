@@ -1,162 +1,142 @@
 // graph.js
-// Pure helpers for walking the Goal/Project/Plan/Session/Task graph --
-// shared by the Goals tree, Domains dashboards, the "why is this here"
-// trace, the rollup report, and Search, since they all need the same
+// Pure helpers for walking the flat Kind/Item graph -- shared by Today's
+// progress rail, the Plans kanban, Workspace's ticket boards, Search, and
+// the Add Form's tag autocomplete, since they all need the same
 // parent/child relationships. Kept dependency-free so it stays trivially
-// testable if it ever grows real coverage.
+// testable. The model is deliberately flatter than the old Goal/Plan/
+// Session/Task chain: a Kind can nest under another Kind (parentKindId),
+// and an Item can attach directly to a Kind (parentKindId) -- there is no
+// intermediate entity between an Item and the Kind it serves anymore.
 
-export function childGoals(goalId, goals) {
-  return (goals || []).filter((g) => g.parentGoalId === goalId);
+import { todayISO } from "../constants";
+
+export function childKinds(kindId, kinds) {
+  return (kinds || []).filter((k) => k.parentKindId === kindId);
 }
 
-export function rootGoals(goals) {
-  return (goals || []).filter((g) => !g.parentGoalId);
+export function rootKinds(kinds) {
+  return (kinds || []).filter((k) => !k.parentKindId);
 }
 
-export function plansForParent(parentType, parentId, plans) {
-  return (plans || []).filter((p) => p.parentType === parentType && p.parentId === parentId);
+export function itemsForKind(kindId, items) {
+  return (items || []).filter((i) => i.parentKindId === kindId);
 }
 
-export function sessionsForPlan(planId, sessions) {
-  return (sessions || []).filter((s) => s.planId === planId);
-}
-
-export function tasksForSession(sessionId, tasks) {
-  return (tasks || []).filter((t) => t.sessionId === sessionId);
-}
-
-export function goalAncestors(goal, goals) {
-  const chain = [goal];
-  let current = goal;
-  while (current?.parentGoalId) {
-    current = (goals || []).find((g) => g.id === current.parentGoalId);
+export function kindAncestors(kind, kinds) {
+  const chain = [kind];
+  let current = kind;
+  while (current?.parentKindId) {
+    current = (kinds || []).find((k) => k.id === current.parentKindId);
     if (!current) break;
     chain.push(current);
   }
   return chain; // finest to coarsest: [self, parent, grandparent, ...]
 }
 
-// Every Goal id in a Goal's subtree (itself + all descendants), used by the
-// rollup report to gather everything gathered under a Goal over time.
-export function goalSubtreeIds(goalId, goals) {
-  const ids = [goalId];
-  let frontier = [goalId];
+// Every Kind id in a Kind's subtree (itself + all descendants) -- used by
+// kindProgress() and by the parent-picker's cycle guard.
+export function kindSubtreeIds(kindId, kinds) {
+  const ids = [kindId];
+  let frontier = [kindId];
   while (frontier.length) {
-    const next = (goals || []).filter((g) => frontier.includes(g.parentGoalId));
-    ids.push(...next.map((g) => g.id));
-    frontier = next.map((g) => g.id);
+    const next = (kinds || []).filter((k) => frontier.includes(k.parentKindId));
+    ids.push(...next.map((k) => k.id));
+    frontier = next.map((k) => k.id);
   }
   return ids;
 }
 
-// Full trace for the "why is this here" info icon: given any Task/Session/
-// Plan/Goal, walk up through its Session/Plan/Goal-or-Project chain to the
-// root, recording the tier/domain/content-type rationale at each step.
+// Full trace for the "why is this here" info icon: an Item's chain is just
+// itself + its parent Kind's own ancestor chain (no intermediate Session/
+// Plan layer anymore); a Kind's chain is its own ancestor chain.
 export function traceFor(type, entity, data) {
-  const { goals = [], projects = [], plans = [], sessions = [] } = data;
+  const { kinds = [] } = data;
   const steps = [];
-  let session = null;
-  let plan = null;
-
-  if (type === "task") {
-    session = sessions.find((s) => s.id === entity.sessionId);
-    steps.push({ label: entity.title, detail: "Task" });
-  }
-  if (type === "session") session = entity;
-  if (session) {
-    plan = plans.find((p) => p.id === session.planId);
-    steps.push({ label: session.title, detail: `Session -- ${session.contentType} → ${session.toolLocation}` });
-  }
-  if (type === "plan") plan = entity;
-  if (plan) {
-    steps.push({ label: plan.title, detail: plan.parentType ? `Plan -- ${plan.domain}` : `Plan -- ${plan.domain} (not yet linked)` });
-    if (plan.parentType === "goal") {
-      const goal = goals.find((g) => g.id === plan.parentId);
-      if (goal) {
-        for (const g of goalAncestors(goal, goals)) {
-          steps.push({ label: g.title, detail: `Goal -- ${g.tier}, ${g.domain}`, goalId: g.id });
+  if (type === "item") {
+    steps.push({ label: entity.title, detail: entity.itemType });
+    if (entity.parentKindId) {
+      const parent = kinds.find((k) => k.id === entity.parentKindId);
+      if (parent) {
+        for (const k of kindAncestors(parent, kinds)) {
+          steps.push({ label: k.title, detail: `${k.kindType} -- ${k.domain}`, kindId: k.id });
         }
       }
-    } else if (plan.parentType === "project") {
-      const project = projects.find((p) => p.id === plan.parentId);
-      if (project) {
-        steps.push({ label: project.title, detail: `Project -- ${project.initiator === "me" ? "my initiative" : "wife's initiative"}, ${project.familyScope}` });
-      }
     }
-  }
-  if (type === "goal") {
-    for (const g of goalAncestors(entity, goals)) {
-      steps.push({ label: g.title, detail: `Goal -- ${g.tier}, ${g.domain}`, goalId: g.id });
+  } else {
+    for (const k of kindAncestors(entity, kinds)) {
+      steps.push({ label: k.title, detail: `${k.kindType} -- ${k.domain}`, kindId: k.id });
     }
   }
   return steps;
 }
 
-// Gathers everything tied to a Goal's whole subtree -- its own event-log
-// entries plus every Plan/Session/Task under it (and under its descendant
-// Goals) -- so the rollup report grows as weeks pass rather than showing a
-// static snapshot.
-export function rollupForGoal(goalId, data) {
-  const { goals = [], plans = [], sessions = [], tasks = [], events = [] } = data;
-  const goalIds = new Set(goalSubtreeIds(goalId, goals));
-  const relatedPlans = plans.filter((p) => p.parentType === "goal" && goalIds.has(p.parentId));
-  const planIds = new Set(relatedPlans.map((p) => p.id));
-  const relatedSessions = sessions.filter((s) => planIds.has(s.planId));
-  const sessionIds = new Set(relatedSessions.map((s) => s.id));
-  const relatedTasks = tasks.filter((t) => sessionIds.has(t.sessionId));
-  const taskIds = new Set(relatedTasks.map((t) => t.id));
-  const relatedEvents = events
-    .filter((e) =>
-      (e.entityType === "goal" && goalIds.has(e.entityId)) ||
-      (e.entityType === "plan" && planIds.has(e.entityId)) ||
-      (e.entityType === "session" && sessionIds.has(e.entityId)) ||
-      (e.entityType === "task" && taskIds.has(e.entityId)))
-    .sort((a, b) => a.at - b.at);
-  return { goalIds, plans: relatedPlans, sessions: relatedSessions, tasks: relatedTasks, events: relatedEvents };
-}
-
-// Automatic sense of "how far along" a Goal is: done Sessions + done Tasks,
-// over total Sessions + Tasks, across the Goal's whole subtree (built on
-// rollupForGoal(), same gather every other Goal view already uses).
-// percent is null (not 0) when there's nothing under the Goal yet to
-// measure -- an empty Goal isn't "0% done," it's "no data."
-export function goalProgress(goalId, data) {
-  const { sessions, tasks } = rollupForGoal(goalId, data);
-  const total = sessions.length + tasks.length;
-  const done = sessions.filter((s) => s.done).length + tasks.filter((t) => t.done).length;
+// Automatic sense of "how far along" a Kind is: done Items over total
+// Items, across the Kind's whole subtree (itself + nested Kinds). percent
+// is null (not 0) when there's nothing under it yet to measure.
+export function kindProgress(kindId, data) {
+  const { kinds = [], items = [] } = data;
+  const subtreeIds = new Set(kindSubtreeIds(kindId, kinds));
+  const relatedItems = items.filter((i) => subtreeIds.has(i.parentKindId));
+  const total = relatedItems.length;
+  const done = relatedItems.filter((i) => i.done).length;
   return { done, total, percent: total ? Math.round((done / total) * 100) : null };
 }
 
-// Whether an entity is tagged with a given domain, primary or secondary --
-// used by Domains dashboards and Trends so a cross-domain item shows up
-// everywhere it's tagged, not just under its primary domain.
+// Whether an entity is tagged with a given domain, primary or secondary.
 export function matchesDomain(entity, domainId) {
   return entity.domain === domainId || (entity.secondaryDomains || []).includes(domainId);
 }
 
-// A Plan is "grounded" once it serves a Goal or Project -- ungrounded Plans
-// are groundwork logged before that link exists yet (see the v2 schema
-// relaxation), and are what the Unlinked-work review surfaces.
-export function isGrounded(plan) {
-  return !!(plan.parentType && plan.parentId);
+export function unlinkedKinds(kinds) {
+  return (kinds || []).filter((k) => !k.parentKindId);
 }
 
-export function unlinkedPlans(plans) {
-  return (plans || []).filter((p) => !isGrounded(p));
+export function standaloneItems(items) {
+  return (items || []).filter((i) => !i.parentKindId);
 }
 
-export function standaloneTasks(tasks) {
-  return (tasks || []).filter((t) => !t.sessionId);
+// Every distinct tag currently in use across Kinds and Items -- powers the
+// Add Form's autocomplete (§2.4). No separate tags collection at this data
+// volume; computed live off whatever's already loaded.
+export function allTagsInUse(data) {
+  const { kinds = [], items = [] } = data;
+  const set = new Set();
+  for (const e of [...kinds, ...items]) {
+    for (const t of e.tags || []) set.add(t);
+  }
+  return [...set].sort();
+}
+
+// Whether a timing block's targetDay/dueDate falls within today through
+// `days` days out -- used to decide whether saving an Item should
+// auto-promote its parent Kind into "in-progress" (see useSecretary.js)
+// and to highlight "landing this week" items on Today/Workspace.
+export function itemFallsInWindow(timing, days = 6) {
+  if (!timing) return false;
+  const day = timing.targetDay || timing.dueDate;
+  if (!day) return false;
+  const start = todayISO();
+  const end = new Date();
+  end.setDate(end.getDate() + days);
+  const endISO = end.toISOString().slice(0, 10);
+  return day >= start && day <= endISO;
+}
+
+// The sync contract behind the Practices tab's weekly grid (§9.1.1): a
+// practiceHabit is a definition only, never a completion record. A given
+// habit+day has at most one Item (isRecurringPracticeItem + practiceHabitId),
+// found here and written to directly by whoever's toggling it (the grid or
+// Today/Week's own checkbox) -- there is no second completion record to
+// drift out of sync with the first.
+export function practiceItemFor(habitId, day, items) {
+  return (items || []).find((i) => i.isRecurringPracticeItem && i.practiceHabitId === habitId && i.timing?.targetDay === day) || null;
 }
 
 export function searchAll(query, data) {
   const q = query.trim().toLowerCase();
   if (!q) return [];
   const results = [];
-  for (const g of data.goals || []) if (g.title.toLowerCase().includes(q)) results.push({ type: "goal", entity: g });
-  for (const p of data.projects || []) if (p.title.toLowerCase().includes(q)) results.push({ type: "project", entity: p });
-  for (const p of data.plans || []) if (p.title.toLowerCase().includes(q)) results.push({ type: "plan", entity: p });
-  for (const s of data.sessions || []) if (s.title.toLowerCase().includes(q)) results.push({ type: "session", entity: s });
-  for (const t of data.tasks || []) if (t.title.toLowerCase().includes(q)) results.push({ type: "task", entity: t });
+  for (const k of data.kinds || []) if (k.title.toLowerCase().includes(q)) results.push({ type: "kind", entity: k });
+  for (const i of data.items || []) if (i.title.toLowerCase().includes(q)) results.push({ type: "item", entity: i });
   return results;
 }

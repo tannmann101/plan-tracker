@@ -2,11 +2,10 @@ import { useState } from "react";
 import { Btn, SectionTitle, Note } from "../ui";
 import { SANS, MONO, INK, MUTE, LINE, INKBLUE, INKBLUE_SOFT, CARD, RADIUS_SM } from "../theme";
 import { EntityCard } from "./EntityCard";
-import QuickAddModal from "./QuickAddModal";
+import AddForm from "./AddForm";
 import EditEntityModal from "./EditEntityModal";
-import { tasksForSession } from "../lib/graph";
 
-const WEEKDAY_LABELS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const WEEKDAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 
 function toISO(d) {
   return d.toISOString().slice(0, 10);
@@ -14,11 +13,12 @@ function toISO(d) {
 
 // Every date cell the grid needs to render a given month, including the
 // leading/trailing days from adjacent months that fill out the first/last
-// week rows.
+// week rows. Monday-start, matching the Week view's own column order.
 function monthGridDays(monthStart) {
   const first = new Date(monthStart);
   const gridStart = new Date(first);
-  gridStart.setDate(gridStart.getDate() - first.getDay());
+  const day = first.getDay();
+  gridStart.setDate(gridStart.getDate() - (day === 0 ? 6 : day - 1));
   const days = [];
   const cursor = new Date(gridStart);
   for (let i = 0; i < 42; i++) {
@@ -28,12 +28,11 @@ function monthGridDays(monthStart) {
   return days;
 }
 
-// Month-grid calendar for This Week's "look further ahead" mode -- prev/next
-// navigation, a dot on any day carrying Sessions or standalone Tasks, tap a
-// day to see (and add to) that day's items. Same EntityCard/Quick Add/Edit
-// pieces the Week view and Today use, so behavior stays consistent across
-// every day-scoped surface.
-export default function CalendarMonthView({ secretary, isOwner, onNavigateGoal }) {
+// Month-grid calendar for Week/Calendar's Month mode (§7.3) -- indefinite
+// prev/next navigation, date numbers top-left, a dot on any day carrying
+// Items, tap a day to see (and add to) that day's Items. Same
+// EntityCard/AddForm/EditEntityModal pieces the Week view and Today use.
+export default function CalendarMonthView({ secretary, onNavigateKind }) {
   const [monthStart, setMonthStart] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -47,10 +46,7 @@ export default function CalendarMonthView({ secretary, isOwner, onNavigateGoal }
   const days = monthGridDays(monthStart);
   const monthLabel = monthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
-  const daysWithItems = new Set([
-    ...(secretary.sessions || []).map((s) => s.targetDay).filter(Boolean),
-    ...(secretary.tasks || []).map((t) => t.date).filter(Boolean),
-  ]);
+  const daysWithItems = new Set((secretary.items || []).map((i) => i.timing?.targetDay).filter(Boolean));
 
   const changeMonth = (delta) => {
     const d = new Date(monthStart);
@@ -59,11 +55,8 @@ export default function CalendarMonthView({ secretary, isOwner, onNavigateGoal }
     setSelectedDay(null);
   };
 
-  const daySessions = selectedDay ? (secretary.sessions || []).filter((s) => s.targetDay === selectedDay) : [];
-  const dayStandaloneTasks = selectedDay ? (secretary.tasks || []).filter((t) => t.date === selectedDay && !t.sessionId) : [];
-
-  const toggleSessionDone = (entity, next) => secretary.saveEntity("session", { ...entity, done: next });
-  const toggleTaskDone = (entity, next) => secretary.saveEntity("task", { ...entity, done: next });
+  const dayItems = selectedDay ? (secretary.items || []).filter((i) => i.timing?.targetDay === selectedDay) : [];
+  const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
 
   return (
     <div>
@@ -94,7 +87,7 @@ export default function CalendarMonthView({ secretary, isOwner, onNavigateGoal }
                 aspectRatio: "1", border: `1px solid ${isSelected ? INKBLUE : LINE}`,
                 background: isSelected ? INKBLUE_SOFT : isToday ? "#F9F7F1" : CARD,
                 borderRadius: RADIUS_SM, cursor: "pointer", display: "flex", flexDirection: "column",
-                alignItems: "center", justifyContent: "center", gap: 3, opacity: inMonth ? 1 : 0.35,
+                alignItems: "flex-start", justifyContent: "space-between", padding: 5, opacity: inMonth ? 1 : 0.35,
               }}
             >
               <span style={{ fontFamily: MONO, fontSize: 12, color: isToday ? INKBLUE : INK, fontWeight: isToday ? 700 : 400 }}>{d.getDate()}</span>
@@ -108,40 +101,18 @@ export default function CalendarMonthView({ secretary, isOwner, onNavigateGoal }
         <div style={{ marginTop: 20 }}>
           <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
             <SectionTitle note={selectedDay}>Selected Day</SectionTitle>
-            {isOwner && <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>}
+            <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>
           </div>
-          {daySessions.length === 0 && dayStandaloneTasks.length === 0 ? (
+          {dayItems.length === 0 ? (
             <Note>Nothing placed on this day yet.</Note>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-              {daySessions.map((session) => (
-                <div key={session.id}>
-                  <EntityCard
-                    type="session" entity={session} domains={secretary.domains} data={secretary}
-                    readOnly={!isOwner} onToggleDone={toggleSessionDone}
-                    onEdit={isOwner ? (t, e) => setEditing({ type: t, entity: e }) : null}
-                    onNavigateGoal={onNavigateGoal}
-                  />
-                  {tasksForSession(session.id, secretary.tasks).length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6, marginLeft: 22 }}>
-                      {tasksForSession(session.id, secretary.tasks).map((task) => (
-                        <EntityCard
-                          key={task.id} type="task" entity={task} domains={secretary.domains} data={secretary}
-                          readOnly={!isOwner} onToggleDone={toggleTaskDone}
-                          onEdit={isOwner ? (t, e) => setEditing({ type: t, entity: e }) : null}
-                          onNavigateGoal={onNavigateGoal}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-              {dayStandaloneTasks.map((task) => (
+              {dayItems.map((item) => (
                 <EntityCard
-                  key={task.id} type="task" entity={task} domains={secretary.domains} data={secretary}
-                  readOnly={!isOwner} onToggleDone={toggleTaskDone}
-                  onEdit={isOwner ? (t, e) => setEditing({ type: t, entity: e }) : null}
-                  onNavigateGoal={onNavigateGoal}
+                  key={item.id} family="item" entity={item} secretary={secretary}
+                  onToggleDone={toggleDone}
+                  onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
+                  onNavigateKind={onNavigateKind}
                 />
               ))}
             </div>
@@ -150,16 +121,13 @@ export default function CalendarMonthView({ secretary, isOwner, onNavigateGoal }
       )}
 
       {adding && selectedDay && (
-        <QuickAddModal
-          secretary={secretary}
-          types={["session", "task"]}
-          defaultType="session"
-          defaults={{ targetDay: selectedDay, date: selectedDay }}
-          onClose={() => setAdding(false)}
-        />
+        <AddForm secretary={secretary} defaults={{ targetDay: selectedDay }} onClose={() => setAdding(false)} />
       )}
       {editing && (
-        <EditEntityModal type={editing.type} entity={editing.entity} secretary={secretary} onClose={() => setEditing(null)} />
+        <EditEntityModal
+          family={editing.family} entity={editing.entity} secretary={secretary}
+          onClose={() => setEditing(null)} onDeleted={() => setEditing(null)}
+        />
       )}
     </div>
   );

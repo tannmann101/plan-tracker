@@ -1,162 +1,66 @@
 import { useState } from "react";
 import { Modal, Btn, Input, Select } from "../ui";
-import { SERIF, MONO, INK, MUTE, INKBLUE, BRICK, LINE } from "../theme";
-import {
-  contentTypesForDomain, defaultContentTypeForDomain, contentTypeLabel, toolLocationFor, LIFECYCLE_STATUSES,
-  INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, TIER_ORDER,
-} from "../constants";
-import { goalSubtreeIds } from "../lib/graph";
+import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, BRICK } from "../theme";
+import { KIND_STATUSES, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES } from "../constants";
+import { allTagsInUse, kindSubtreeIds, itemsForKind } from "../lib/graph";
+import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker } from "./formFields";
 
-// A Goal can only reparent one tier up (yearly has none) -- and never into
-// its own subtree, which would create a cycle. goalSubtreeIds() already
-// gathers a Goal's whole descendant set for the rollup report; reused here
-// to exclude exactly those ids from the candidate list.
-function goalParentCandidates(goal, goals) {
-  const tierIdx = TIER_ORDER.indexOf(goal.tier);
-  if (tierIdx <= 0) return [];
-  const parentTier = TIER_ORDER[tierIdx - 1];
-  const excluded = new Set(goalSubtreeIds(goal.id, goals));
-  return (goals || []).filter((g) => g.tier === parentTier && !excluded.has(g.id));
-}
-
-function Field({ label, children }) {
-  return (
-    <div style={{ marginBottom: 12 }}>
-      <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>{label}</div>
-      {children}
-    </div>
-  );
-}
-
-// Multi-select for secondaryDomains -- a native multi-select sized to show
-// a handful of rows at once, consistent with the plain-<select> pattern
-// used elsewhere for grouped/multi choices (see QuickAddModal's ParentPicker).
-function DomainMultiSelect({ domains, value, onChange, exclude }) {
-  const options = domains.filter((d) => d.id !== exclude);
-  return (
-    <select
-      multiple
-      value={value}
-      onChange={(e) => onChange(Array.from(e.target.selectedOptions, (o) => o.value))}
-      size={Math.min(6, options.length)}
-      style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}
-    >
-      {options.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-    </select>
-  );
-}
-
-function ParentPicker({ goals, projects, value, onChange }) {
-  return (
-    <select
-      value={value ? `${value.parentType}:${value.parentId}` : ""}
-      onChange={(e) => {
-        const v = e.target.value;
-        if (!v) return onChange(null);
-        const [parentType, parentId] = v.split(":");
-        onChange({ parentType, parentId });
-      }}
-      style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}
-    >
-      <option value="">-- not yet linked (ungrounded) --</option>
-      <optgroup label="Goals">
-        {(goals || []).map((g) => <option key={g.id} value={`goal:${g.id}`}>{g.title} ({g.tier})</option>)}
-      </optgroup>
-      <optgroup label="Projects">
-        {(projects || []).map((p) => <option key={p.id} value={`project:${p.id}`}>{p.title}</option>)}
-      </optgroup>
-    </select>
-  );
-}
-
-// Edit + retroactive realignment: tapping a card's body (not its checkbox)
-// opens this. Every entity type gets title/domain/secondaryDomains; Plan and
-// Session additionally get their parent-link reassigned here -- the concrete
-// "we mis-categorized this, attach it properly now" fix, usable from any
-// card or from Trends' Unlinked-work tab.
-export default function EditEntityModal({ type, entity, secretary, onClose }) {
+// The universal Kind/Item edit surface (§15) -- tapping any card's body
+// anywhere in the app opens this, same field set the Add Form offers, plus
+// delete. Evolved in place from the prior rework's EditEntityModal rather
+// than forked, so every page shares one edit implementation.
+export default function EditEntityModal({ family, entity, secretary, onClose, onDeleted }) {
   const [title, setTitle] = useState(entity.title);
   const [domain, setDomain] = useState(entity.domain || secretary.domains[0]?.id || "");
   const [secondaryDomains, setSecondaryDomains] = useState(entity.secondaryDomains || []);
-  const [status, setStatus] = useState(entity.status || "active");
-  const [targetDate, setTargetDate] = useState(entity.targetDate || "");
-  const [goalParentId, setGoalParentId] = useState(entity.parentGoalId || "");
-  const [contentType, setContentType] = useState(
-    entity.contentType || defaultContentTypeForDomain(entity.domain || secretary.domains[0]?.id || "", secretary.routingTable)
-  );
-  const [toolLocation, setToolLocation] = useState(
-    entity.toolLocation || toolLocationFor(contentType, secretary.routingTable)
-  );
-  const [targetDay, setTargetDay] = useState(entity.targetDay || "");
-  const [date, setDate] = useState(entity.date || "");
-  const [sessionId, setSessionId] = useState(entity.sessionId || "");
+  const [resources, setResources] = useState(entity.resources || []);
+  const [tags, setTags] = useState(entity.tags || []);
+  const [parentKindId, setParentKindId] = useState(entity.parentKindId || null);
+
+  const [status, setStatus] = useState(entity.status || "not-started");
   const [initiator, setInitiator] = useState(entity.initiator || "me");
   const [familyScope, setFamilyScope] = useState(entity.familyScope || "personal");
   const [consentStatus, setConsentStatus] = useState(entity.consentStatus || "pending");
-  const [planParent, setPlanParent] = useState(
-    entity.parentType ? { parentType: entity.parentType, parentId: entity.parentId } : null
-  );
-  const [planId, setPlanId] = useState(entity.planId || "");
+
+  const [done, setDone] = useState(!!entity.done);
+  const [targetDay, setTargetDay] = useState(entity.timing?.targetDay || "");
+  const [floating, setFloating] = useState(entity.timing?.floating !== false);
+  const [time, setTime] = useState(entity.timing?.time || "");
+  const [dueDate, setDueDate] = useState(entity.timing?.dueDate || "");
+  const [milestones, setMilestones] = useState(entity.timing?.milestones || []);
+
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteMode, setDeleteMode] = useState("unlink"); // unlink | cascade -- only relevant for a Kind with linked Items
 
-  // Categories are domain-exclusive -- switching domains re-picks a sensible
-  // default from the new domain's own list rather than carrying over a
-  // content-type that no longer belongs to it. The tool/location resets to
-  // that category's default too -- it's a real, editable field now, not
-  // just assumed silently from the category.
-  const changeContentType = (nextContentType) => {
-    setContentType(nextContentType);
-    setToolLocation(nextContentType ? toolLocationFor(nextContentType, secretary.routingTable) : "");
-  };
-  const changeDomain = (nextDomain) => {
-    setDomain(nextDomain);
-    if (type === "session" || type === "task") changeContentType(defaultContentTypeForDomain(nextDomain, secretary.routingTable));
-  };
-
-  const contentTypeOptions = contentTypesForDomain(domain, secretary.routingTable).map((r) => ({ id: r.id, label: contentTypeLabel(r.id, secretary.routingTable) }));
-  const taskContentTypeOptions = [{ id: "", label: "-- none --" }, ...contentTypeOptions];
-  const toolLocationOptions = [...new Set((secretary.routingTable || []).map((r) => r.toolLocation))]
-    .sort()
-    .map((loc) => ({ id: loc, label: loc }));
-  const goalParentOptions = type === "goal" ? goalParentCandidates(entity, secretary.goals) : [];
-  const plansInDomain = (secretary.plans || []).filter((p) => p.domain === domain);
-  const sessionsInDomain = (secretary.sessions || []).filter((s) => s.domain === domain);
+  const tagSuggestions = allTagsInUse(secretary);
+  const linkedItems = family === "kind" ? itemsForKind(entity.id, secretary.items) : [];
+  const excludeIds = family === "kind" ? kindSubtreeIds(entity.id, secretary.kinds) : null;
 
   const save = async () => {
     if (!title.trim()) return;
     setSaving(true);
     setError(null);
     try {
-      const patch = { ...entity, title: title.trim(), domain, secondaryDomains };
-      if (type === "goal" || type === "project" || type === "plan") patch.status = status;
-      if (type === "goal") {
-        patch.targetDate = targetDate || null;
-        patch.parentGoalId = goalParentId || null;
+      const patch = { ...entity, title: title.trim(), domain, secondaryDomains, resources, tags, parentKindId: parentKindId || null };
+      if (family === "kind") {
+        patch.status = status;
+        patch.timing = (dueDate || milestones.length) ? { dueDate: dueDate || null, milestones } : null;
+        if (entity.kindType === "project") {
+          patch.initiator = initiator;
+          patch.familyScope = familyScope;
+          if (familyScope === "touches-family") patch.consentStatus = consentStatus;
+          else delete patch.consentStatus;
+        }
+      } else {
+        patch.done = done;
+        patch.completedAt = done ? (entity.completedAt || Date.now()) : null;
+        patch.timing = (targetDay || dueDate || milestones.length)
+          ? { targetDay: targetDay || null, time: floating ? null : (time || null), dueDate: dueDate || null, floating, milestones }
+          : null;
       }
-      if (type === "project") {
-        patch.initiator = initiator;
-        patch.familyScope = familyScope;
-        if (familyScope === "touches-family") patch.consentStatus = consentStatus;
-        else delete patch.consentStatus;
-      }
-      if (type === "plan") {
-        patch.parentType = planParent?.parentType || null;
-        patch.parentId = planParent?.parentId || null;
-      }
-      if (type === "session") {
-        patch.contentType = contentType;
-        patch.toolLocation = toolLocation;
-        patch.targetDay = targetDay || null;
-        patch.planId = planId || entity.planId;
-      }
-      if (type === "task") {
-        patch.date = date || null;
-        patch.sessionId = sessionId || null;
-        patch.contentType = contentType || null;
-        patch.toolLocation = contentType ? (toolLocation || null) : null;
-      }
-      await secretary.saveEntity(type, patch);
+      await secretary.saveEntity(family, patch);
       onClose();
     } catch (err) {
       setError(err.message || "Could not save that.");
@@ -165,116 +69,146 @@ export default function EditEntityModal({ type, entity, secretary, onClose }) {
     }
   };
 
+  const confirmDelete = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      if (family === "kind" && linkedItems.length > 0 && deleteMode === "cascade") {
+        for (const item of linkedItems) await secretary.deleteEntity("item", item.id);
+      } else if (family === "kind" && linkedItems.length > 0) {
+        for (const item of linkedItems) await secretary.saveEntity("item", { ...item, parentKindId: null });
+      }
+      await secretary.deleteEntity(family, entity.id);
+      onDeleted?.();
+      onClose();
+    } catch (err) {
+      setError(err.message || "Could not delete that.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <Modal onClose={onClose} width={420}>
+    <Modal onClose={onClose} width={440}>
       <h3 style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: INK, margin: "0 0 12px" }}>Edit</h3>
 
-      <Field label="Title">
+      <Field label="Name">
         <Input value={title} onChange={setTitle} onEnter={save} autoFocus />
       </Field>
 
       <Field label="Domain">
-        <Select value={domain} onChange={changeDomain} options={secretary.domains} />
+        <Select value={domain} onChange={setDomain} options={secretary.domains} />
       </Field>
 
-      <Field label="Secondary domains (optional -- ⌘/Ctrl-click for more than one)">
-        <DomainMultiSelect domains={secretary.domains} value={secondaryDomains} onChange={setSecondaryDomains} exclude={domain} />
+      <Field label="Secondary domains (optional)">
+        <MultiCheckList options={secretary.domains.filter((d) => d.id !== domain)} value={secondaryDomains} onChange={setSecondaryDomains} />
       </Field>
 
-      {(type === "goal" || type === "project" || type === "plan") && (
-        <Field label="Status">
-          <Select value={status} onChange={setStatus} options={LIFECYCLE_STATUSES} />
-        </Field>
-      )}
+      <Field label="Resources (optional)">
+        <MultiCheckList options={secretary.resources} value={resources} onChange={setResources} />
+      </Field>
 
-      {type === "goal" && (
-        <Field label="Target date (optional)">
-          <Input value={targetDate} onChange={setTargetDate} placeholder="YYYY-MM-DD" />
-        </Field>
-      )}
+      <Field label="Tags">
+        <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
+      </Field>
 
-      {type === "goal" && (goalParentOptions.length > 0 || entity.parentGoalId) && (
-        <Field label="Parent goal (reassign to fix a mis-categorization)">
-          <select
-            value={goalParentId}
-            onChange={(e) => setGoalParentId(e.target.value)}
-            style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}
-          >
-            <option value="">-- root, no parent --</option>
-            {goalParentOptions.map((g) => <option key={g.id} value={g.id}>{g.title} ({g.tier})</option>)}
-          </select>
-        </Field>
-      )}
-
-      {type === "project" && (
+      {family === "kind" && (
         <>
-          <Field label="Initiator">
-            <Select value={initiator} onChange={setInitiator} options={INITIATORS} />
+          <Field label="Status">
+            <Select value={status} onChange={setStatus} options={KIND_STATUSES} />
           </Field>
-          <Field label="Family scope">
-            <Select value={familyScope} onChange={setFamilyScope} options={FAMILY_SCOPES} />
+          <Field label="Parent (reassign to fix a mis-categorization)">
+            <KindParentPicker kinds={secretary.kinds} value={parentKindId} onChange={setParentKindId} excludeIds={excludeIds} />
           </Field>
-          {familyScope === "touches-family" && (
-            <Field label="Consent">
-              <Select value={consentStatus} onChange={setConsentStatus} options={CONSENT_STATUSES} />
-            </Field>
+          {entity.kindType === "project" && (
+            <>
+              <Field label="Initiator">
+                <Select value={initiator} onChange={setInitiator} options={INITIATORS} />
+              </Field>
+              <Field label="Family scope">
+                <Select value={familyScope} onChange={setFamilyScope} options={FAMILY_SCOPES} />
+              </Field>
+              {familyScope === "touches-family" && (
+                <Field label="Consent">
+                  <Select value={consentStatus} onChange={setConsentStatus} options={CONSENT_STATUSES} />
+                </Field>
+              )}
+            </>
           )}
+          <Field label="Due date (optional)">
+            <Input type="date" value={dueDate} onChange={setDueDate} />
+          </Field>
+          <Field label="Milestones (optional)">
+            <MilestonesEditor value={milestones} onChange={setMilestones} />
+          </Field>
         </>
       )}
 
-      {type === "plan" && (
-        <Field label="Serves (reassign to fix a mis-categorization)">
-          <ParentPicker goals={secretary.goals} projects={secretary.projects} value={planParent} onChange={setPlanParent} />
-        </Field>
-      )}
-
-      {type === "session" && (
+      {family === "item" && (
         <>
-          <Field label="Content-type">
-            <Select value={contentType} onChange={changeContentType} options={contentTypeOptions} />
-          </Field>
-          <Field label="Tool / location">
-            <Select value={toolLocation} onChange={setToolLocation} options={toolLocationOptions} />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: MONO, fontSize: 12, color: INK, cursor: "pointer", marginBottom: 12 }}>
+            <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} />
+            Done
+          </label>
+          <Field label="Attach to (reassign to fix a mis-categorization)">
+            <KindParentPicker kinds={secretary.kinds} value={parentKindId} onChange={setParentKindId} />
           </Field>
           <Field label="Target day">
-            <Input value={targetDay} onChange={setTargetDay} placeholder="YYYY-MM-DD" />
+            <Input type="date" value={targetDay} onChange={setTargetDay} />
           </Field>
-          <Field label="Plan (reassign to fix a mis-categorization)">
-            <select value={planId || entity.planId} onChange={(e) => setPlanId(e.target.value)} style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}>
-              {plansInDomain.map((p) => <option key={p.id} value={p.id}>{p.title}</option>)}
-            </select>
-          </Field>
-        </>
-      )}
-
-      {type === "task" && (
-        <>
-          <Field label="Date">
-            <Input value={date} onChange={setDate} placeholder="YYYY-MM-DD" />
-          </Field>
-          <Field label="Content-type (optional)">
-            <Select value={contentType} onChange={changeContentType} options={taskContentTypeOptions} />
-          </Field>
-          {contentType && (
-            <Field label="Tool / location">
-              <Select value={toolLocation} onChange={setToolLocation} options={toolLocationOptions} />
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: MONO, fontSize: 12, color: INK, cursor: "pointer", marginBottom: 12 }}>
+            <input type="checkbox" checked={floating} onChange={(e) => setFloating(e.target.checked)} />
+            Floating (no specific time)
+          </label>
+          {!floating && (
+            <Field label="Time">
+              <Input type="time" value={time} onChange={setTime} />
             </Field>
           )}
-          <Field label="Session (reassign to fix a mis-categorization)">
-            <select value={sessionId} onChange={(e) => setSessionId(e.target.value)} style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" }}>
-              <option value="">-- none (standalone) --</option>
-              {sessionsInDomain.map((s) => <option key={s.id} value={s.id}>{s.title}</option>)}
-            </select>
+          <Field label="Due date (optional, if different)">
+            <Input type="date" value={dueDate} onChange={setDueDate} />
+          </Field>
+          <Field label="Milestones (optional)">
+            <MilestonesEditor value={milestones} onChange={setMilestones} />
           </Field>
         </>
       )}
 
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
 
-      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
-        <Btn primary color={INKBLUE} disabled={saving || !title.trim()} onClick={save}>{saving ? "Saving…" : "Save"}</Btn>
-        <Btn color={MUTE} onClick={onClose}>Cancel</Btn>
-      </div>
+      {confirmingDelete ? (
+        <div style={{ borderTop: "1px solid #E4DECC", marginTop: 14, paddingTop: 14 }}>
+          {family === "kind" && linkedItems.length > 0 && (
+            <>
+              <p style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE, margin: "0 0 8px" }}>
+                {linkedItems.length} Item{linkedItems.length === 1 ? "" : "s"} {linkedItems.length === 1 ? "is" : "are"} attached to this. What should happen to {linkedItems.length === 1 ? "it" : "them"}?
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: SANS, fontSize: 12.5, cursor: "pointer" }}>
+                  <input type="radio" checked={deleteMode === "unlink"} onChange={() => setDeleteMode("unlink")} />
+                  Unlink them (they become unattached, not deleted)
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: SANS, fontSize: 12.5, cursor: "pointer" }}>
+                  <input type="radio" checked={deleteMode === "cascade"} onChange={() => setDeleteMode("cascade")} />
+                  Delete them too
+                </label>
+              </div>
+            </>
+          )}
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn primary color={BRICK} disabled={saving} onClick={confirmDelete}>{saving ? "Deleting…" : "Confirm delete"}</Btn>
+            <Btn color={MUTE} onClick={() => setConfirmingDelete(false)} disabled={saving}>Cancel</Btn>
+          </div>
+        </div>
+      ) : (
+        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "space-between" }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn primary color={INKBLUE} disabled={saving || !title.trim()} onClick={save}>{saving ? "Saving…" : "Save"}</Btn>
+            <Btn color={MUTE} onClick={onClose}>Cancel</Btn>
+          </div>
+          <Btn color={BRICK} onClick={() => setConfirmingDelete(true)}>Delete</Btn>
+        </div>
+      )}
     </Modal>
   );
 }

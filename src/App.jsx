@@ -3,115 +3,150 @@ import { signOut } from "firebase/auth";
 import AuthGate, { useAuthUser } from "./AuthGate";
 import { auth } from "./firebase";
 import { useSecretary } from "./useSecretary";
-import { SANS, MONO, PAGE, MUTE, INKBLUE, BRICK, LINE, RADIUS_SM } from "./theme";
+import { useRoute } from "./useRoute";
+import { SANS, MONO, PAGE, MUTE, INK, INKBLUE, BRICK, LINE, RADIUS_SM } from "./theme";
 import { GlobalStyle, FAB, Btn, Wordmark } from "./ui";
-import { isOwnerEmail } from "./constants";
 import { triageCapture } from "./lib/claude";
-import { placeCapture } from "./lib/placeCapture";
-import { CaptureBar, RichCaptureModal } from "./components/CaptureBar";
-import CaptureConfirmModal from "./components/CaptureConfirmModal";
+import { CaptureBar } from "./components/CaptureBar";
+import AddForm from "./components/AddForm";
 
-import Hub from "./pages/Hub";
 import Today from "./pages/Today";
 import ThisWeek from "./pages/ThisWeek";
-import Goals from "./pages/Goals";
-import Domains from "./pages/Domains";
+import Plans from "./pages/Plans";
+import Workspace from "./pages/Workspace";
 import Trends from "./pages/Trends";
-import PlanWorkspace from "./pages/PlanWorkspace";
-import Locations from "./pages/Locations";
-import Inbox from "./pages/Inbox";
-import WeeklyMeetingImport from "./pages/WeeklyMeetingImport";
-import WeeklyView from "./pages/WeeklyView";
+import Log from "./pages/Log";
+import Secretary from "./pages/Secretary";
 import SearchPage from "./pages/Search";
 import Settings from "./pages/Settings";
 
+// §4 -- flat tabbed shell. Top bar: Today/Week/Plans/Workspace/Trends.
+// Hamburger: Search/Log/Secretary/Settings. Both accounts render and act
+// identically now (§13) -- there is no isOwner branch left anywhere here.
+const TOP_TABS = [
+  { path: "/today", label: "Today" },
+  { path: "/week", label: "Week" },
+  { path: "/plans", label: "Plans" },
+  { path: "/workspace", label: "Workspace" },
+  { path: "/trends", label: "Trends" },
+];
+
+const MENU_ITEMS = [
+  { path: "/search", label: "Search" },
+  { path: "/log", label: "Log" },
+  { path: "/secretary", label: "Secretary" },
+  { path: "/settings", label: "Settings" },
+];
+
 function Shell({ user }) {
   const secretary = useSecretary(true);
-  const isOwner = isOwnerEmail(user.email);
-  const [screen, setScreen] = useState("hub");
-  const [richCaptureOpen, setRichCaptureOpen] = useState(false);
-  const [confirmCapture, setConfirmCapture] = useState(null);
+  const { path, navigate } = useRoute();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [captureBusy, setCaptureBusy] = useState(false);
-  const [goalsFocusId, setGoalsFocusId] = useState(null);
+  const [focusKindId, setFocusKindId] = useState(null);
 
-  const goBack = () => setScreen("hub");
+  const goToday = () => navigate("/today");
 
-  // Threaded down through every page that renders a card with a "why is
-  // this here" trace, so tapping a Goal in that chain jumps straight to it
-  // in the Goals tree instead of just naming it.
-  const navigateGoal = useCallback((goalId) => {
-    setGoalsFocusId(goalId);
-    setScreen("goals");
-  }, []);
+  // Threaded down through every page that renders a "why is this here"
+  // trace -- tapping a Kind in that chain always lands on Workspace,
+  // focused on it, regardless of which page the tap happened from.
+  const navigateKind = useCallback((kindId) => {
+    setFocusKindId(kindId);
+    navigate("/workspace");
+  }, [navigate]);
 
-  const existingGoalsContext = useCallback(
-    () => (secretary.goals || []).map((g) => ({ id: g.id, title: g.title, tier: g.tier, domain: g.domain })),
-    [secretary.goals]
-  );
-
-  const handleCapture = useCallback(async (text, hold) => {
+  // triageCapture drafts a pendingOperation server-side (see
+  // functions/index.js) -- this just kicks that off and refreshes so the
+  // Secretary review log picks it up; nothing here decides a placement.
+  const handleCapture = useCallback(async (text) => {
     setCaptureBusy(true);
     try {
-      if (hold) {
-        await secretary.saveCapture({ status: "holding", rawText: text });
-        return;
-      }
-      const captureId = await secretary.saveCapture({ status: "pending-triage", rawText: text });
-      try {
-        const draft = await triageCapture({ text, existingGoals: existingGoalsContext(), priorAnswers: [] });
-        if (draft.confidence === "high" && !draft.clarifyingQuestion) {
-          await placeCapture(secretary, captureId, text, draft);
-        } else {
-          await secretary.saveCapture({ id: captureId, status: "pending-triage", rawText: text, triageDraft: draft });
-          setConfirmCapture({ id: captureId, rawText: text, triageDraft: draft });
-        }
-      } catch (err) {
-        console.error("Triage failed", err);
-      }
+      const existingKinds = (secretary.kinds || []).map((k) => ({ id: k.id, title: k.title, kindType: k.kindType, domain: k.domain }));
+      await triageCapture({ text, existingKinds });
+      await secretary.refresh();
     } finally {
       setCaptureBusy(false);
     }
-  }, [secretary, existingGoalsContext]);
+  }, [secretary]);
 
   if (secretary.status === "forbidden") return <AuthGate user={user} forbidden />;
 
-  const reviewCount = (secretary.captures || []).filter((c) => c.status === "drift" || c.status === "pending-triage").length;
-  const stillLoading = secretary.status === "loading" && !secretary.goals;
+  const stillLoading = secretary.status === "loading" && !secretary.kinds;
+  const unsortedCount = (secretary.pendingOperations || []).filter((o) => o.status === "pending").length;
+
+  const pageProps = { secretary, onBack: goToday, onNavigateKind: navigateKind, onNavigate: navigate };
 
   return (
     <div style={{ minHeight: "100vh", background: PAGE, fontFamily: SANS }}>
       <GlobalStyle />
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 18px 110px" }}>
-        <header style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={goBack}>
-            <div style={{ width: 8, height: 8, borderRadius: "50%", background: INKBLUE }} />
-            <Wordmark />
+        <header style={{ marginBottom: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap", marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={goToday}>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: INKBLUE }} />
+              <Wordmark />
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              {secretary.saveStatus === "saving" && <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>saving…</span>}
+              {secretary.saveStatus === "error" && <span style={{ fontFamily: MONO, fontSize: 11, color: BRICK }}>save failed</span>}
+              <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>{user.email}</span>
+              <button
+                onClick={() => signOut(auth)}
+                style={{ border: `1px solid ${LINE}`, background: "transparent", color: MUTE, fontFamily: MONO, fontSize: 11, padding: "5px 10px", borderRadius: RADIUS_SM, cursor: "pointer" }}
+              >
+                sign out
+              </button>
+            </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            {secretary.saveStatus === "saving" && <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>saving…</span>}
-            {secretary.saveStatus === "error" && <span style={{ fontFamily: MONO, fontSize: 11, color: BRICK }}>save failed</span>}
-            <Btn small onClick={() => setScreen("search")} color={MUTE}>Search</Btn>
-            {isOwner && (
-              <Btn small onClick={() => setScreen("inbox")} color={reviewCount ? BRICK : MUTE}>
-                Review{reviewCount > 0 ? ` (${reviewCount})` : ""}
-              </Btn>
-            )}
-            <Btn small onClick={() => setScreen("settings")} color={MUTE}>Settings</Btn>
-            <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>{isOwner ? user.email : `${user.email} · viewing only`}</span>
-            <button
-              onClick={() => signOut(auth)}
-              style={{ border: `1px solid ${LINE}`, background: "transparent", color: MUTE, fontFamily: MONO, fontSize: 11, padding: "5px 10px", borderRadius: RADIUS_SM, cursor: "pointer" }}
-            >
-              sign out
-            </button>
-          </div>
-        </header>
 
-        {isOwner && (
-          <div style={{ marginBottom: 18 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+            <nav style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+              {TOP_TABS.map((t) => (
+                <button
+                  key={t.path}
+                  type="button"
+                  onClick={() => navigate(t.path)}
+                  style={{
+                    border: "none", background: path === t.path ? INK : "transparent", color: path === t.path ? "#fff" : MUTE,
+                    fontFamily: MONO, fontSize: 12, fontWeight: path === t.path ? 600 : 400, padding: "6px 13px",
+                    borderRadius: 999, cursor: "pointer",
+                  }}
+                >{t.label}</button>
+              ))}
+            </nav>
+            <div style={{ position: "relative" }}>
+              <Btn small onClick={() => setMenuOpen((m) => !m)} color={unsortedCount ? BRICK : MUTE}>
+                ☰{unsortedCount > 0 ? ` (${unsortedCount})` : ""}
+              </Btn>
+              {menuOpen && (
+                <div style={{
+                  position: "absolute", right: 0, top: "calc(100% + 6px)", background: "#fff", border: `1px solid ${LINE}`,
+                  borderRadius: 10, boxShadow: "0 4px 14px rgba(36,34,32,0.16)", zIndex: 50, minWidth: 140, overflow: "hidden",
+                }}>
+                  {MENU_ITEMS.map((m) => (
+                    <button
+                      key={m.path}
+                      type="button"
+                      onClick={() => { navigate(m.path); setMenuOpen(false); }}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left", border: "none",
+                        background: path === m.path ? "#F2EEE3" : "transparent", color: INK,
+                        fontFamily: MONO, fontSize: 12, padding: "9px 14px", cursor: "pointer",
+                      }}
+                    >
+                      {m.label}{m.path === "/secretary" && unsortedCount > 0 ? ` (${unsortedCount})` : ""}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 14 }}>
             <CaptureBar onCapture={handleCapture} busy={captureBusy} />
           </div>
-        )}
+        </header>
 
         {stillLoading ? (
           <div style={{ fontFamily: MONO, fontSize: 12.5, color: MUTE, padding: "30px 4px" }}>Gathering your affairs…</div>
@@ -119,47 +154,29 @@ function Shell({ user }) {
           <div style={{ fontFamily: MONO, fontSize: 12.5, color: BRICK, padding: "30px 4px" }}>
             I could not retrieve your records. <Btn small onClick={secretary.refresh} color={BRICK}>Retry</Btn>
           </div>
-        ) : screen === "hub" ? (
-          <Hub secretary={secretary} isOwner={isOwner} onNavigate={setScreen} reviewCount={reviewCount} />
-        ) : screen === "today" ? (
-          <Today secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
-        ) : screen === "thisweek" ? (
-          <ThisWeek secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigate={setScreen} onNavigateGoal={navigateGoal} />
-        ) : screen === "goals" ? (
-          <Goals secretary={secretary} isOwner={isOwner} onBack={goBack} focusGoalId={goalsFocusId} onFocusHandled={() => setGoalsFocusId(null)} />
-        ) : screen === "domains" ? (
-          <Domains secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
-        ) : screen === "trends" ? (
-          <Trends secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
-        ) : screen === "workspace" ? (
-          <PlanWorkspace secretary={secretary} isOwner={isOwner} onBack={goBack} />
-        ) : screen === "locations" ? (
-          <Locations secretary={secretary} isOwner={isOwner} onBack={goBack} onNavigateGoal={navigateGoal} />
-        ) : screen === "inbox" ? (
-          <Inbox secretary={secretary} isOwner={isOwner} onBack={goBack} />
-        ) : screen === "weeklyimport" ? (
-          <WeeklyMeetingImport secretary={secretary} onBack={() => setScreen("thisweek")} />
-        ) : screen === "weeklyview" ? (
-          <WeeklyView secretary={secretary} onBack={() => setScreen("thisweek")} />
-        ) : screen === "search" ? (
-          <SearchPage secretary={secretary} onBack={goBack} onNavigateGoal={navigateGoal} />
-        ) : screen === "settings" ? (
-          <Settings secretary={secretary} isOwner={isOwner} onBack={goBack} />
-        ) : null}
+        ) : path === "/week" ? (
+          <ThisWeek {...pageProps} />
+        ) : path === "/plans" ? (
+          <Plans {...pageProps} />
+        ) : path === "/workspace" ? (
+          <Workspace {...pageProps} focusKindId={focusKindId} onFocusHandled={() => setFocusKindId(null)} />
+        ) : path === "/trends" ? (
+          <Trends {...pageProps} />
+        ) : path === "/search" ? (
+          <SearchPage {...pageProps} />
+        ) : path === "/log" ? (
+          <Log {...pageProps} />
+        ) : path === "/secretary" ? (
+          <Secretary {...pageProps} />
+        ) : path === "/settings" ? (
+          <Settings {...pageProps} />
+        ) : (
+          <Today {...pageProps} />
+        )}
       </div>
 
-      {isOwner && <FAB onClick={() => setRichCaptureOpen(true)} />}
-      {richCaptureOpen && (
-        <RichCaptureModal
-          onClose={() => setRichCaptureOpen(false)}
-          onCapture={handleCapture}
-          onOpenWeeklyImport={() => setScreen("weeklyimport")}
-          busy={captureBusy}
-        />
-      )}
-      {confirmCapture && (
-        <CaptureConfirmModal capture={confirmCapture} secretary={secretary} onClose={() => setConfirmCapture(null)} />
-      )}
+      <FAB onClick={() => setAddOpen(true)} title="Add" />
+      {addOpen && <AddForm secretary={secretary} onClose={() => setAddOpen(false)} onNavigate={navigate} />}
     </div>
   );
 }
