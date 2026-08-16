@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, DOMAIN_COLORS, softTint } from "../theme";
 import { Checkbox } from "../ui";
+import { disciplineStreak } from "../lib/graph";
 
 const MIN_BLOCK_PX = 16;
 
@@ -138,7 +139,7 @@ function layoutTimedItems(timedItems) {
 // placement, overlap warnings, click-an-empty-slot-to-add -- exists once.
 export function TimeGridDay({
   iso, label, isToday, floatingItems, timedItems, startHour, endHour, pxPerHour = 52,
-  onToggleDone, onEdit, onSlotClick,
+  onToggleDone, onEdit, onSlotClick, disciplines = [], onDisciplineClick,
 }) {
   const gridHeight = (endHour - startHour) * pxPerHour;
   const laid = layoutTimedItems(timedItems);
@@ -149,6 +150,14 @@ export function TimeGridDay({
       <div style={{ fontFamily: MONO, fontSize: 11, color: isToday ? INKBLUE : INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
         {label}
       </div>
+
+      {disciplines.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 4 }}>
+          {disciplines.map((d) => (
+            <DisciplineChip key={d.id} discipline={d} onClick={() => onDisciplineClick?.(d)} />
+          ))}
+        </div>
+      )}
 
       {floatingItems.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
@@ -215,6 +224,28 @@ function FloatingChip({ item, onToggleDone, onEdit }) {
       >
         {item.isRecurringPracticeItem && <span title="Tracked as a Practice -- same box as Plans' weekly tracker">↻ </span>}
         {item.title}
+      </span>
+    </div>
+  );
+}
+
+// A habit being eliminated, focused into the background of the day/week
+// (Plans' "Habits to Break") -- BRICK-tinted rather than domain-colored so
+// "resist this" reads as visually distinct from an ordinary floating Item,
+// and there's no checkbox since there's nothing to complete: the streak
+// counts up on its own via disciplineStreak(), reset only by a relapse
+// logged from the detail modal this chip opens.
+function DisciplineChip({ discipline, onClick }) {
+  const { days, nextMilestone } = disciplineStreak(discipline);
+  return (
+    <div
+      onClick={onClick}
+      title={`Working to eliminate -- day ${days}${nextMilestone ? `, ${nextMilestone.days - days}d to "${nextMilestone.label}"` : ""}`}
+      style={{ display: "flex", alignItems: "center", gap: 6, background: softTint(BRICK), border: `1px solid ${BRICK}55`, borderRadius: 6, padding: "3px 6px", cursor: "pointer" }}
+    >
+      <span style={{ fontFamily: SANS, fontSize: 11, color: BRICK, fontWeight: 700, flex: "none" }}>⊘</span>
+      <span style={{ fontFamily: SANS, fontSize: 11, color: INK, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {discipline.title} · day {days}
       </span>
     </div>
   );

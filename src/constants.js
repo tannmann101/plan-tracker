@@ -189,6 +189,20 @@ export const DEFAULT_PRACTICE_CATEGORIES = [
   { id: "philosophia", label: "Philosophia" },
 ];
 
+// -- Disciplines (habits being eliminated) --------------------------------
+// The inverse of a Practice: not something you do and check off, but
+// something you're actively resisting until it's weeded out. Milestones
+// are day-offsets from the discipline's own startedAt rather than fixed
+// calendar dates, so they recompute automatically after a relapse resets
+// the clock (see lib/graph.js's disciplineStreak). This seed is just a
+// starting point on the Add form -- fully editable/removable per habit,
+// since "good after" varies a lot by what's being quit.
+export const DEFAULT_DISCIPLINE_MILESTONES = [
+  { id: "m1", label: "3 days", days: 3 },
+  { id: "m2", label: "2 weeks", days: 14 },
+  { id: "m3", label: "2 months", days: 60 },
+];
+
 // -- Capture / review ----------------------------------------------------
 // A capture is just the raw intake record now -- triage always produces a
 // pendingOperation for review, never a direct write (see lib/claude.js,

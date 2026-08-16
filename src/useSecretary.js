@@ -11,6 +11,7 @@ const REFS = {
   item: collection(db, "items"),
 };
 const PRACTICE_HABITS_REF = collection(db, "practiceHabits");
+const DISCIPLINES_REF = collection(db, "disciplines");
 const PENDING_OPS_REF = collection(db, "pendingOperations");
 const CHAT_REF = collection(db, "secretaryChat");
 const EVENTS_REF = collection(db, "events");
@@ -44,6 +45,7 @@ export function useSecretary(enabled) {
   const [kinds, setKinds] = useState(null);
   const [items, setItems] = useState(null);
   const [practiceHabits, setPracticeHabits] = useState(null);
+  const [disciplines, setDisciplines] = useState(null);
   const [pendingOperations, setPendingOperations] = useState(null);
   const [chatMessages, setChatMessages] = useState(null);
   const [events, setEvents] = useState(null);
@@ -57,11 +59,12 @@ export function useSecretary(enabled) {
   const refresh = useCallback(async () => {
     setStatus((s) => (s === "ready" ? "ready" : "loading"));
     try {
-      const [kindsSnap, itemsSnap, habitsSnap, opsSnap, chatSnap, eventsSnap, capturesSnap, configSnap] =
+      const [kindsSnap, itemsSnap, habitsSnap, disciplinesSnap, opsSnap, chatSnap, eventsSnap, capturesSnap, configSnap] =
         await Promise.all([
           getDocs(REFS.kind),
           getDocs(REFS.item),
           getDocs(PRACTICE_HABITS_REF),
+          getDocs(DISCIPLINES_REF),
           getDocs(PENDING_OPS_REF),
           getDocs(CHAT_REF),
           getDocs(EVENTS_REF),
@@ -72,6 +75,7 @@ export function useSecretary(enabled) {
       setKinds(mapDocs(kindsSnap));
       setItems(mapDocs(itemsSnap));
       setPracticeHabits(mapDocs(habitsSnap));
+      setDisciplines(mapDocs(disciplinesSnap));
       setPendingOperations(mapDocs(opsSnap));
       setChatMessages(mapDocs(chatSnap));
       setEvents(mapDocs(eventsSnap));
@@ -219,6 +223,76 @@ export function useSecretary(enabled) {
     }
   }, []);
 
+  // A discipline is a bad habit being eliminated (Plans' "Habits to
+  // Break") -- unlike a practice habit it does carry its own lifecycle
+  // state (focused/resolved/startedAt) since there's no separate per-day
+  // Item standing in for it. Logs the same append-only event trail as
+  // Kind/Item saves so Trends can reconstruct streak history later:
+  // startedAt moving = a relapse resetting the clock, focused flipping =
+  // paused/resumed, resolved flipping true = the habit's been broken.
+  const saveDiscipline = useCallback(async (discipline) => {
+    setSaveStatus("saving");
+    try {
+      const { id, ...rest } = discipline;
+      const docId = id || doc(DISCIPLINES_REF).id;
+      const prev = id ? (disciplines || []).find((d) => d.id === id) : null;
+      const now = Date.now();
+      const payload = { ...rest, createdAt: prev?.createdAt || now, updatedAt: now };
+      await setDoc(doc(DISCIPLINES_REF, docId), payload);
+
+      let transition = null;
+      if (!prev) transition = "started";
+      else if (prev.startedAt !== payload.startedAt) transition = "relapsed";
+      else if (!prev.resolved && payload.resolved) transition = "resolved";
+      else if (prev.focused !== payload.focused) transition = payload.focused ? "resumed" : "paused";
+      if (transition) {
+        await logEvent({
+          entityType: "discipline",
+          entityId: docId,
+          ...(payload.domain ? { domain: payload.domain } : {}),
+          from: prev ? (prev.focused ? "focused" : "paused") : null,
+          to: transition,
+          at: now,
+        });
+      }
+
+      setDisciplines((prevList) => {
+        const next = (prevList || []).filter((d) => d.id !== docId);
+        next.push({ id: docId, ...payload });
+        return next;
+      });
+      setSaveStatus("idle");
+      return docId;
+    } catch (err) {
+      console.error("Failed to save discipline", err);
+      setSaveStatus("error");
+      throw err;
+    }
+  }, [disciplines]);
+
+  const deleteDiscipline = useCallback(async (id) => {
+    setSaveStatus("saving");
+    try {
+      const prev = (disciplines || []).find((d) => d.id === id);
+      await deleteDoc(doc(DISCIPLINES_REF, id));
+      if (prev) {
+        await logEvent({
+          entityType: "discipline",
+          entityId: id,
+          ...(prev.domain ? { domain: prev.domain } : {}),
+          from: prev.focused ? "focused" : "paused",
+          to: "deleted",
+          at: Date.now(),
+        });
+      }
+      setDisciplines((prevList) => (prevList || []).filter((d) => d.id !== id));
+      setSaveStatus("idle");
+    } catch (err) {
+      console.error("Failed to delete discipline", err);
+      setSaveStatus("error");
+    }
+  }, [disciplines]);
+
   // Captures are just the raw intake record now -- not event-logged (same
   // "plain document" treatment as before), since triage always drafts a
   // pendingOperation for review rather than writing anything directly.
@@ -335,10 +409,10 @@ export function useSecretary(enabled) {
   }, []);
 
   return {
-    kinds, items, practiceHabits, pendingOperations, chatMessages, events, captures,
+    kinds, items, practiceHabits, disciplines, pendingOperations, chatMessages, events, captures,
     domains, resources, practiceCategories,
     status, saveStatus, refresh,
-    saveEntity, deleteEntity, savePracticeHabit, deletePracticeHabit,
+    saveEntity, deleteEntity, savePracticeHabit, deletePracticeHabit, saveDiscipline, deleteDiscipline,
     saveCapture, deleteCapture, savePendingOperation, deletePendingOperation, saveChatMessage, saveConfig,
   };
 }

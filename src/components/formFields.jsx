@@ -105,6 +105,42 @@ export function MilestonesEditor({ value, onChange }) {
   );
 }
 
+// A discipline's milestones (Plans' "Habits to Break") are day-offsets
+// from whenever its streak last reset, not fixed dates -- so unlike
+// MilestonesEditor's title/done checklist, each entry pairs a label with
+// a day count (e.g. "2 weeks" / 14) and disciplineStreak() in lib/graph.js
+// derives which ones are already reached from the live streak.
+export function DisciplineMilestonesEditor({ value, onChange }) {
+  const [label, setLabel] = useState("");
+  const [days, setDays] = useState("");
+  const add = () => {
+    const d = Number(days);
+    if (!label.trim() || !d || d <= 0) return;
+    onChange([...value, { id: `m${Date.now()}`, label: label.trim(), days: d }].sort((a, b) => a.days - b.days));
+    setLabel("");
+    setDays("");
+  };
+  return (
+    <div>
+      {value.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+          {value.map((m) => (
+            <span key={m.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 11, border: `1px solid ${LINE}`, borderRadius: 999, padding: "3px 9px" }}>
+              {m.label} ({m.days}d)
+              <button type="button" onClick={() => onChange(value.filter((x) => x.id !== m.id))} style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", padding: 0, fontSize: 12 }}>×</button>
+            </span>
+          ))}
+        </div>
+      )}
+      <div style={{ display: "flex", gap: 6 }}>
+        <Input value={label} onChange={setLabel} placeholder="Milestone label…" onEnter={add} />
+        <Input value={days} onChange={setDays} placeholder="Days" width={64} type="number" onEnter={add} />
+        <Btn small onClick={add}>Add</Btn>
+      </div>
+    </div>
+  );
+}
+
 // A timed Item's block length -- the fixed presets cover the common cases
 // in one tap, but "Custom…" drops to a plain minutes field so a block
 // isn't forced into one of a handful of lengths.

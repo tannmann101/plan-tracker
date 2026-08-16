@@ -48,7 +48,7 @@ service cloud.firestore {
     }
 
     function entityTypeValues() {
-      return ['kind', 'item'];
+      return ['kind', 'item', 'discipline'];
     }
 
     function captureStatusValues() {
@@ -137,6 +137,25 @@ service cloud.firestore {
         d.createdAt is number;
     }
 
+    // A discipline is the inverse of a practice habit: not something you do
+    // and check off, but a bad habit you're actively eliminating. Streak
+    // math (days since startedAt, next milestone) is computed client-side
+    // from startedAt + milestones, not stored -- milestones is left loose
+    // (a list) the same way Kind.timing.milestones is, since it's a small
+    // per-habit array with no cross-entity meaning to enforce.
+    function isValidDiscipline(d) {
+      return d.title is string && d.title.size() > 0 &&
+        d.domain in domainValues() &&
+        isOptionalList(d, 'resources') &&
+        isOptionalList(d, 'tags') &&
+        (!('milestones' in d) || d.milestones is list) &&
+        (!('focused' in d) || d.focused is bool) &&
+        (!('resolved' in d) || d.resolved is bool) &&
+        (!('startedAt' in d) || d.startedAt is number) &&
+        d.createdAt is number &&
+        d.updatedAt is number;
+    }
+
     // Append-only log of lifecycle transitions across Kinds/Items, written
     // alongside every save/delete so Log (§8) and progress rollups have
     // something to reconstruct from without a scheduled snapshot job.
@@ -209,6 +228,12 @@ service cloud.firestore {
       allow read: if isAllowed();
       allow delete: if isAllowed();
       allow create, update: if isAllowed() && isValidPracticeHabit(request.resource.data);
+    }
+
+    match /disciplines/{id} {
+      allow read: if isAllowed();
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidDiscipline(request.resource.data);
     }
 
     match /events/{id} {

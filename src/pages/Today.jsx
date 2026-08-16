@@ -5,6 +5,7 @@ import { EntityCard } from "../components/EntityCard";
 import { TimeGridDay, TimeRangeControl, useTimeGridPrefs } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
+import DisciplineDetailModal from "../components/DisciplineDetailModal";
 import { todayISO, addDaysISO } from "../constants";
 import { kindProgress, rootKinds } from "../lib/graph";
 
@@ -35,7 +36,9 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
   const [adding, setAdding] = useState(false);
   const [addDefaults, setAddDefaults] = useState({ targetDay: today });
   const [editing, setEditing] = useState(null);
+  const [disciplineModal, setDisciplineModal] = useState(null);
 
+  const activeDisciplines = (secretary.disciplines || []).filter((d) => d.focused && !d.resolved);
   const days = nextDays(today, 4);
   const items = (secretary.items || []).filter((i) => days.includes(i.timing?.targetDay));
   const itemsByDay = Object.fromEntries(days.map((d) => [d, items
@@ -77,6 +80,7 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
                   startHour={gridPrefs.startHour} endHour={gridPrefs.endHour} pxPerHour={gridPrefs.pxPerHour}
                   onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
                   onSlotClick={onSlotClick}
+                  disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
                 />
               ))}
             </div>
@@ -148,6 +152,9 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
           family={editing.family} entity={editing.entity} secretary={secretary}
           onClose={() => setEditing(null)} onDeleted={() => setEditing(null)}
         />
+      )}
+      {disciplineModal && (
+        <DisciplineDetailModal discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)} />
       )}
     </div>
   );

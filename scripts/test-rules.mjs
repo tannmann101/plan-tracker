@@ -59,6 +59,18 @@ const validPracticeHabit = (overrides = {}) => ({
   ...overrides,
 });
 
+const validDiscipline = (overrides = {}) => ({
+  title: "Quit smoking",
+  domain: "practices",
+  milestones: [{ id: "m1", label: "3 days", days: 3 }],
+  focused: true,
+  resolved: false,
+  startedAt: now(),
+  createdAt: now(),
+  updatedAt: now(),
+  ...overrides,
+});
+
 const validEvent = (overrides = {}) => ({
   entityType: "item",
   entityId: "item1",
@@ -105,6 +117,7 @@ for (const [name, path, payload] of [
   ["kind", "kinds/kind1", validKind()],
   ["item", "items/item1", validItem()],
   ["practice habit", "practiceHabits/habit1", validPracticeHabit()],
+  ["discipline", "disciplines/discipline1", validDiscipline()],
   ["capture", "captures/capture1", validCapture()],
   ["pending operation", "pendingOperations/op1", validPendingOperation()],
   ["chat message", "secretaryChat/msg1", validChatMessage()],
@@ -307,6 +320,40 @@ try {
   console.error(e.message);
 }
 
+try {
+  const { domain: _dom, ...missingDomain } = validDiscipline();
+  await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-missing-domain"), missingDomain));
+  check("discipline missing a required field is rejected", true);
+} catch (e) {
+  check("discipline missing a required field is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-bad-domain"), validDiscipline({ domain: "not-a-real-domain" })));
+  check("discipline with an out-of-vocabulary domain is rejected", true);
+} catch (e) {
+  check("discipline with an out-of-vocabulary domain is rejected", false);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "disciplines/discipline-bad-milestones"), validDiscipline({ milestones: "not-a-list" })));
+  check("discipline with a wrong-typed milestones field is rejected", true);
+} catch (e) {
+  check("discipline with a wrong-typed milestones field is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "disciplines/discipline-paused"), validDiscipline({ focused: false, resolved: false })));
+  check("discipline that's paused (unfocused) is allowed", true);
+} catch (e) {
+  check("discipline that's paused (unfocused) is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "disciplines/discipline-resolved"), validDiscipline({ focused: false, resolved: true })));
+  check("discipline marked resolved is allowed", true);
+} catch (e) {
+  check("discipline marked resolved is allowed", false);
+  console.error(e.message);
+}
+
 // -- Events: append-only, schema-validated --
 
 try {
@@ -326,6 +373,13 @@ try {
   check("event with an invalid entityType is rejected", true);
 } catch (e) {
   check("event with an invalid entityType is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "events/evt3"), validEvent({ entityType: "discipline", entityId: "discipline1", from: "focused", to: "relapsed" })));
+  check("event with entityType 'discipline' is allowed", true);
+} catch (e) {
+  check("event with entityType 'discipline' is allowed", false);
+  console.error(e.message);
 }
 
 // -- pendingOperations: the shared AI-proposal queue --
@@ -393,6 +447,14 @@ try {
   check("Rochelle can delete a kind", !snap.exists());
 } catch (e) {
   check("Rochelle can delete a kind", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(deleteDoc(doc(tannerDb, "disciplines/discipline1")));
+  const snap = await getDoc(doc(rochelleDb, "disciplines/discipline1"));
+  check("Tanner can delete a discipline", !snap.exists());
+} catch (e) {
+  check("Tanner can delete a discipline", false);
   console.error(e.message);
 }
 
