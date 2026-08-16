@@ -8,6 +8,7 @@
 // deliberately light given how many other surfaces this release touches.
 
 import { MONO, SANS, INK, MUTE, LINE, INKBLUE } from "../theme";
+import { todayISO } from "../constants";
 
 const NUM = (n) => n.toLocaleString();
 const DAY = 24 * 60 * 60 * 1000;
@@ -177,10 +178,13 @@ export function LineChart({ points, color, height = 140, yMax = 100, yUnit = "%"
 }
 
 // A single horizontal ruler from today out to the furthest due date among
-// `rows` ({id, title, date (ISO), color}) -- Plans' kanban and Workspace
-// both reuse this verbatim (§9.2/§10) rather than each rolling their own.
-// Rows without a date are dropped; onClick, when given, makes a marker
-// tap-through to that Kind.
+// `rows` ({id, title, date (ISO, the due/end date), startDate (ISO,
+// optional), color}) -- Plans' kanban and Workspace both reuse this
+// verbatim (§9.2/§10) rather than each rolling their own. A row with a
+// startDate draws as a range bar (the scheduled span for that Project/
+// Goal) instead of just a point marker at its due date. Rows without a
+// date are dropped; onClick, when given, makes a row tap-through to that
+// Kind.
 export function Timeline({ rows, onClick, height = 90 }) {
   const dated = (rows || []).filter((r) => r.date).sort((a, b) => a.date.localeCompare(b.date));
   if (dated.length === 0) {
@@ -188,9 +192,10 @@ export function Timeline({ rows, onClick, height = 90 }) {
   }
   const width = 640;
   const padL = 14, padR = 14;
-  const todayISO = new Date().toISOString().slice(0, 10);
-  const minD = [todayISO, ...dated.map((r) => r.date)].sort()[0];
-  const maxD = dated[dated.length - 1].date;
+  const todayStr = todayISO();
+  const allDates = [todayStr, ...dated.map((r) => r.date), ...dated.filter((r) => r.startDate).map((r) => r.startDate)].sort();
+  const minD = allDates[0];
+  const maxD = allDates[allDates.length - 1];
   const minT = new Date(`${minD}T00:00:00`).getTime();
   const maxT = Math.max(new Date(`${maxD}T00:00:00`).getTime(), minT + DAY);
   const x = (d) => padL + ((new Date(`${d}T00:00:00`).getTime() - minT) / (maxT - minT)) * (width - padL - padR);
@@ -200,24 +205,28 @@ export function Timeline({ rows, onClick, height = 90 }) {
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto" }} role="img">
       <line x1={padL} x2={width - padR} y1={laneY} y2={laneY} stroke={LINE} strokeWidth={1} />
       <g>
-        <line x1={x(todayISO)} x2={x(todayISO)} y1={laneY - 8} y2={laneY + 8} stroke={INK} strokeWidth={1.5} />
-        <text x={x(todayISO)} y={laneY + 22} textAnchor="middle" fontFamily={MONO} fontSize={9} fill={MUTE}>today</text>
+        <line x1={x(todayStr)} x2={x(todayStr)} y1={laneY - 8} y2={laneY + 8} stroke={INK} strokeWidth={1.5} />
+        <text x={x(todayStr)} y={laneY + 22} textAnchor="middle" fontFamily={MONO} fontSize={9} fill={MUTE}>today</text>
       </g>
       {dated.map((r, i) => {
         const cx = x(r.date);
         const above = i % 2 === 0;
+        const hasRange = r.startDate && r.startDate < r.date;
         return (
           <g
             key={r.id}
             onClick={onClick ? () => onClick(r.id) : undefined}
             style={{ cursor: onClick ? "pointer" : "default" }}
           >
+            {hasRange && (
+              <rect x={x(r.startDate)} y={laneY - 3} width={Math.max(2, cx - x(r.startDate))} height={6} rx={3} fill={r.color || INKBLUE} opacity={0.35} />
+            )}
             <line x1={cx} x2={cx} y1={laneY} y2={above ? laneY - 16 : laneY + 16} stroke={r.color || INKBLUE} strokeWidth={1} />
             <circle cx={cx} cy={laneY} r={4} fill={r.color || INKBLUE} />
             <text x={cx} y={above ? laneY - 20 : laneY + 28} textAnchor="middle" fontFamily={SANS} fontSize={10} fill={INK}>
               {r.title.length > 16 ? `${r.title.slice(0, 15)}…` : r.title}
             </text>
-            <title>{`${r.title}: ${r.date}`}</title>
+            <title>{hasRange ? `${r.title}: ${r.startDate} → ${r.date}` : `${r.title}: ${r.date}`}</title>
           </g>
         );
       })}

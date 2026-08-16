@@ -8,7 +8,7 @@
 // and an Item can attach directly to a Kind (parentKindId) -- there is no
 // intermediate entity between an Item and the Kind it serves anymore.
 
-import { todayISO } from "../constants";
+import { todayISO, addDaysISO } from "../constants";
 
 export function childKinds(kindId, kinds) {
   return (kinds || []).filter((k) => k.parentKindId === kindId);
@@ -116,9 +116,7 @@ export function itemFallsInWindow(timing, days = 6) {
   const day = timing.targetDay || timing.dueDate;
   if (!day) return false;
   const start = todayISO();
-  const end = new Date();
-  end.setDate(end.getDate() + days);
-  const endISO = end.toISOString().slice(0, 10);
+  const endISO = addDaysISO(start, days);
   return day >= start && day <= endISO;
 }
 
@@ -130,6 +128,58 @@ export function itemFallsInWindow(timing, days = 6) {
 // drift out of sync with the first.
 export function practiceItemFor(habitId, day, items) {
   return (items || []).find((i) => i.isRecurringPracticeItem && i.practiceHabitId === habitId && i.timing?.targetDay === day) || null;
+}
+
+const STALL_DAYS = 14;
+
+// A Kind is easy to lose track of once it's created -- this is the "what
+// needs to happen to move this along" signal shown on its card. Checked in
+// priority order: an overdue due date beats a stall, which beats having
+// nothing attached at all. Returns null when nothing needs flagging (done,
+// genuinely fresh, or has real near-term activity).
+export function kindAttention(kind, data) {
+  if (!kind || kind.status === "done") return null;
+  const today = todayISO();
+
+  if (kind.timing?.dueDate && kind.timing.dueDate < today) {
+    return { level: "overdue", label: "Overdue", hint: `Due ${kind.timing.dueDate} -- past due. Give it a new date, or mark it done.` };
+  }
+
+  const { items = [], kinds = [] } = data;
+  const subtreeIds = new Set(kindSubtreeIds(kind.id, kinds));
+  const relatedItems = items.filter((i) => subtreeIds.has(i.parentKindId));
+
+  if (kind.status !== "not-started" && relatedItems.length === 0) {
+    return { level: "attention", label: "No Items yet", hint: "Nothing is attached to this -- add an Item to give it a next step." };
+  }
+
+  const openItems = relatedItems.filter((i) => !i.done);
+  const hasUpcoming = openItems.some((i) => {
+    const day = i.timing?.targetDay || i.timing?.dueDate;
+    return day && day >= today && day <= addDaysISO(today, STALL_DAYS);
+  });
+  const recentActivity = relatedItems.some((i) => {
+    const touched = i.completedAt || i.updatedAt;
+    return touched && Date.now() - touched <= STALL_DAYS * 86400000;
+  });
+
+  if (openItems.length > 0 && !hasUpcoming && !recentActivity) {
+    return { level: "attention", label: `Stalled ${STALL_DAYS}d+`, hint: "Nothing scheduled soon and no recent activity -- pick a next Item and set a day." };
+  }
+
+  return null;
+}
+
+// Timed (non-floating) Items from today through the next `days` days --
+// the scheduling context handed to secretaryChat so it can spot overlaps
+// and suggest a free slot rather than silently double-booking (see
+// functions/index.js's secretaryChat).
+export function upcomingTimedItems(items, days = 14) {
+  const start = todayISO();
+  const end = addDaysISO(start, days);
+  return (items || [])
+    .filter((i) => !i.done && i.timing?.floating === false && i.timing?.time && i.timing?.targetDay >= start && i.timing.targetDay <= end)
+    .map((i) => ({ id: i.id, title: i.title, domain: i.domain, targetDay: i.timing.targetDay, time: i.timing.time, durationMinutes: i.timing.durationMinutes || 30 }));
 }
 
 export function searchAll(query, data) {

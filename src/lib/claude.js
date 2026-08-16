@@ -32,9 +32,9 @@ export async function triageCapture({ text, existingKinds }) {
   }
 }
 
-export async function secretaryChat({ messages, entityContext, existingKinds }) {
+export async function secretaryChat({ messages, entityContext, existingKinds, existingItems }) {
   try {
-    const result = await secretaryChatFn({ messages, entityContext, existingKinds });
+    const result = await secretaryChatFn({ messages, entityContext, existingKinds, existingItems });
     return result.data.result;
   } catch (err) {
     throw new Error(err.message || "Could not reach Secretary.");

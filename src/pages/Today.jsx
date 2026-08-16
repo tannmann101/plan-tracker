@@ -1,11 +1,19 @@
 import { useState } from "react";
-import { Btn, SectionTitle, Note, Pill, ProgressBar } from "../ui";
+import { Btn, SectionTitle, Note, Pill, ProgressBar, ExpandableRail, TabBar } from "../ui";
 import { MONO, SANS, INK, MUTE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
+import { TimeGridDay } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
-import { todayISO } from "../constants";
+import { todayISO, addDaysISO } from "../constants";
 import { kindProgress, rootKinds } from "../lib/graph";
+
+const VIEW_TABS = [
+  { id: "blocked", label: "Time-blocked" },
+  { id: "list", label: "List" },
+];
+const START_HOUR = 6;
+const END_HOUR = 21;
 
 function dayLabel(iso, today) {
   if (iso === today) return "Today";
@@ -15,11 +23,7 @@ function dayLabel(iso, today) {
 
 function nextDays(today, count) {
   const days = [today];
-  for (let i = 1; i < count; i++) {
-    const d = new Date(`${today}T00:00:00`);
-    d.setDate(d.getDate() + i);
-    days.push(d.toISOString().slice(0, 10));
-  }
+  for (let i = 1; i < count; i++) days.push(addDaysISO(today, i));
   return days;
 }
 
@@ -28,7 +32,9 @@ function nextDays(today, count) {
 // progress + a "where's this landing" resource tally for what's visible.
 export default function Today({ secretary, onBack, onNavigateKind }) {
   const today = todayISO();
+  const [view, setView] = useState("blocked");
   const [adding, setAdding] = useState(false);
+  const [addDefaults, setAddDefaults] = useState({ targetDay: today });
   const [editing, setEditing] = useState(null);
 
   const days = nextDays(today, 4);
@@ -38,6 +44,9 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
     .sort((a, b) => Number(!!a.done) - Number(!!b.done) || (a.timing?.time || "").localeCompare(b.timing?.time || ""))]));
 
   const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
+
+  const openAdd = (defaults) => { setAddDefaults(defaults); setAdding(true); };
+  const onSlotClick = (iso, hour) => openAdd({ targetDay: iso, time: `${String(hour).padStart(2, "0")}:00` });
 
   const goals = rootKinds(secretary.kinds).filter((k) => k.kindType === "goal" && k.status !== "done");
 
@@ -50,57 +59,79 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
       <Btn small onClick={onBack} color={MUTE}>← Back</Btn>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <SectionTitle note={today}>Today</SectionTitle>
-        <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <TabBar tabs={VIEW_TABS} active={view} onChange={setView} />
+          <Btn small primary color={INKBLUE} onClick={() => openAdd({ targetDay: today })}>+ Add</Btn>
+        </div>
       </div>
 
       <div style={{ display: "flex", gap: 22, alignItems: "flex-start", flexWrap: "wrap" }}>
         <div style={{ flex: "2 1 420px", minWidth: 280 }}>
-          {days.map((d) => (
-            <div key={d} style={{ marginBottom: 20 }}>
-              <div style={{ fontFamily: MONO, fontSize: 11, color: d === today ? INKBLUE : INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>
-                {dayLabel(d, today)}
+          {view === "blocked" ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14 }}>
+              {days.map((d) => (
+                <TimeGridDay
+                  key={d} iso={d} label={dayLabel(d, today)} isToday={d === today}
+                  floatingItems={itemsByDay[d].filter((i) => i.timing?.floating !== false || !i.timing?.time)}
+                  timedItems={itemsByDay[d].filter((i) => i.timing?.floating === false && i.timing?.time)}
+                  startHour={START_HOUR} endHour={END_HOUR}
+                  onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
+                  onSlotClick={onSlotClick}
+                />
+              ))}
+            </div>
+          ) : (
+            days.map((d) => (
+              <div key={d} style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: MONO, fontSize: 11, color: d === today ? INKBLUE : INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", margin: "0 0 8px" }}>
+                  {dayLabel(d, today)}
+                </div>
+                {itemsByDay[d].length === 0 ? (
+                  <Note>Nothing placed here.</Note>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                    {itemsByDay[d].map((item) => (
+                      <EntityCard
+                        key={item.id} family="item" entity={item} secretary={secretary}
+                        onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
+                        onNavigateKind={onNavigateKind}
+                      />
+                    ))}
+                  </div>
+                )}
               </div>
-              {itemsByDay[d].length === 0 ? (
-                <Note>Nothing placed here.</Note>
+            ))
+          )}
+        </div>
+
+        <div style={{ flex: "1 1 260px", minWidth: 260 }}>
+          <ExpandableRail title="Goal progress">
+            {goals.length === 0 ? (
+              <Note>No open Goals yet.</Note>
+            ) : goals.map((g) => {
+              const progress = kindProgress(g.id, secretary);
+              return (
+                <div key={g.id} style={{ marginBottom: 16 }}>
+                  <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500 }}>{g.title}</div>
+                  <ProgressBar percent={progress.percent} color={DOMAIN_COLORS[g.domain] || INKBLUE} />
+                </div>
+              );
+            })}
+          </ExpandableRail>
+
+          <div style={{ marginTop: 22 }}>
+            <ExpandableRail title="Where this is landing">
+              {resourceRows.length === 0 ? (
+                <Note>Nothing tagged with a resource this stretch.</Note>
               ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
-                  {itemsByDay[d].map((item) => (
-                    <EntityCard
-                      key={item.id} family="item" entity={item} secretary={secretary}
-                      onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
-                      onNavigateKind={onNavigateKind}
-                    />
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+                  {resourceRows.map(([r, count]) => (
+                    <Pill key={r} color={MUTE} tint={softTint(MUTE)}>{r} · {count}</Pill>
                   ))}
                 </div>
               )}
-            </div>
-          ))}
-        </div>
-
-        <div style={{ flex: "1 1 220px", minWidth: 220 }}>
-          <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Goal progress</div>
-          {goals.length === 0 ? (
-            <Note>No open Goals yet.</Note>
-          ) : goals.map((g) => {
-            const progress = kindProgress(g.id, secretary);
-            return (
-              <div key={g.id} style={{ marginBottom: 14 }}>
-                <div style={{ fontFamily: SANS, fontSize: 12.5, color: INK, fontWeight: 500 }}>{g.title}</div>
-                <ProgressBar percent={progress.percent} color={DOMAIN_COLORS[g.domain] || INKBLUE} />
-              </div>
-            );
-          })}
-
-          <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", margin: "22px 0 10px" }}>Where this is landing</div>
-          {resourceRows.length === 0 ? (
-            <Note>Nothing tagged with a resource this stretch.</Note>
-          ) : (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {resourceRows.map(([r, count]) => (
-                <Pill key={r} color={MUTE} tint={softTint(MUTE)}>{r} · {count}</Pill>
-              ))}
-            </div>
-          )}
+            </ExpandableRail>
+          </div>
         </div>
       </div>
 
@@ -108,7 +139,7 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
         <AddForm
           secretary={secretary}
           allowKinds={false}
-          defaults={{ targetDay: today }}
+          defaults={addDefaults}
           onClose={() => setAdding(false)}
         />
       )}

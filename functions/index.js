@@ -102,7 +102,14 @@ function itemPatch(draft) {
     resources: Array.isArray(draft.resources) ? draft.resources : [],
     tags: Array.isArray(draft.tags) ? draft.tags : [],
     parentKindId: draft.parentKindId || null,
-    timing: draft.targetDay ? { targetDay: draft.targetDay, floating: true } : null,
+    timing: draft.targetDay
+      ? {
+          targetDay: draft.targetDay,
+          floating: !draft.time,
+          time: draft.time || null,
+          durationMinutes: draft.time ? (draft.durationMinutes || 30) : null,
+        }
+      : null,
     done: false,
   };
 }
@@ -275,6 +282,7 @@ exports.secretaryChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 
   }
   const entityContext = request.data?.entityContext || null;
   const existingKinds = Array.isArray(request.data?.existingKinds) ? request.data.existingKinds : [];
+  const existingItems = Array.isArray(request.data?.existingItems) ? request.data.existingItems : [];
 
   const system = `You are Secretary, a formal, courteous, old-fashioned household secretary having a conversation with your employer. You can discuss scheduling, help sequence milestones, and draft new Kinds/Items or edits to existing ones -- but you never write anything yourself. Respond with ONLY a single JSON object, no prose, no markdown fences.
 
@@ -288,16 +296,23 @@ Schema:
     "family": "kind" or "item",
     "title": string, "kindType": string or null, "itemType": string or null,
     "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "secondaryDomains": [string], "tags": [string],
-    "targetDay": string or null, "parentKindId": string or null,
-    "note": string (one sentence explaining the proposal)
+    "targetDay": string or null (ISO date, YYYY-MM-DD),
+    "time": string or null (ISO 24h "HH:MM" -- only set this for a genuinely time-blocked Item; leave null for a floating one),
+    "durationMinutes": number or null (only meaningful alongside "time"; default 30 if the conversation doesn't say),
+    "parentKindId": string or null,
+    "note": string (one sentence explaining the proposal -- when you scheduled around a conflict, say so here)
   }
 }
 
 Only set proposedOperation when the conversation actually calls for creating or changing a Kind/Item -- most turns should just be a reply with proposedOperation null. Never invent an update to something the household didn't ask to change.
 
+Scheduling: when the household asks you to book, schedule, or time-block something, check existingItems below for that day before proposing a "time" -- an Item's time slot runs from its "time" for "durationMinutes" (default 30 if absent). If the requested time collides with an existing Item, do not silently double-book it: either pick the nearest genuinely free slot that still fits what was asked (same day, closest to the requested time) and say so plainly in "note" and "reply", or, if nothing reasonable is free that day, set proposedOperation to null, explain the conflict in "reply", and ask how the household wants to resolve it (move the existing Item, pick a different day, or double-book on purpose). Never invent a "resolution" the household didn't ask for -- point out the conflict and let them decide when it's ambiguous.
+
 ${entityContext ? `This conversation was opened from a specific ${entityContext.family === 'kind' ? 'Kind' : 'Item'}: ${JSON.stringify(entityContext)}. Prefer proposing updates to it (opType "update-${entityContext.family}", targetId "${entityContext.id}") when the conversation is about changing it.` : ''}
 
-existingKinds (id/title/kindType/domain, for parentKindId/targetId matching): ${JSON.stringify(existingKinds)}`;
+existingKinds (id/title/kindType/domain, for parentKindId/targetId matching): ${JSON.stringify(existingKinds)}
+
+existingItems (id/title/domain/targetDay/time/durationMinutes -- today through the next 2 weeks, for scheduling/overlap checks): ${JSON.stringify(existingItems)}`;
 
   const messages = history.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
   const responseText = await callClaude({ system, messages, maxTokens: 1536 });

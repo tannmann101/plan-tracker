@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Modal, Btn, Input, Select } from "../ui";
-import { SERIF, MONO, INK, MUTE, INKBLUE, LINE, BRICK } from "../theme";
+import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK } from "../theme";
 import {
   KIND_TYPES, ITEM_TYPES, kindTypeLabel, itemTypeLabel, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, todayISO,
+  DURATION_OPTIONS, DEFAULT_DURATION_MINUTES,
 } from "../constants";
 import { allTagsInUse } from "../lib/graph";
 import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker } from "./formFields";
@@ -43,8 +44,10 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
   const [consentStatus, setConsentStatus] = useState("pending");
 
   const [targetDay, setTargetDay] = useState(defaults.targetDay || "");
-  const [floating, setFloating] = useState(true);
-  const [time, setTime] = useState("");
+  const [floating, setFloating] = useState(defaults.time == null);
+  const [time, setTime] = useState(defaults.time || "");
+  const [durationMinutes, setDurationMinutes] = useState(String(defaults.durationMinutes || DEFAULT_DURATION_MINUTES));
+  const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [milestones, setMilestones] = useState([]);
   const [parentKindId, setParentKindId] = useState(defaults.parentKindId || null);
@@ -73,7 +76,7 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
       if (family === "kind") {
         const timing = retro
           ? { dueDate: completedDate }
-          : (dueDate || milestones.length) ? { dueDate: dueDate || null, milestones } : null;
+          : (startDate || dueDate || milestones.length) ? { startDate: startDate || null, dueDate: dueDate || null, milestones } : null;
         const patch = {
           title: title.trim(), kindType: type, domain, secondaryDomains, resources, tags,
           parentKindId: null, status: retro ? "done" : "not-started", timing, retro, createdVia: "add-form",
@@ -88,7 +91,11 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
         const timing = retro
           ? { targetDay: completedDate }
           : (targetDay || dueDate || milestones.length)
-            ? { targetDay: targetDay || null, time: floating ? null : (time || null), dueDate: dueDate || null, floating, milestones }
+            ? {
+                targetDay: targetDay || null, time: floating ? null : (time || null),
+                durationMinutes: floating ? null : Number(durationMinutes),
+                dueDate: dueDate || null, floating, milestones,
+              }
             : null;
         const patch = {
           title: title.trim(), itemType: type, domain, secondaryDomains, resources, tags,
@@ -216,11 +223,21 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
                     Floating (no specific time)
                   </label>
                   {!floating && (
-                    <Field label="Time">
-                      <Input type="time" value={time} onChange={setTime} />
-                    </Field>
+                    <>
+                      <Field label="Time">
+                        <Input type="time" value={time} onChange={setTime} />
+                      </Field>
+                      <Field label="Duration">
+                        <Select value={durationMinutes} onChange={setDurationMinutes} options={DURATION_OPTIONS} />
+                      </Field>
+                    </>
                   )}
                 </>
+              )}
+              {family === "kind" && (
+                <Field label="Start date (optional)">
+                  <Input type="date" value={startDate} onChange={setStartDate} />
+                </Field>
               )}
               <Field label="Due date (optional)">
                 <Input type="date" value={dueDate} onChange={setDueDate} />

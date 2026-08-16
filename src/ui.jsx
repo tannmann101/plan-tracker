@@ -238,6 +238,33 @@ export function ProgressBar({ percent, color = INKBLUE }) {
   );
 }
 
+// A right-rail section (progress bars, charts, filters) rendered small in
+// its normal spot, with a "⤢" button that reopens the exact same content
+// full-width in an overlay -- so a chart that's unreadable at 220px doesn't
+// need a second, bespoke "big" implementation. Today/ThisWeek/Workspace all
+// wrap their rail sections in this rather than rendering charts twice.
+export function ExpandableRail({ title, children }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em" }}>{title}</div>
+        <IconButton title={`Expand ${title}`} onClick={() => setExpanded(true)}>⤢</IconButton>
+      </div>
+      {children}
+      {expanded && (
+        <Modal onClose={() => setExpanded(false)} width={720}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+            <h3 style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: INK, margin: 0 }}>{title}</h3>
+            <IconButton title="Close" onClick={() => setExpanded(false)}>×</IconButton>
+          </div>
+          {children}
+        </Modal>
+      )}
+    </>
+  );
+}
+
 // Modal/overlay for capture-confirmation and other over-the-current-screen
 // interactions -- never a separate page to navigate to.
 export function Modal({ onClose, children, width = 420 }) {

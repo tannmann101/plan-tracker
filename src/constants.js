@@ -120,6 +120,21 @@ export const ITEM_TYPES = [
 export const ITEM_TYPE_IDS = ITEM_TYPES.map((i) => i.id);
 export const itemTypeLabel = (id) => ITEM_TYPES.find((i) => i.id === id)?.label || id;
 
+// A timed (non-floating) Item's block length on the Day/Week time-grid
+// (§ time-blocking). Stored as timing.durationMinutes -- select-driven
+// rather than free text so blocks stay grid-friendly. Defaults to 30 when
+// an existing timed Item predates this field.
+export const DURATION_OPTIONS = [
+  { id: "15", label: "15 min" },
+  { id: "30", label: "30 min" },
+  { id: "45", label: "45 min" },
+  { id: "60", label: "1 hr" },
+  { id: "90", label: "1.5 hr" },
+  { id: "120", label: "2 hr" },
+  { id: "180", label: "3 hr" },
+];
+export const DEFAULT_DURATION_MINUTES = 30;
+
 // Drives the Plans kanban (§9.2) -- Still Needed -> Queue -> In Progress ->
 // Almost Done -> Done. "in-progress" can be auto-promoted into by an Item
 // save (see lib/graph.js's maybePromoteKindStatus) but is always
@@ -189,7 +204,21 @@ export const PENDING_OP_TYPES = ["create-kind", "create-item", "update-kind", "u
 export const PENDING_OP_STATUSES = ["pending", "approved", "discarded"];
 export const UNSORTED_FLAG_DAYS = 3;
 
-export const todayISO = () => new Date().toISOString().slice(0, 10);
+// The one place a Date turns into a "YYYY-MM-DD" string -- reads the
+// Date's own local year/month/day fields directly rather than going
+// through `.toISOString()`, which converts to UTC first and silently
+// shifts the calendar day for anyone not sitting exactly at UTC. Every
+// other date-arithmetic helper in the app (todayISO, weekStartISO, the
+// day-grid helpers in Today/ThisWeek/Plans/Workspace/CalendarMonthView)
+// is built on this, so there is exactly one place that conversion happens.
+export const isoDate = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+};
+
+export const todayISO = () => isoDate(new Date());
 
 // Monday-start, per the Week/Calendar page's column layout (§7.2).
 export const weekStartISO = (d = new Date()) => {
@@ -197,5 +226,14 @@ export const weekStartISO = (d = new Date()) => {
   const day = date.getDay(); // 0 = Sunday .. 6 = Saturday
   const diff = (day === 0 ? -6 : 1) - day;
   date.setDate(date.getDate() + diff);
-  return date.toISOString().slice(0, 10);
+  return isoDate(date);
+};
+
+// `n` days after (or before, for negative `n`) a "YYYY-MM-DD" string --
+// shared by every page that lays days out in a strip or grid (Today,
+// Week/Calendar, Plans, Workspace), so this date math exists in one place.
+export const addDaysISO = (iso, n) => {
+  const d = new Date(`${iso}T00:00:00`);
+  d.setDate(d.getDate() + n);
+  return isoDate(d);
 };

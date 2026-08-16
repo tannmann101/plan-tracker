@@ -1,7 +1,10 @@
 import { Card, Checkbox, Pill } from "../ui";
-import { SANS, MONO, INK, MUTE, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
+import { SANS, MONO, INK, MUTE, BRICK, OCHRE, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
 import { InfoIcon, KindChainLine } from "./InfoModal";
 import { domainLabel, kindStatusLabel, itemTypeLabel, kindTypeLabel } from "../constants";
+import { kindAttention } from "../lib/graph";
+
+const ATTENTION_COLORS = { overdue: BRICK, attention: OCHRE };
 
 function timingLabel(timing) {
   if (!timing) return null;
@@ -19,6 +22,7 @@ export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, 
   const domainColor = DOMAIN_COLORS[entity.domain] || MUTE;
   const done = family === "item" ? !!entity.done : entity.status === "done";
   const timing = timingLabel(entity.timing);
+  const attention = family === "kind" ? kindAttention(entity, secretary) : null;
   return (
     <Card style={{ display: "flex", alignItems: "flex-start", gap: 11, opacity: done ? 0.62 : 1 }}>
       {family === "item" && !readOnly && onToggleDone ? (
@@ -47,7 +51,11 @@ export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, 
           {(entity.tags || []).map((t) => <Pill key={t}>#{t}</Pill>)}
           {timing && <Pill color={MUTE}>{timing}</Pill>}
           {entity.retro && <Pill color={MUTE}>retro</Pill>}
+          {attention && <Pill color={ATTENTION_COLORS[attention.level]}>{attention.label}</Pill>}
         </div>
+        {attention && (
+          <div style={{ fontFamily: MONO, fontSize: 10.5, color: ATTENTION_COLORS[attention.level], marginTop: 6 }}>{attention.hint}</div>
+        )}
         {note && <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginTop: 6 }}>{note}</div>}
         <KindChainLine family={family} entity={entity} data={secretary} onNavigateKind={onNavigateKind} />
       </div>
