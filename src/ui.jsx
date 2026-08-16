@@ -7,6 +7,7 @@ import {
   MONO, SANS, SERIF, BG, CARD, INK, MUTE, MUTE_SOFT, LINE, HEAD_BG,
   INKBLUE, INKBLUE_SOFT, RADIUS, RADIUS_SM, SHADOW_CARD, TRANSITION, softTint,
 } from "./theme";
+import { useViewport } from "./useViewport";
 
 export function GlobalStyle() {
   return (
@@ -30,6 +31,8 @@ export function GlobalStyle() {
       .ui-fab:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(36,34,32,0.22); }
       .ui-fab:active { transform: translateY(0); }
       ::selection { background: ${INKBLUE_SOFT}; }
+      @keyframes ui-panel-slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+      .ui-modal-panel { animation: ui-panel-slide-in 160ms ease; }
     `}</style>
   );
 }
@@ -266,8 +269,39 @@ export function ExpandableRail({ title, children }) {
 }
 
 // Modal/overlay for capture-confirmation and other over-the-current-screen
-// interactions -- never a separate page to navigate to.
+// interactions -- never a separate page to navigate to. Mobile keeps the
+// original centered dialog untouched; desktop (see useViewport) gets a
+// right-side sliding panel instead, since a small centered card wastes most
+// of a wide viewport and a docked panel reads more like a native desktop
+// inspector. Same children, same props -- every existing caller (AddForm,
+// EditEntityModal, ExpandableRail, DisciplineDetailModal, ...) gets this for
+// free with no call-site change.
 export function Modal({ onClose, children, width = 420 }) {
+  const { isDesktop } = useViewport();
+
+  if (isDesktop) {
+    return (
+      <div
+        onClick={onClose}
+        style={{
+          position: "fixed", inset: 0, background: "rgba(36,34,32,0.32)",
+          display: "flex", justifyContent: "flex-end", zIndex: 100,
+        }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="ui-modal-panel"
+          style={{
+            background: CARD, borderLeft: `1px solid ${LINE}`, boxShadow: "-10px 0 28px rgba(36,34,32,0.16)",
+            width: "100%", maxWidth: Math.max(width, 420), height: "100%", overflowY: "auto", padding: 28,
+          }}
+        >
+          {children}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       onClick={onClose}
@@ -290,8 +324,10 @@ export function Modal({ onClose, children, width = 420 }) {
 }
 
 // Floating action button -- richer capture (photo, etc.) entry point,
-// always reachable regardless of which hub area you're in.
-export function FAB({ onClick, title = "Capture" }) {
+// always reachable regardless of which hub area you're in. offsetRight lets
+// the desktop shell nudge it clear of the Secretary chat dock when that's
+// open, rather than the dock covering it.
+export function FAB({ onClick, title = "Capture", offsetRight = 20 }) {
   return (
     <button
       type="button"
@@ -300,9 +336,10 @@ export function FAB({ onClick, title = "Capture" }) {
       aria-label={title}
       className="ui-fab"
       style={{
-        position: "fixed", right: 20, bottom: 20, width: 52, height: 52, borderRadius: "50%",
+        position: "fixed", right: offsetRight, bottom: 20, width: 52, height: 52, borderRadius: "50%",
         background: INKBLUE, color: "#fff", border: "none", boxShadow: "0 2px 10px rgba(36,34,32,0.28)",
         cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40,
+        transition: `right ${TRANSITION}`,
       }}
     >
       +
