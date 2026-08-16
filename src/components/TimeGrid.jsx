@@ -1,9 +1,37 @@
 import { useState } from "react";
-import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, DOMAIN_COLORS, softTint } from "../theme";
+import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, DOMAIN_COLORS, BG, softTint } from "../theme";
 import { Checkbox } from "../ui";
+import { useViewport } from "../useViewport";
 import { disciplineStreak } from "../lib/graph";
 
 const MIN_BLOCK_PX = 16;
+
+// A row of per-day columns (Today's 4-day strip, Week's 7-day grid, in
+// either time-blocked or list layout) -- shared so the "never wrap a day
+// onto a second row" fix only needs to exist once. Mobile keeps the
+// original auto-fit behavior untouched (columns reflow onto more rows as
+// they run out of width, which is fine at a single-column phone width);
+// desktop instead holds a fixed column count and side-scrolls once it hits
+// each column's minimum width, so every day always reads at the same
+// level per the household's own note that vertical wrapping mid-week is
+// disorienting.
+export function DayGridRow({ count, minColPx, gapPx = 12, children }) {
+  const { isDesktop } = useViewport();
+  if (isDesktop) {
+    return (
+      <div style={{ overflowX: "auto", paddingBottom: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(${count}, minmax(${minColPx}px, 1fr))`, gap: gapPx, minWidth: count * minColPx + (count - 1) * gapPx }}>
+          {children}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: `repeat(auto-fit, minmax(${minColPx}px, 1fr))`, gap: gapPx }}>
+      {children}
+    </div>
+  );
+}
 
 // Range (which hours show) and zoom (how tall an hour is) are a per-person
 // display preference, not household data -- kept in localStorage rather
@@ -82,7 +110,7 @@ export function TimeRangeControl({ prefs, onChange }) {
   );
 }
 
-const selectStyle = { fontFamily: MONO, fontSize: 11, padding: "3px 5px", border: `1px solid ${LINE}`, borderRadius: 6, background: "#fff" };
+const selectStyle = { fontFamily: MONO, fontSize: 11, padding: "3px 5px", border: `1px solid ${LINE}`, borderRadius: 6, background: BG };
 
 function timeToMinutes(t) {
   const [h, m] = t.split(":").map(Number);

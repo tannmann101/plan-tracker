@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE } from "../theme";
+import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE, CARD, HEAD_BG } from "../theme";
 import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES } from "../constants";
 import { Field, TagsInput, MultiCheckList, KindParentPicker, DurationInput } from "../components/formFields";
 import { allTagsInUse, kindSubtreeIds, upcomingItems, practiceHabitsSummary, disciplinesSummary, kindsNeedingAttention } from "../lib/graph";
@@ -222,7 +222,7 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
         {messages.map((m) => (
           <div key={m.id} style={{ alignSelf: m.role === "user" ? "flex-end" : "flex-start", maxWidth: "85%" }}>
             <div style={{
-              fontFamily: SANS, fontSize: 12.5, color: INK, background: m.role === "user" ? "#EAE3D1" : "#fff",
+              fontFamily: SANS, fontSize: 12.5, color: INK, background: m.role === "user" ? HEAD_BG : CARD,
               border: `1px solid ${LINE}`, borderRadius: 10, padding: "7px 11px",
             }}>{m.text}</div>
           </div>

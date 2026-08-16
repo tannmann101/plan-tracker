@@ -4,16 +4,20 @@
 
 import { useState } from "react";
 import {
-  MONO, SANS, SERIF, BG, CARD, INK, MUTE, MUTE_SOFT, LINE, HEAD_BG,
-  INKBLUE, INKBLUE_SOFT, RADIUS, RADIUS_SM, SHADOW_CARD, TRANSITION, softTint,
+  MONO, SANS, SERIF, BG, CARD, PAGE, INK, MUTE, MUTE_SOFT, LINE, HEAD_BG,
+  INKBLUE, INKBLUE_SOFT, BRICK, RADIUS, RADIUS_SM, SHADOW_CARD, SHADOW_RGB, TRANSITION, softTint,
+  THEME_VARS_CSS,
 } from "./theme";
 import { useViewport } from "./useViewport";
+import { useTheme } from "./useTheme";
 
 export function GlobalStyle() {
   return (
     <style>{`
+      ${THEME_VARS_CSS}
       * { box-sizing: border-box; }
-      body { -webkit-font-smoothing: antialiased; }
+      html { background: ${PAGE}; }
+      body { -webkit-font-smoothing: antialiased; background: ${PAGE}; color: ${INK}; }
       input::placeholder, textarea::placeholder { color: ${MUTE_SOFT}; opacity: 1; }
       table tbody tr { transition: background ${TRANSITION}; }
       table tbody tr:hover td { background: ${HEAD_BG}; }
@@ -24,16 +28,42 @@ export function GlobalStyle() {
       .ui-btn-primary:hover:not(:disabled) { filter: brightness(0.94); }
       .ui-btn:active:not(:disabled) { transform: translateY(1px); }
       .ui-btn:focus-visible { outline: 2px solid var(--btn-c); outline-offset: 2px; }
-      .ui-tab:hover { background: rgba(36,34,32,0.05); }
-      .ui-card-link:hover { border-color: ${INKBLUE}; box-shadow: 0 1px 2px rgba(36,34,32,0.06), 0 10px 26px rgba(36,34,32,0.1); }
+      .ui-tab:hover { background: rgb(var(--shadow-rgb) / 0.05); }
+      .ui-card-link:hover { border-color: ${INKBLUE}; box-shadow: 0 1px 2px rgb(var(--shadow-rgb) / 0.06), 0 10px 26px rgb(var(--shadow-rgb) / 0.1); }
       .ui-check { transition: background ${TRANSITION}, border-color ${TRANSITION}; cursor: pointer; }
       .ui-fab { transition: transform 120ms ease, box-shadow ${TRANSITION}; }
-      .ui-fab:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgba(36,34,32,0.22); }
+      .ui-fab:hover { transform: translateY(-1px); box-shadow: 0 4px 14px rgb(var(--shadow-rgb) / 0.22); }
       .ui-fab:active { transform: translateY(0); }
       ::selection { background: ${INKBLUE_SOFT}; }
       @keyframes ui-panel-slide-in { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
       .ui-modal-panel { animation: ui-panel-slide-in 160ms ease; }
     `}</style>
+  );
+}
+
+// Sun/moon toggle -- shows the currently-resolved appearance (which may be
+// following system preference, no explicit choice made yet) and always
+// switches to an explicit opposite on click. Used in both shells (desktop
+// sidebar footer, mobile header).
+export function ThemeToggle() {
+  const { theme, setTheme } = useTheme();
+  const isDark = theme === "dark";
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme(isDark ? "light" : "dark")}
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      className="ui-btn"
+      style={{
+        "--btn-c": MUTE, border: `1px solid ${LINE}`, background: BG, color: INK,
+        width: 26, height: 26, borderRadius: "50%", cursor: "pointer",
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        fontSize: 13, flex: "none", padding: 0,
+      }}
+    >
+      {isDark ? "☾" : "☀"}
+    </button>
   );
 }
 
@@ -161,7 +191,7 @@ export function TabBar({ tabs, active, onChange }) {
           style={{
             border: "none", background: active === t.id ? BG : "transparent", color: active === t.id ? INK : MUTE,
             fontFamily: MONO, fontSize: 12, fontWeight: active === t.id ? 600 : 400, padding: "6px 15px",
-            borderRadius: RADIUS_SM, cursor: "pointer", boxShadow: active === t.id ? "0 1px 3px rgba(36,34,32,0.14)" : "none",
+            borderRadius: RADIUS_SM, cursor: "pointer", boxShadow: active === t.id ? `0 1px 3px rgb(${SHADOW_RGB} / 0.14)` : "none",
           }}
         >{t.label}</button>
       ))}
@@ -292,7 +322,7 @@ export function Modal({ onClose, children, width = 420 }) {
           onClick={(e) => e.stopPropagation()}
           className="ui-modal-panel"
           style={{
-            background: CARD, borderLeft: `1px solid ${LINE}`, boxShadow: "-10px 0 28px rgba(36,34,32,0.16)",
+            background: CARD, borderLeft: `1px solid ${LINE}`, boxShadow: `-10px 0 28px rgb(${SHADOW_RGB} / 0.16)`,
             width: "100%", maxWidth: Math.max(width, 420), height: "100%", overflowY: "auto", padding: 28,
           }}
         >
@@ -337,7 +367,7 @@ export function FAB({ onClick, title = "Capture", offsetRight = 20 }) {
       className="ui-fab"
       style={{
         position: "fixed", right: offsetRight, bottom: 20, width: 52, height: 52, borderRadius: "50%",
-        background: INKBLUE, color: "#fff", border: "none", boxShadow: "0 2px 10px rgba(36,34,32,0.28)",
+        background: INKBLUE, color: "#fff", border: "none", boxShadow: `0 2px 10px rgb(${SHADOW_RGB} / 0.28)`,
         cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40,
         transition: `right ${TRANSITION}`,
       }}
@@ -404,7 +434,7 @@ export function AIAssist({ actionLabel = "Ask Secretary", onGenerate, onAccept, 
           <p style={{ fontFamily: MONO, fontSize: 12, color: MUTE }}>One moment…</p>
         )}
         {error ? (
-          <p style={{ fontFamily: MONO, fontSize: 11.5, color: "#8B3A2B", marginTop: 10 }}>
+          <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK, marginTop: 10 }}>
             {error} <button type="button" onClick={generate} style={{ border: "none", background: "none", color: INKBLUE, cursor: "pointer", fontFamily: MONO, fontSize: 11.5, textDecoration: "underline" }}>Try again</button>
           </p>
         ) : null}
@@ -418,7 +448,7 @@ export function AIAssist({ actionLabel = "Ask Secretary", onGenerate, onAccept, 
         Draft -- review before accepting
       </div>
       <div>{renderDraft(draft, { setDraft })}</div>
-      {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: "#8B3A2B", marginTop: 10 }}>{error}</p>}
+      {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK, marginTop: 10 }}>{error}</p>}
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
         {onAccept ? (
           <Btn primary color={INKBLUE} disabled={accepting} onClick={accept}>{accepting ? "Saving…" : "Accept"}</Btn>
