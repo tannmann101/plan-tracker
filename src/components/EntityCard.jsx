@@ -1,5 +1,5 @@
 import { Card, Checkbox, Pill } from "../ui";
-import { SANS, MONO, INK, MUTE, BRICK, OCHRE, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
+import { SANS, MONO, INK, MUTE, BRICK, OCHRE, DEEPTEAL, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
 import { InfoIcon, KindChainLine } from "./InfoModal";
 import { domainLabel, kindStatusLabel, itemTypeLabel, kindTypeLabel } from "../constants";
 import { kindAttention } from "../lib/graph";
@@ -51,6 +51,11 @@ export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, 
           {(entity.tags || []).map((t) => <Pill key={t}>#{t}</Pill>)}
           {timing && <Pill color={MUTE}>{timing}</Pill>}
           {entity.retro && <Pill color={MUTE}>retro</Pill>}
+          {entity.isRecurringPracticeItem && (
+            <Pill color={DEEPTEAL} tint={softTint(DEEPTEAL)} title="Tracked as a Practice -- checking this box is the same box as Plans' weekly tracker">
+              ↻ practice
+            </Pill>
+          )}
           {attention && <Pill color={ATTENTION_COLORS[attention.level]}>{attention.label}</Pill>}
         </div>
         {attention && (
