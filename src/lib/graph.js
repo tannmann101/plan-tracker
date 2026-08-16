@@ -8,7 +8,7 @@
 // and an Item can attach directly to a Kind (parentKindId) -- there is no
 // intermediate entity between an Item and the Kind it serves anymore.
 
-import { todayISO, addDaysISO } from "../constants";
+import { todayISO, addDaysISO, weekStartISO } from "../constants";
 
 export function childKinds(kindId, kinds) {
   return (kinds || []).filter((k) => k.parentKindId === kindId);
@@ -170,16 +170,78 @@ export function kindAttention(kind, data) {
   return null;
 }
 
-// Timed (non-floating) Items from today through the next `days` days --
-// the scheduling context handed to secretaryChat so it can spot overlaps
-// and suggest a free slot rather than silently double-booking (see
-// functions/index.js's secretaryChat).
-export function upcomingTimedItems(items, days = 14) {
+// Undone Items from today through the next `days` days, timed and
+// floating alike -- the scheduling/awareness context handed to
+// secretaryChat (functions/index.js) so it can spot time-slot overlaps
+// among the timed ones (time set, floating false) and still have a
+// general sense of what's already on the books from the floating ones
+// (time null), rather than only seeing whatever happens to be clock-
+// scheduled.
+export function upcomingItems(items, days = 14) {
   const start = todayISO();
   const end = addDaysISO(start, days);
   return (items || [])
-    .filter((i) => !i.done && i.timing?.floating === false && i.timing?.time && i.timing?.targetDay >= start && i.timing.targetDay <= end)
-    .map((i) => ({ id: i.id, title: i.title, domain: i.domain, targetDay: i.timing.targetDay, time: i.timing.time, durationMinutes: i.timing.durationMinutes || 30 }));
+    .filter((i) => !i.done && i.timing?.targetDay && i.timing.targetDay >= start && i.timing.targetDay <= end)
+    .map((i) => ({
+      id: i.id, title: i.title, domain: i.domain, targetDay: i.timing.targetDay,
+      floating: i.timing.floating !== false,
+      time: i.timing.floating === false ? i.timing.time : null,
+      durationMinutes: i.timing.floating === false ? (i.timing.durationMinutes || 30) : null,
+      isRecurringPracticeItem: !!i.isRecurringPracticeItem,
+      practiceHabitId: i.practiceHabitId || null,
+    }));
+}
+
+// A live snapshot of each active practice habit's completion state, for
+// Secretary chat context -- lets it answer "did I do X today" and, when
+// asked to check one off, target the existing Item for that habit+day (or
+// know none exists yet) rather than guessing and risking a second Item for
+// the same habit+day (see practiceItemFor's single-Item contract).
+export function practiceHabitsSummary(data) {
+  const { practiceHabits = [], items = [] } = data;
+  const today = todayISO();
+  const weekStart = weekStartISO();
+  const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
+  return (practiceHabits || []).filter((h) => h.active !== false).map((h) => {
+    const todayItem = practiceItemFor(h.id, today, items);
+    const weekDoneCount = weekDays.filter((d) => practiceItemFor(h.id, d, items)?.done).length;
+    return {
+      id: h.id, title: h.title, categoryId: h.categoryId,
+      todayItemId: todayItem?.id || null, todayDone: !!todayItem?.done,
+      weekDoneCount, weekTotalDays: 7,
+    };
+  });
+}
+
+// Focused (in-progress), unresolved disciplines with their live streak --
+// Secretary chat context so it can discuss progress and offer
+// encouragement, but it deliberately can't log a relapse, change focus, or
+// mark one resolved itself; those stay direct actions in Plans/Today, the
+// same boundary practice habit definitions already have.
+export function disciplinesSummary(data) {
+  const { disciplines = [] } = data;
+  return (disciplines || []).filter((d) => d.focused && !d.resolved).map((d) => {
+    const { days, nextMilestone } = disciplineStreak(d);
+    return {
+      id: d.id, title: d.title, type: d.type, streakDays: days,
+      nextMilestoneLabel: nextMilestone?.label || null,
+      daysToNextMilestone: nextMilestone ? nextMilestone.days - days : null,
+    };
+  });
+}
+
+// Every Kind currently flagged as needing attention (see kindAttention) --
+// Secretary chat context so it can proactively surface what's overdue,
+// stalled, or empty when relevant, not only react to what's asked about.
+export function kindsNeedingAttention(data) {
+  const { kinds = [] } = data;
+  return kinds
+    .map((k) => ({ kind: k, attention: kindAttention(k, data) }))
+    .filter((x) => x.attention)
+    .map(({ kind, attention }) => ({
+      id: kind.id, title: kind.title, kindType: kind.kindType, domain: kind.domain,
+      level: attention.level, label: attention.label, hint: attention.hint,
+    }));
 }
 
 // Streak math for a discipline (Plans' "Habits to Break", §9.1 companion):
