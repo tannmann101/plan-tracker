@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Btn, Input } from "../ui";
 import { MONO, SANS, INK, MUTE, INKBLUE, LINE } from "../theme";
+import { DURATION_OPTIONS } from "../constants";
 
 // Shared building blocks for AddForm.jsx and EditEntityModal.jsx -- kept in
 // one place so a Kind/Item's field behavior (tags, resources, milestones,
@@ -100,6 +101,42 @@ export function MilestonesEditor({ value, onChange }) {
         <Input value={text} onChange={setText} placeholder="Add a milestone…" onEnter={add} />
         <Btn small onClick={add}>Add</Btn>
       </div>
+    </div>
+  );
+}
+
+// A timed Item's block length -- the fixed presets cover the common cases
+// in one tap, but "Custom…" drops to a plain minutes field so a block
+// isn't forced into one of a handful of lengths.
+export function DurationInput({ value, onChange }) {
+  const isPreset = DURATION_OPTIONS.some((o) => o.id === String(value));
+  const [customMode, setCustomMode] = useState(!isPreset);
+  const selectValue = customMode ? "custom" : String(value);
+
+  return (
+    <div>
+      <select
+        value={selectValue}
+        onChange={(e) => {
+          if (e.target.value === "custom") { setCustomMode(true); return; }
+          setCustomMode(false);
+          onChange(e.target.value);
+        }}
+        style={fieldSelectStyle}
+      >
+        {DURATION_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
+        <option value="custom">Custom…</option>
+      </select>
+      {customMode && (
+        <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+          <input
+            className="ui-field" type="number" min={1} step={1} value={value}
+            onChange={(e) => onChange(e.target.value)}
+            style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px", fontSize: 12.5, fontFamily: SANS, color: INK, width: 90 }}
+          />
+          <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>minutes</span>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Modal, Btn, Input, Select } from "../ui";
 import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, BRICK } from "../theme";
-import { KIND_STATUSES, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, DURATION_OPTIONS, DEFAULT_DURATION_MINUTES } from "../constants";
+import { KIND_STATUSES, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, DEFAULT_DURATION_MINUTES } from "../constants";
 import { allTagsInUse, kindSubtreeIds, itemsForKind } from "../lib/graph";
-import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker } from "./formFields";
+import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker, DurationInput } from "./formFields";
 
 // The universal Kind/Item edit surface (§15) -- tapping any card's body
 // anywhere in the app opens this, same field set the Add Form offers, plus
@@ -175,7 +175,7 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
                 <Input type="time" value={time} onChange={setTime} />
               </Field>
               <Field label="Duration">
-                <Select value={durationMinutes} onChange={setDurationMinutes} options={DURATION_OPTIONS} />
+                <DurationInput value={durationMinutes} onChange={setDurationMinutes} />
               </Field>
             </>
           )}

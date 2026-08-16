@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, LINE } from "../theme";
-import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS } from "../constants";
-import { Field, TagsInput, MultiCheckList, KindParentPicker } from "../components/formFields";
+import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES } from "../constants";
+import { Field, TagsInput, MultiCheckList, KindParentPicker, DurationInput } from "../components/formFields";
 import { allTagsInUse, kindSubtreeIds, upcomingTimedItems } from "../lib/graph";
 import { triageCapture, secretaryChat } from "../lib/claude";
 import WeeklyMeetingImport from "./WeeklyMeetingImport";
@@ -32,6 +32,10 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
   const [tags, setTags] = useState(op.patch.tags || []);
   const [parentKindId, setParentKindId] = useState(op.patch.parentKindId || null);
   const [targetDay, setTargetDay] = useState(op.patch.timing?.targetDay || op.patch.timing?.dueDate || "");
+  const [startDate, setStartDate] = useState(op.patch.timing?.startDate || "");
+  const [floating, setFloating] = useState(op.patch.timing?.floating !== false);
+  const [time, setTime] = useState(op.patch.timing?.time || "");
+  const [durationMinutes, setDurationMinutes] = useState(String(op.patch.timing?.durationMinutes || DEFAULT_DURATION_MINUTES));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
 
@@ -55,11 +59,17 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
       if (family === "kind") {
         payload.kindType = type;
         payload.status = base.status || "not-started";
-        payload.timing = targetDay ? { dueDate: targetDay } : (base.timing || null);
+        payload.timing = (startDate || targetDay) ? { startDate: startDate || null, dueDate: targetDay || null } : (base.timing || null);
       } else {
         payload.itemType = type;
         payload.done = base.done || false;
-        payload.timing = targetDay ? { targetDay, floating: true } : (base.timing || null);
+        payload.timing = targetDay
+          ? {
+              targetDay, floating,
+              time: floating ? null : (time || null),
+              durationMinutes: floating ? null : Number(durationMinutes),
+            }
+          : (base.timing || null);
       }
       payload.createdVia = op.patch.createdVia || "capture";
       await secretary.saveEntity(family, payload);
@@ -109,9 +119,32 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
       <Field label="Tags">
         <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
       </Field>
+      {family === "kind" && (
+        <Field label="Start date (optional)">
+          <Input type="date" value={startDate} onChange={setStartDate} />
+        </Field>
+      )}
       <Field label={family === "kind" ? "Due date (optional)" : "Target day (optional)"}>
         <Input type="date" value={targetDay} onChange={setTargetDay} />
       </Field>
+      {family === "item" && targetDay && (
+        <>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: SANS, fontSize: 12.5, color: INK, cursor: "pointer", marginBottom: 12 }}>
+            <input type="checkbox" checked={floating} onChange={(e) => setFloating(e.target.checked)} />
+            Floating (no specific time)
+          </label>
+          {!floating && (
+            <>
+              <Field label="Time">
+                <Input type="time" value={time} onChange={setTime} />
+              </Field>
+              <Field label="Duration">
+                <DurationInput value={durationMinutes} onChange={setDurationMinutes} />
+              </Field>
+            </>
+          )}
+        </>
+      )}
       <Field label={family === "kind" ? "Parent (optional)" : "Attach to (optional)"}>
         <KindParentPicker kinds={secretary.kinds} value={parentKindId} onChange={setParentKindId} excludeIds={excludeIds} />
       </Field>
