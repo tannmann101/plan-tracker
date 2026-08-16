@@ -29,6 +29,7 @@ function PracticesTab({ secretary }) {
   const habits = secretary.practiceHabits || [];
 
   const [newCategory, setNewCategory] = useState("");
+  const [editingHabitId, setEditingHabitId] = useState(null);
   const [habitTitle, setHabitTitle] = useState("");
   const [habitCategory, setHabitCategory] = useState(categories[0]?.id || "");
   const [habitResources, setHabitResources] = useState([]);
@@ -52,13 +53,33 @@ function PracticesTab({ secretary }) {
     await secretary.saveConfig("practiceCategories", categories.filter((c) => c.id !== id));
   };
 
-  const addHabit = async () => {
-    const title = habitTitle.trim();
-    if (!title || !habitCategory) return;
-    await secretary.savePracticeHabit({ title, categoryId: habitCategory, resources: habitResources, tags: habitTags, active: true });
+  const resetHabitForm = () => {
+    setEditingHabitId(null);
     setHabitTitle("");
+    setHabitCategory(categories[0]?.id || "");
     setHabitResources([]);
     setHabitTags([]);
+  };
+
+  const startEditHabit = (habit) => {
+    setEditingHabitId(habit.id);
+    setHabitTitle(habit.title);
+    setHabitCategory(habit.categoryId);
+    setHabitResources(habit.resources || []);
+    setHabitTags(habit.tags || []);
+  };
+
+  const saveHabit = async () => {
+    const title = habitTitle.trim();
+    if (!title || !habitCategory) return;
+    const editing = editingHabitId ? habits.find((h) => h.id === editingHabitId) : null;
+    await secretary.savePracticeHabit({
+      id: editingHabitId || undefined,
+      createdAt: editing?.createdAt,
+      title, categoryId: habitCategory, resources: habitResources, tags: habitTags,
+      active: editing?.active !== false,
+    });
+    resetHabitForm();
   };
 
   const toggleDay = async (habit, day) => {
@@ -91,7 +112,7 @@ function PracticesTab({ secretary }) {
         <Btn small onClick={addCategory}>Add category</Btn>
       </div>
 
-      <SectionTitle note="habit definitions">Add a Practice</SectionTitle>
+      <SectionTitle note="habit definitions">{editingHabitId ? "Edit Practice" : "Add a Practice"}</SectionTitle>
       <Card>
         <Field label="Name">
           <Input value={habitTitle} onChange={setHabitTitle} />
@@ -105,10 +126,18 @@ function PracticesTab({ secretary }) {
         <Field label="Tags">
           <TagsInput value={habitTags} onChange={setHabitTags} suggestions={tagSuggestions} />
         </Field>
-        <Btn primary color={INKBLUE} disabled={!habitTitle.trim() || !habitCategory} onClick={addHabit}>Add practice</Btn>
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn primary color={INKBLUE} disabled={!habitTitle.trim() || !habitCategory} onClick={saveHabit}>
+            {editingHabitId ? "Save changes" : "Add practice"}
+          </Btn>
+          {editingHabitId && <Btn color={MUTE} onClick={resetHabitForm}>Cancel</Btn>}
+        </div>
       </Card>
 
       <SectionTitle note={`${weekStart} → ${weekDays[6]}`}>Weekly tracker</SectionTitle>
+      <Note>
+        Checking a day here checks the exact same Item that Today and Week's checkbox for that practice checks -- they're always in sync, never two separate records. Click a practice's name to edit it.
+      </Note>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <Btn small onClick={() => setWeekStart(addDaysISO(weekStart, -7))} color={MUTE}>← Prev</Btn>
         <Btn small onClick={() => setWeekStart(weekStartISO())} color={MUTE}>This week</Btn>
@@ -125,6 +154,7 @@ function PracticesTab({ secretary }) {
                 {WEEKDAY_LABELS.map((w) => (
                   <th key={w} style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, padding: "0 4px 8px", textAlign: "center" }}>{w}</th>
                 ))}
+                <th style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, padding: "0 4px 8px", textAlign: "center" }}>Wk</th>
                 <th />
               </tr>
             </thead>
@@ -132,24 +162,39 @@ function PracticesTab({ secretary }) {
               {categories.filter((c) => habits.some((h) => h.categoryId === c.id)).map((cat) => (
                 <Fragment key={cat.id}>
                   <tr>
-                    <td colSpan={9} style={{ fontFamily: MONO, fontSize: 10.5, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", padding: "10px 0 4px" }}>{cat.label}</td>
+                    <td colSpan={10} style={{ fontFamily: MONO, fontSize: 10.5, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", padding: "10px 0 4px" }}>{cat.label}</td>
                   </tr>
-                  {habits.filter((h) => h.categoryId === cat.id).map((habit) => (
-                    <tr key={habit.id}>
-                      <td style={{ fontFamily: SANS, fontSize: 12.5, color: INK, padding: "4px 10px 4px 0", borderBottom: `1px solid ${LINE}` }}>{habit.title}</td>
-                      {weekDays.map((day) => {
-                        const item = practiceItemFor(habit.id, day, secretary.items);
-                        return (
+                  {habits.filter((h) => h.categoryId === cat.id).map((habit) => {
+                    const weekItems = weekDays.map((day) => practiceItemFor(habit.id, day, secretary.items));
+                    const doneCount = weekItems.filter((i) => i?.done).length;
+                    return (
+                      <tr key={habit.id}>
+                        <td style={{ padding: "4px 10px 4px 0", borderBottom: `1px solid ${LINE}` }}>
+                          <button
+                            type="button" onClick={() => startEditHabit(habit)} title="Edit practice"
+                            style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 12.5, color: INK, textAlign: "left", textDecoration: editingHabitId === habit.id ? "underline" : "none" }}
+                          >
+                            {habit.title}
+                          </button>
+                        </td>
+                        {weekDays.map((day, i) => (
                           <td key={day} style={{ textAlign: "center", padding: "4px", borderBottom: `1px solid ${LINE}` }}>
-                            <Checkbox checked={!!item?.done} onChange={() => toggleDay(habit, day)} />
+                            <Checkbox checked={!!weekItems[i]?.done} onChange={() => toggleDay(habit, day)} />
                           </td>
-                        );
-                      })}
-                      <td style={{ borderBottom: `1px solid ${LINE}` }}>
-                        <button type="button" onClick={() => secretary.deletePracticeHabit(habit.id)} title="Delete practice" style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", fontSize: 13 }}>×</button>
-                      </td>
-                    </tr>
-                  ))}
+                        ))}
+                        <td style={{ textAlign: "center", padding: "4px", borderBottom: `1px solid ${LINE}`, fontFamily: MONO, fontSize: 11, color: MUTE }}>
+                          {doneCount}/7
+                        </td>
+                        <td style={{ borderBottom: `1px solid ${LINE}` }}>
+                          <button
+                            type="button"
+                            onClick={() => { if (editingHabitId === habit.id) resetHabitForm(); secretary.deletePracticeHabit(habit.id); }}
+                            title="Delete practice" style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", fontSize: 13 }}
+                          >×</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </Fragment>
               ))}
             </tbody>

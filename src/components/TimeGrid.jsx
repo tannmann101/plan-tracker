@@ -192,6 +192,7 @@ export function TimeGridDay({
               }}
             >
               <div style={{ fontFamily: SANS, fontSize: 10.5, fontWeight: 600, color: INK, lineHeight: 1.25, textDecoration: item.done ? "line-through" : "none" }}>
+                {item.isRecurringPracticeItem && <span title="Tracked as a Practice -- same box as Plans' weekly tracker">↻ </span>}
                 {item.title}
               </div>
               {overlapping && <div style={{ fontFamily: MONO, fontSize: 9, color: BRICK, fontWeight: 600 }}>⚠ overlap</div>}
@@ -212,6 +213,7 @@ function FloatingChip({ item, onToggleDone, onEdit }) {
         onClick={() => onEdit?.("item", item)}
         style={{ fontFamily: SANS, fontSize: 11, color: INK, cursor: "pointer", flex: 1, minWidth: 0, textDecoration: item.done ? "line-through" : "none", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
       >
+        {item.isRecurringPracticeItem && <span title="Tracked as a Practice -- same box as Plans' weekly tracker">↻ </span>}
         {item.title}
       </span>
     </div>

@@ -180,9 +180,9 @@ export function Card({ children, style, tint, onClick }) {
   );
 }
 
-export function Pill({ children, color = MUTE, tint }) {
+export function Pill({ children, color = MUTE, tint, title }) {
   return (
-    <span style={{
+    <span title={title} style={{
       display: "inline-flex", alignItems: "center", fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
       letterSpacing: "0.02em", color, background: tint || HEAD_BG, border: `1px solid ${color}33`,
       borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap",
