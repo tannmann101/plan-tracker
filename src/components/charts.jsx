@@ -7,7 +7,7 @@
 // baseline hover tooltip rather than a full custom tooltip layer, kept
 // deliberately light given how many other surfaces this release touches.
 
-import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, softTint } from "../theme";
+import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, CARD, softTint } from "../theme";
 import { todayISO } from "../constants";
 
 const NUM = (n) => n.toLocaleString();
@@ -175,7 +175,7 @@ export function LineChart({ points, color, height = 140, yMax = 100, yUnit = "%"
       })}
       <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       {pathCoords.map((c) => (
-        <circle key={c.week} cx={c.px} cy={c.py} r={c.week === last.week ? 4 : 2.5} fill={color} stroke="#fff" strokeWidth={2}>
+        <circle key={c.week} cx={c.px} cy={c.py} r={c.week === last.week ? 4 : 2.5} fill={color} stroke={CARD} strokeWidth={2}>
           <title>{`${c.week}: ${c.y}${yUnit}${c.note ? ` (${c.note})` : ""}`}</title>
         </circle>
       ))}
@@ -256,7 +256,7 @@ function Sparkline({ points, color, width = 56, height = 22 }) {
   return (
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ flex: "none" }} aria-hidden="true">
       <path d={path} fill="none" stroke={MUTE_SOFT} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={last.x} cy={last.y} r={2.5} fill={color} stroke="#fff" strokeWidth={1.5} />
+      <circle cx={last.x} cy={last.y} r={2.5} fill={color} stroke={CARD} strokeWidth={1.5} />
     </svg>
   );
 }
@@ -268,7 +268,7 @@ function Sparkline({ points, color, width = 56, height = 22 }) {
 // before any panel below has enough history to plot.
 export function StatTile({ label, value, sublabel, color = INKBLUE, trend }) {
   return (
-    <div style={{ flex: "1 1 150px", minWidth: 140, padding: "13px 15px", background: "#fff", border: `1px solid ${LINE}`, borderRadius: 10 }}>
+    <div style={{ flex: "1 1 150px", minWidth: 140, padding: "13px 15px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10 }}>
       <div style={{ fontFamily: MONO, fontSize: 10, color: MUTE, textTransform: "uppercase", letterSpacing: "0.045em" }}>{label}</div>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8, marginTop: 5 }}>
         <div style={{ fontFamily: SANS, fontSize: 25, fontWeight: 600, color: INK, lineHeight: 1 }}>{value}</div>

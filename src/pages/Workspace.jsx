@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Btn, SectionTitle, Note, Pill, ExpandableRail } from "../ui";
 import { MONO, MUTE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
+import { useViewport } from "../useViewport";
 import { EntityCard } from "../components/EntityCard";
 import EditEntityModal from "../components/EditEntityModal";
 import AddForm from "../components/AddForm";
@@ -29,6 +30,7 @@ function completedByWeek(items, n = 8) {
 // Secretary.jsx's chat panel rather than a second implementation), so a
 // conversation about a ticket and editing it sit side by side.
 export default function Workspace({ secretary, onBack, onNavigateKind, onNavigate, focusKindId, onFocusHandled }) {
+  const { isDesktop } = useViewport();
   const [showDone, setShowDone] = useState(false);
   const [domainFilter, setDomainFilter] = useState(null);
   const [resourceFilter, setResourceFilter] = useState(null);
@@ -112,7 +114,7 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
           <Timeline rows={timelineRows} onClick={onNavigateKind} />
         </div>
 
-        <div style={{ flex: "1 1 280px", minWidth: 260 }}>
+        <div style={isDesktop ? { flex: "0 1 380px", minWidth: 300, maxWidth: 420 } : { flex: "1 1 280px", minWidth: 260 }}>
           <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>This week</div>
           <Note>{weekItems.length} Item{weekItems.length === 1 ? "" : "s"} placed, {weekItems.filter((i) => i.done).length} done.</Note>
 

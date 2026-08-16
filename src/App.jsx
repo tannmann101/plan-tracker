@@ -5,8 +5,8 @@ import { auth } from "./firebase";
 import { useSecretary } from "./useSecretary";
 import { useRoute } from "./useRoute";
 import { useViewport } from "./useViewport";
-import { SANS, MONO, SERIF, PAGE, CARD, MUTE, INK, INKBLUE, INKBLUE_SOFT, BRICK, LINE, RADIUS_SM } from "./theme";
-import { GlobalStyle, FAB, Btn, IconButton, Wordmark } from "./ui";
+import { SANS, MONO, SERIF, PAGE, CARD, MUTE, INK, INKBLUE, BRICK, LINE, RADIUS_SM, SHADOW_RGB } from "./theme";
+import { GlobalStyle, FAB, Btn, IconButton, ThemeToggle, Wordmark } from "./ui";
 import { triageCapture } from "./lib/claude";
 import { CaptureBar } from "./components/CaptureBar";
 import AddForm from "./components/AddForm";
@@ -25,11 +25,13 @@ import Settings from "./pages/Settings";
 // §4 -- flat tabbed shell on mobile: top bar (Today/Week/Plans/Workspace/
 // Trends) + hamburger (Search/Log/Secretary/Settings), completely unchanged
 // from the original mobile-first design. Desktop (see useViewport) gets its
-// own shell below -- a persistent sidebar covering the same nine routes
-// (no hamburger needed, there's room) plus a dockable Secretary chat panel
-// -- reusing every page/hook/handler here unchanged, just laid out
-// differently. Both accounts render and act identically (§13) -- there is
-// no isOwner branch left anywhere here.
+// own shell below -- a persistent sidebar for the same five primary tabs, a
+// "More" dropdown standing in for the hamburger (Search/Log/Settings), a
+// distinctly-styled Secretary shortcut (its own page, not lumped into
+// More), and a dockable Secretary chat panel for quick in-context questions
+// without leaving the current page -- reusing every page/hook/handler here
+// unchanged, just laid out differently. Both accounts render and act
+// identically (§13) -- there is no isOwner branch left anywhere here.
 const TOP_TABS = [
   { path: "/today", label: "Today" },
   { path: "/week", label: "Week" },
@@ -45,6 +47,12 @@ const MENU_ITEMS = [
   { path: "/settings", label: "Settings" },
 ];
 
+// Everything but Secretary -- desktop's "More" dropdown stands in for the
+// mobile hamburger with just the plain utility pages; Secretary gets its
+// own distinct button instead (see DESKTOP_MORE_ITEMS' comment at the call
+// site below).
+const DESKTOP_MORE_ITEMS = MENU_ITEMS.filter((m) => m.path !== "/secretary");
+
 const CHAT_DOCK_WIDTH = 360;
 
 function Shell({ user }) {
@@ -52,6 +60,7 @@ function Shell({ user }) {
   const { path, navigate } = useRoute();
   const { isDesktop } = useViewport();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [captureBusy, setCaptureBusy] = useState(false);
   const [focusKindId, setFocusKindId] = useState(null);
@@ -124,13 +133,12 @@ function Shell({ user }) {
   const addForm = addOpen && <AddForm secretary={secretary} onClose={() => setAddOpen(false)} onNavigate={navigate} />;
 
   if (isDesktop) {
-    const allRoutes = [...TOP_TABS, ...MENU_ITEMS];
     return (
       <div style={{ minHeight: "100vh", background: PAGE, fontFamily: SANS, display: "flex" }}>
         <GlobalStyle />
 
         <aside style={{
-          width: 220, flex: "none", position: "sticky", top: 0, height: "100vh",
+          width: 210, flex: "none", position: "sticky", top: 0, height: "100vh",
           display: "flex", flexDirection: "column", padding: "22px 14px",
           borderRight: `1px solid ${LINE}`, background: CARD,
         }}>
@@ -140,44 +148,29 @@ function Shell({ user }) {
           </div>
 
           <nav style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            {allRoutes.map((r) => (
+            {TOP_TABS.map((t) => (
               <button
-                key={r.path}
+                key={t.path}
                 type="button"
-                onClick={() => navigate(r.path)}
+                onClick={() => navigate(t.path)}
                 style={{
                   display: "flex", alignItems: "center", justifyContent: "space-between",
-                  border: "none", textAlign: "left", background: path === r.path ? INK : "transparent",
-                  color: path === r.path ? "#fff" : INK, fontFamily: MONO, fontSize: 12.5,
-                  fontWeight: path === r.path ? 600 : 400, padding: "8px 10px", borderRadius: RADIUS_SM, cursor: "pointer",
+                  border: "none", textAlign: "left", background: path === t.path ? INK : "transparent",
+                  color: path === t.path ? CARD : INK, fontFamily: MONO, fontSize: 12.5,
+                  fontWeight: path === t.path ? 600 : 400, padding: "8px 10px", borderRadius: RADIUS_SM, cursor: "pointer",
                 }}
               >
-                <span>{r.label}</span>
-                {r.path === "/secretary" && unsortedCount > 0 && (
-                  <span style={{
-                    fontFamily: MONO, fontSize: 10, fontWeight: 600, color: path === r.path ? "#fff" : BRICK,
-                  }}>{unsortedCount}</span>
-                )}
+                <span>{t.label}</span>
               </button>
             ))}
           </nav>
 
-          <button
-            type="button"
-            onClick={() => setChatOpen((o) => !o)}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 14,
-              border: `1px solid ${chatOpen ? INKBLUE : LINE}`, textAlign: "left", background: chatOpen ? INKBLUE_SOFT : "transparent",
-              color: chatOpen ? INKBLUE : MUTE, fontFamily: MONO, fontSize: 12, padding: "8px 10px", borderRadius: RADIUS_SM, cursor: "pointer",
-            }}
-          >
-            <span>Ask Secretary</span>
-            <span>{chatOpen ? "✕" : "→"}</span>
-          </button>
-
-          <div style={{ marginTop: "auto", paddingTop: 14, display: "flex", flexDirection: "column", gap: 6 }}>
-            {secretary.saveStatus === "saving" && <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE }}>saving…</span>}
-            {secretary.saveStatus === "error" && <span style={{ fontFamily: MONO, fontSize: 10.5, color: BRICK }}>save failed</span>}
+          <div style={{ marginTop: "auto", paddingTop: 14, display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <ThemeToggle />
+              {secretary.saveStatus === "saving" && <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE }}>saving…</span>}
+              {secretary.saveStatus === "error" && <span style={{ fontFamily: MONO, fontSize: 10.5, color: BRICK }}>save failed</span>}
+            </div>
             <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, wordBreak: "break-all" }}>{user.email}</span>
             <button
               onClick={() => signOut(auth)}
@@ -189,7 +182,55 @@ function Shell({ user }) {
         </aside>
 
         <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-          <div style={{ maxWidth: 1120, width: "100%", margin: "0 auto", padding: "22px 32px 70px" }}>
+          <div style={{ maxWidth: 1640, width: "100%", margin: "0 auto", padding: "20px 32px 70px", flex: 1 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center", justifyContent: "flex-end", marginBottom: 12 }}>
+              <IconButton title={chatOpen ? "Close quick chat" : "Ask Secretary (quick chat)"} onClick={() => setChatOpen((o) => !o)} color={chatOpen ? INKBLUE : MUTE}>
+                💬
+              </IconButton>
+              <button
+                type="button"
+                onClick={() => navigate("/secretary")}
+                title="Open Secretary"
+                style={{
+                  display: "flex", alignItems: "center", gap: 6, border: "none", cursor: "pointer",
+                  background: path === "/secretary" ? INK : INKBLUE, color: CARD,
+                  fontFamily: MONO, fontSize: 12, fontWeight: 600, padding: "7px 14px", borderRadius: 999,
+                }}
+              >
+                Secretary
+                {unsortedCount > 0 && (
+                  <span style={{
+                    display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 16, height: 16,
+                    borderRadius: 999, background: CARD, color: BRICK, fontSize: 10, fontWeight: 700, padding: "0 4px",
+                  }}>{unsortedCount}</span>
+                )}
+              </button>
+              <div style={{ position: "relative" }}>
+                <Btn small onClick={() => setMoreOpen((m) => !m)} color={MUTE}>More ▾</Btn>
+                {moreOpen && (
+                  <div style={{
+                    position: "absolute", right: 0, top: "calc(100% + 6px)", background: CARD, border: `1px solid ${LINE}`,
+                    borderRadius: 10, boxShadow: `0 4px 14px rgb(${SHADOW_RGB} / 0.16)`, zIndex: 50, minWidth: 140, overflow: "hidden",
+                  }}>
+                    {DESKTOP_MORE_ITEMS.map((m) => (
+                      <button
+                        key={m.path}
+                        type="button"
+                        onClick={() => { navigate(m.path); setMoreOpen(false); }}
+                        style={{
+                          display: "block", width: "100%", textAlign: "left", border: "none",
+                          background: path === m.path ? PAGE : "transparent", color: INK,
+                          fontFamily: MONO, fontSize: 12, padding: "9px 14px", cursor: "pointer",
+                        }}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
             <div style={{ marginBottom: 18 }}>
               <CaptureBar onCapture={handleCapture} busy={captureBusy} />
             </div>
@@ -203,7 +244,7 @@ function Shell({ user }) {
             borderLeft: `1px solid ${LINE}`, background: CARD, display: "flex", flexDirection: "column",
           }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 16px 12px", borderBottom: `1px solid ${LINE}` }}>
-              <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: INK }}>Secretary</span>
+              <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: INK }}>Quick chat</span>
               <IconButton title="Close" onClick={() => setChatOpen(false)}>×</IconButton>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
@@ -229,6 +270,7 @@ function Shell({ user }) {
               <Wordmark />
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <ThemeToggle />
               {secretary.saveStatus === "saving" && <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>saving…</span>}
               {secretary.saveStatus === "error" && <span style={{ fontFamily: MONO, fontSize: 11, color: BRICK }}>save failed</span>}
               <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>{user.email}</span>
@@ -249,7 +291,7 @@ function Shell({ user }) {
                   type="button"
                   onClick={() => navigate(t.path)}
                   style={{
-                    border: "none", background: path === t.path ? INK : "transparent", color: path === t.path ? "#fff" : MUTE,
+                    border: "none", background: path === t.path ? INK : "transparent", color: path === t.path ? CARD : MUTE,
                     fontFamily: MONO, fontSize: 12, fontWeight: path === t.path ? 600 : 400, padding: "6px 13px",
                     borderRadius: 999, cursor: "pointer",
                   }}
@@ -262,8 +304,8 @@ function Shell({ user }) {
               </Btn>
               {menuOpen && (
                 <div style={{
-                  position: "absolute", right: 0, top: "calc(100% + 6px)", background: "#fff", border: `1px solid ${LINE}`,
-                  borderRadius: 10, boxShadow: "0 4px 14px rgba(36,34,32,0.16)", zIndex: 50, minWidth: 140, overflow: "hidden",
+                  position: "absolute", right: 0, top: "calc(100% + 6px)", background: CARD, border: `1px solid ${LINE}`,
+                  borderRadius: 10, boxShadow: `0 4px 14px rgb(${SHADOW_RGB} / 0.16)`, zIndex: 50, minWidth: 140, overflow: "hidden",
                 }}>
                   {MENU_ITEMS.map((m) => (
                     <button
@@ -272,7 +314,7 @@ function Shell({ user }) {
                       onClick={() => { navigate(m.path); setMenuOpen(false); }}
                       style={{
                         display: "block", width: "100%", textAlign: "left", border: "none",
-                        background: path === m.path ? "#F2EEE3" : "transparent", color: INK,
+                        background: path === m.path ? PAGE : "transparent", color: INK,
                         fontFamily: MONO, fontSize: 12, padding: "9px 14px", cursor: "pointer",
                       }}
                     >

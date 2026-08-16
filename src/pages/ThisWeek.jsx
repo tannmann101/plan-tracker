@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note, TabBar, ExpandableRail } from "../ui";
 import { MUTE, INK, MONO, INKBLUE, DOMAIN_COLORS } from "../theme";
+import { useViewport } from "../useViewport";
 import { EntityCard } from "../components/EntityCard";
-import { TimeGridDay, TimeRangeControl, useTimeGridPrefs } from "../components/TimeGrid";
+import { TimeGridDay, TimeRangeControl, DayGridRow, useTimeGridPrefs } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import DisciplineDetailModal from "../components/DisciplineDetailModal";
@@ -27,6 +28,7 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 // Items, and full Kind-or-Item Add (unlike Today, this page isn't
 // Items-only).
 export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate }) {
+  const { isDesktop } = useViewport();
   const [view, setView] = useState("week");
   const [layout, setLayout] = useState("blocked");
   const [gridPrefs, setGridPrefs] = useTimeGridPrefs();
@@ -73,7 +75,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
       </div>
 
       <div style={{ display: "flex", gap: 22, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "3 1 500px", minWidth: 280 }}>
+        <div style={{ flex: isDesktop ? "3 1 560px" : "3 1 500px", minWidth: 280 }}>
           {view === "week" ? (
             <>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
@@ -82,7 +84,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                 <Btn small onClick={() => setWeekStart(addDaysISO(weekStart, 7))} color={MUTE}>Next week →</Btn>
               </div>
               {layout === "blocked" ? (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                <DayGridRow count={weekDays.length} minColPx={isDesktop ? 155 : 140} gapPx={10}>
                   {weekDays.map((d, i) => (
                     <TimeGridDay
                       key={d} iso={d} label={`${WEEKDAY_LABELS[i]} ${d.slice(5)}`} isToday={false}
@@ -93,9 +95,9 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                       disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
                     />
                   ))}
-                </div>
+                </DayGridRow>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                <DayGridRow count={weekDays.length} minColPx={isDesktop ? 165 : 150} gapPx={12}>
                   {weekDays.map((d, i) => (
                     <div key={d}>
                       <div style={{ fontFamily: MONO, fontSize: 11, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
@@ -113,7 +115,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                       </div>
                     </div>
                   ))}
-                </div>
+                </DayGridRow>
               )}
             </>
           ) : (
@@ -122,7 +124,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
         </div>
 
         {view === "week" && (
-          <div style={{ flex: "1 1 260px", minWidth: 260 }}>
+          <div style={isDesktop ? { flex: "0 1 360px", minWidth: 300, maxWidth: 400 } : { flex: "1 1 260px", minWidth: 260 }}>
             <ExpandableRail title="Domain distribution, this week">
               {domainRows.length === 0 ? <Note>Nothing placed this week yet.</Note> : <HorizontalBarChart rows={domainRows} />}
             </ExpandableRail>

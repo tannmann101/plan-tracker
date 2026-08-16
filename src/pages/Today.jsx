@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note, Pill, ProgressBar, ExpandableRail, TabBar } from "../ui";
 import { MONO, SANS, INK, MUTE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
+import { useViewport } from "../useViewport";
 import { EntityCard } from "../components/EntityCard";
-import { TimeGridDay, TimeRangeControl, useTimeGridPrefs } from "../components/TimeGrid";
+import { TimeGridDay, TimeRangeControl, DayGridRow, useTimeGridPrefs } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import DisciplineDetailModal from "../components/DisciplineDetailModal";
@@ -30,6 +31,7 @@ function nextDays(today, count) {
 // 4-day strip rather than just today, and a right rail carrying Goal
 // progress + a "where's this landing" resource tally for what's visible.
 export default function Today({ secretary, onBack, onNavigateKind }) {
+  const { isDesktop } = useViewport();
   const today = todayISO();
   const [view, setView] = useState("blocked");
   const [gridPrefs, setGridPrefs] = useTimeGridPrefs();
@@ -72,9 +74,9 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
       </div>
 
       <div style={{ display: "flex", gap: 22, alignItems: "flex-start", flexWrap: "wrap" }}>
-        <div style={{ flex: "2 1 420px", minWidth: 280 }}>
+        <div style={{ flex: isDesktop ? "3 1 480px" : "2 1 420px", minWidth: 280 }}>
           {view === "blocked" ? (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14 }}>
+            <DayGridRow count={days.length} minColPx={isDesktop ? 170 : 160} gapPx={14}>
               {days.map((d) => (
                 <TimeGridDay
                   key={d} iso={d} label={dayLabel(d, today)} isToday={d === today}
@@ -86,7 +88,7 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
                   disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
                 />
               ))}
-            </div>
+            </DayGridRow>
           ) : (
             days.map((d) => (
               <div key={d} style={{ marginBottom: 20 }}>
@@ -111,7 +113,7 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
           )}
         </div>
 
-        <div style={{ flex: "1 1 260px", minWidth: 260 }}>
+        <div style={isDesktop ? { flex: "0 1 360px", minWidth: 300, maxWidth: 400 } : { flex: "1 1 260px", minWidth: 260 }}>
           <ExpandableRail title="Goal progress">
             {goals.length === 0 ? (
               <Note>No open Goals yet.</Note>
