@@ -1,10 +1,8 @@
 import { Card, Checkbox, Pill } from "../ui";
-import { SANS, MONO, INK, MUTE, BRICK, OCHRE, DEEPTEAL, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
+import { SANS, MONO, INK, MUTE, DEEPTEAL, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS, softTint } from "../theme";
 import { InfoIcon, KindChainLine } from "./InfoModal";
 import { domainLabel, kindStatusLabel, itemTypeLabel, kindTypeLabel } from "../constants";
 import { kindAttention } from "../lib/graph";
-
-const ATTENTION_COLORS = { overdue: BRICK, attention: OCHRE };
 
 function timingLabel(timing) {
   if (!timing) return null;

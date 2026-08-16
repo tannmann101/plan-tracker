@@ -104,3 +104,8 @@ export const STATUS_COLORS = {
   "almost-done": BRASS,
   done: MOSS,
 };
+
+// Matches kindAttention()'s levels in src/lib/graph.js -- shared by
+// EntityCard's pill/hint and Trends' Needs Attention panel so the two
+// surfaces never drift into picking different colors for the same level.
+export const ATTENTION_COLORS = { overdue: BRICK, attention: OCHRE };
