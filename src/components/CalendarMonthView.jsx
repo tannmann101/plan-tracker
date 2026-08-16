@@ -4,12 +4,9 @@ import { SANS, MONO, INK, MUTE, LINE, INKBLUE, INKBLUE_SOFT, CARD, RADIUS_SM } f
 import { EntityCard } from "./EntityCard";
 import AddForm from "./AddForm";
 import EditEntityModal from "./EditEntityModal";
+import { isoDate } from "../constants";
 
 const WEEKDAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
-
-function toISO(d) {
-  return d.toISOString().slice(0, 10);
-}
 
 // Every date cell the grid needs to render a given month, including the
 // leading/trailing days from adjacent months that fill out the first/last
@@ -42,7 +39,7 @@ export default function CalendarMonthView({ secretary, onNavigateKind }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  const today = toISO(new Date());
+  const today = isoDate(new Date());
   const days = monthGridDays(monthStart);
   const monthLabel = monthStart.toLocaleDateString(undefined, { month: "long", year: "numeric" });
 
@@ -73,7 +70,7 @@ export default function CalendarMonthView({ secretary, onNavigateKind }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(7, 1fr)", gap: 4 }}>
         {days.map((d) => {
-          const iso = toISO(d);
+          const iso = isoDate(d);
           const inMonth = d.getMonth() === monthStart.getMonth();
           const isToday = iso === today;
           const isSelected = iso === selectedDay;

@@ -3,7 +3,7 @@ import { signOut } from "firebase/auth";
 import { Btn, SectionTitle, Note, Card, Input, Textarea } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, LINE } from "../theme";
 import { auth } from "../firebase";
-import { OWNERS, DEFAULT_DOMAINS, DEFAULT_RESOURCES } from "../constants";
+import { OWNERS, DEFAULT_DOMAINS, DEFAULT_RESOURCES, todayISO } from "../constants";
 
 // Copy-only editor -- the seven domains themselves are a taxonomy decision
 // (§3.1), not something this screen lets you add to or remove; only their
@@ -149,7 +149,7 @@ function buildStateExport(secretary) {
 function ExportState({ secretary }) {
   const run = () => {
     const { json, md } = buildStateExport(secretary);
-    const stamp = new Date().toISOString().slice(0, 10);
+    const stamp = todayISO();
     downloadFile(`secretary-state-${stamp}.md`, md, "text/markdown");
     downloadFile(`secretary-state-${stamp}.json`, JSON.stringify(json, null, 2), "application/json");
   };

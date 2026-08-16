@@ -1,25 +1,27 @@
 import { useState } from "react";
-import { Btn, SectionTitle, Note, TabBar } from "../ui";
+import { Btn, SectionTitle, Note, TabBar, ExpandableRail } from "../ui";
 import { MUTE, INK, MONO, INKBLUE, DOMAIN_COLORS } from "../theme";
 import { EntityCard } from "../components/EntityCard";
+import { TimeGridDay } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import CalendarMonthView from "../components/CalendarMonthView";
 import { HorizontalBarChart } from "../components/charts";
-import { weekStartISO, domainLabel } from "../constants";
+import { weekStartISO, addDaysISO, domainLabel } from "../constants";
 
 const VIEW_TABS = [
   { id: "week", label: "Week" },
   { id: "month", label: "Month" },
 ];
 
-const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const LAYOUT_TABS = [
+  { id: "blocked", label: "Time-blocked" },
+  { id: "list", label: "List" },
+];
 
-function addDaysISO(iso, n) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
-}
+const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const START_HOUR = 6;
+const END_HOUR = 21;
 
 // §7 -- Week/Month toggle, indefinite forward/back navigation in both
 // modes, a Monday-start week grid distinguishing floating from timed
@@ -27,8 +29,10 @@ function addDaysISO(iso, n) {
 // Items-only).
 export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate }) {
   const [view, setView] = useState("week");
+  const [layout, setLayout] = useState("blocked");
   const [weekStart, setWeekStart] = useState(() => weekStartISO());
   const [adding, setAdding] = useState(false);
+  const [addDefaults, setAddDefaults] = useState(null);
   const [editing, setEditing] = useState(null);
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
@@ -41,6 +45,8 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
 
   const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
   const openEdit = (fam, e) => setEditing({ family: fam, entity: e });
+  const openAdd = (defaults) => { setAddDefaults(defaults); setAdding(true); };
+  const onSlotClick = (iso, hour) => openAdd({ targetDay: iso, time: `${String(hour).padStart(2, "0")}:00` });
 
   const domainCounts = {};
   for (const i of weekItems) domainCounts[i.domain] = (domainCounts[i.domain] || 0) + 1;
@@ -55,7 +61,8 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
         <SectionTitle note={view === "week" ? `${weekStart} → ${weekEnd}` : undefined}>Week / Calendar</SectionTitle>
         <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center", flexWrap: "wrap" }}>
           <TabBar tabs={VIEW_TABS} active={view} onChange={setView} />
-          <Btn small primary color={INKBLUE} onClick={() => setAdding(true)}>+ Add</Btn>
+          {view === "week" && <TabBar tabs={LAYOUT_TABS} active={layout} onChange={setLayout} />}
+          <Btn small primary color={INKBLUE} onClick={() => openAdd({ targetDay: weekStart })}>+ Add</Btn>
         </div>
       </div>
 
@@ -68,25 +75,39 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                 <Btn small onClick={() => setWeekStart(weekStartISO())} color={MUTE}>This week</Btn>
                 <Btn small onClick={() => setWeekStart(addDaysISO(weekStart, 7))} color={MUTE}>Next week →</Btn>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
-                {weekDays.map((d, i) => (
-                  <div key={d}>
-                    <div style={{ fontFamily: MONO, fontSize: 11, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
-                      {WEEKDAY_LABELS[i]} <span style={{ color: MUTE, fontWeight: 400 }}>{d.slice(5)}</span>
+              {layout === "blocked" ? (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 10 }}>
+                  {weekDays.map((d, i) => (
+                    <TimeGridDay
+                      key={d} iso={d} label={`${WEEKDAY_LABELS[i]} ${d.slice(5)}`} isToday={false}
+                      floatingItems={byDay[d].filter((i) => i.timing?.floating !== false || !i.timing?.time)}
+                      timedItems={byDay[d].filter((i) => i.timing?.floating === false && i.timing?.time)}
+                      startHour={START_HOUR} endHour={END_HOUR}
+                      onToggleDone={toggleDone} onEdit={openEdit} onSlotClick={onSlotClick}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 12 }}>
+                  {weekDays.map((d, i) => (
+                    <div key={d}>
+                      <div style={{ fontFamily: MONO, fontSize: 11, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                        {WEEKDAY_LABELS[i]} <span style={{ color: MUTE, fontWeight: 400 }}>{d.slice(5)}</span>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        {byDay[d].length === 0 ? (
+                          <Note>—</Note>
+                        ) : byDay[d].map((item) => (
+                          <EntityCard
+                            key={item.id} family="item" entity={item} secretary={secretary}
+                            onToggleDone={toggleDone} onEdit={openEdit} onNavigateKind={onNavigateKind}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                      {byDay[d].length === 0 ? (
-                        <Note>—</Note>
-                      ) : byDay[d].map((item) => (
-                        <EntityCard
-                          key={item.id} family="item" entity={item} secretary={secretary}
-                          onToggleDone={toggleDone} onEdit={openEdit} onNavigateKind={onNavigateKind}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </>
           ) : (
             <CalendarMonthView secretary={secretary} onNavigateKind={onNavigateKind} />
@@ -94,15 +115,16 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
         </div>
 
         {view === "week" && (
-          <div style={{ flex: "1 1 220px", minWidth: 220 }}>
-            <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>Domain distribution, this week</div>
-            {domainRows.length === 0 ? <Note>Nothing placed this week yet.</Note> : <HorizontalBarChart rows={domainRows} />}
+          <div style={{ flex: "1 1 260px", minWidth: 260 }}>
+            <ExpandableRail title="Domain distribution, this week">
+              {domainRows.length === 0 ? <Note>Nothing placed this week yet.</Note> : <HorizontalBarChart rows={domainRows} />}
+            </ExpandableRail>
           </div>
         )}
       </div>
 
       {adding && (
-        <AddForm secretary={secretary} defaults={{ targetDay: weekStart }} onClose={() => setAdding(false)} onNavigate={onNavigate} />
+        <AddForm secretary={secretary} defaults={addDefaults || { targetDay: weekStart }} onClose={() => setAdding(false)} onNavigate={onNavigate} />
       )}
       {editing && (
         <EditEntityModal

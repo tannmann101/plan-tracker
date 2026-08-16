@@ -6,7 +6,7 @@ import { Field, TagsInput, MultiCheckList } from "../components/formFields";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import { Timeline } from "../components/charts";
-import { KIND_STATUSES, weekStartISO } from "../constants";
+import { KIND_STATUSES, weekStartISO, addDaysISO } from "../constants";
 import { practiceItemFor, allTagsInUse } from "../lib/graph";
 
 const TOP_TABS = [
@@ -16,12 +16,6 @@ const TOP_TABS = [
 
 function slugify(label) {
   return label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || `cat-${Date.now()}`;
-}
-
-function addDaysISO(iso, n) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
 }
 
 const WEEKDAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
@@ -193,7 +187,7 @@ function KanbanTab({ secretary, onNavigateKind }) {
 
   const timelineRows = kinds
     .filter((k) => k.timing?.dueDate)
-    .map((k) => ({ id: k.id, title: k.title, date: k.timing.dueDate, color: DOMAIN_COLORS[k.domain] || INKBLUE }));
+    .map((k) => ({ id: k.id, title: k.title, date: k.timing.dueDate, startDate: k.timing.startDate || null, color: DOMAIN_COLORS[k.domain] || INKBLUE }));
 
   return (
     <div>

@@ -1,18 +1,12 @@
 import { useEffect, useState } from "react";
-import { Btn, SectionTitle, Note, Pill } from "../ui";
+import { Btn, SectionTitle, Note, Pill, ExpandableRail } from "../ui";
 import { MONO, MUTE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
 import EditEntityModal from "../components/EditEntityModal";
 import AddForm from "../components/AddForm";
 import { Timeline, HorizontalBarChart, WeeklyBarChart } from "../components/charts";
 import { SecretaryChatPanel } from "./Secretary";
-import { domainLabel, weekStartISO } from "../constants";
-
-function addDaysISO(iso, n) {
-  const d = new Date(`${iso}T00:00:00`);
-  d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
-}
+import { domainLabel, weekStartISO, addDaysISO } from "../constants";
 
 // Last `n` week-starts (oldest first), each with a count of Items whose
 // completedAt fell in that week -- the tasks-completed-over-time panel.
@@ -79,7 +73,7 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
 
   const timelineRows = (secretary.kinds || [])
     .filter((k) => k.timing?.dueDate)
-    .map((k) => ({ id: k.id, title: k.title, date: k.timing.dueDate, color: DOMAIN_COLORS[k.domain] || INKBLUE }));
+    .map((k) => ({ id: k.id, title: k.title, date: k.timing.dueDate, startDate: k.timing.startDate || null, color: DOMAIN_COLORS[k.domain] || INKBLUE }));
 
   return (
     <div>
@@ -122,11 +116,17 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
           <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>This week</div>
           <Note>{weekItems.length} Item{weekItems.length === 1 ? "" : "s"} placed, {weekItems.filter((i) => i.done).length} done.</Note>
 
-          <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", margin: "18px 0 8px" }}>Domain distribution</div>
-          {domainRows.length === 0 ? <Note>Nothing yet.</Note> : <HorizontalBarChart rows={domainRows} />}
+          <div style={{ marginTop: 18 }}>
+            <ExpandableRail title="Domain distribution">
+              {domainRows.length === 0 ? <Note>Nothing yet.</Note> : <HorizontalBarChart rows={domainRows} />}
+            </ExpandableRail>
+          </div>
 
-          <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", margin: "18px 0 8px" }}>Completed, last 8 weeks</div>
-          <WeeklyBarChart data={completedData} series={completedSeries} />
+          <div style={{ marginTop: 18 }}>
+            <ExpandableRail title="Completed, last 8 weeks">
+              <WeeklyBarChart data={completedData} series={completedSeries} />
+            </ExpandableRail>
+          </div>
 
           <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", margin: "18px 0 8px" }}>Filter by domain</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal, Btn, Input, Select } from "../ui";
 import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, BRICK } from "../theme";
-import { KIND_STATUSES, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES } from "../constants";
+import { KIND_STATUSES, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, DURATION_OPTIONS, DEFAULT_DURATION_MINUTES } from "../constants";
 import { allTagsInUse, kindSubtreeIds, itemsForKind } from "../lib/graph";
 import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker } from "./formFields";
 
@@ -26,6 +26,8 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
   const [targetDay, setTargetDay] = useState(entity.timing?.targetDay || "");
   const [floating, setFloating] = useState(entity.timing?.floating !== false);
   const [time, setTime] = useState(entity.timing?.time || "");
+  const [durationMinutes, setDurationMinutes] = useState(String(entity.timing?.durationMinutes || DEFAULT_DURATION_MINUTES));
+  const [startDate, setStartDate] = useState(entity.timing?.startDate || "");
   const [dueDate, setDueDate] = useState(entity.timing?.dueDate || "");
   const [milestones, setMilestones] = useState(entity.timing?.milestones || []);
 
@@ -46,7 +48,7 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
       const patch = { ...entity, title: title.trim(), domain, secondaryDomains, resources, tags, parentKindId: parentKindId || null };
       if (family === "kind") {
         patch.status = status;
-        patch.timing = (dueDate || milestones.length) ? { dueDate: dueDate || null, milestones } : null;
+        patch.timing = (startDate || dueDate || milestones.length) ? { startDate: startDate || null, dueDate: dueDate || null, milestones } : null;
         if (entity.kindType === "project") {
           patch.initiator = initiator;
           patch.familyScope = familyScope;
@@ -57,7 +59,11 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
         patch.done = done;
         patch.completedAt = done ? (entity.completedAt || Date.now()) : null;
         patch.timing = (targetDay || dueDate || milestones.length)
-          ? { targetDay: targetDay || null, time: floating ? null : (time || null), dueDate: dueDate || null, floating, milestones }
+          ? {
+              targetDay: targetDay || null, time: floating ? null : (time || null),
+              durationMinutes: floating ? null : Number(durationMinutes),
+              dueDate: dueDate || null, floating, milestones,
+            }
           : null;
       }
       await secretary.saveEntity(family, patch);
@@ -135,6 +141,9 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
               )}
             </>
           )}
+          <Field label="Start date (optional)">
+            <Input type="date" value={startDate} onChange={setStartDate} />
+          </Field>
           <Field label="Due date (optional)">
             <Input type="date" value={dueDate} onChange={setDueDate} />
           </Field>
@@ -161,9 +170,14 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
             Floating (no specific time)
           </label>
           {!floating && (
-            <Field label="Time">
-              <Input type="time" value={time} onChange={setTime} />
-            </Field>
+            <>
+              <Field label="Time">
+                <Input type="time" value={time} onChange={setTime} />
+              </Field>
+              <Field label="Duration">
+                <Select value={durationMinutes} onChange={setDurationMinutes} options={DURATION_OPTIONS} />
+              </Field>
+            </>
           )}
           <Field label="Due date (optional, if different)">
             <Input type="date" value={dueDate} onChange={setDueDate} />
