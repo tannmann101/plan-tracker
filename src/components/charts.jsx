@@ -7,14 +7,14 @@
 // baseline hover tooltip rather than a full custom tooltip layer, kept
 // deliberately light given how many other surfaces this release touches.
 
-import { MONO, SANS, INK, MUTE, LINE, INKBLUE } from "../theme";
+import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, softTint } from "../theme";
 import { todayISO } from "../constants";
 
 const NUM = (n) => n.toLocaleString();
 const DAY = 24 * 60 * 60 * 1000;
 
 // Picks a clean-ish max for the y-axis (nearest round step above the data max).
-function niceMax(max) {
+export function niceMax(max) {
   if (max <= 0) return 4;
   const step = Math.pow(10, Math.floor(Math.log10(max)));
   const rounded = Math.ceil(max / (step / 2)) * (step / 2);
@@ -54,7 +54,7 @@ export function WeeklyBarChart({ data, series, height = 160 }) {
         return (
           <g key={frac}>
             <line x1={padL} x2={width} y1={y} y2={y} stroke={LINE} strokeWidth={1} />
-            <text x={padL - 6} y={y + 3} textAnchor="end" fontFamily={MONO} fontSize={9} fill={MUTE}>{NUM(Math.round(max * frac))}</text>
+            <text x={padL - 6} y={y + 3} textAnchor="end" fontFamily={MONO} fontSize={9} fill={MUTE}>{NUM(Math.round(max * frac * 10) / 10)}</text>
           </g>
         );
       })}
@@ -136,21 +136,30 @@ export function HorizontalBarChart({ rows, height = 22, max: fixedMax }) {
 // labeled at the line's end only.
 export function LineChart({ points, color, height = 140, yMax = 100, yUnit = "%" }) {
   const width = 640;
-  const padL = 34, padB = 20, padT = 14;
-  const plotW = width - padL - 30;
+  // padR reserves room for the end-label text itself (up to ~6 chars at
+  // this font/size, e.g. "100.0%") -- past experience: too small a margin
+  // here lets the label overflow the viewBox, and a root <svg> clips
+  // overflow by default, so the last character or two silently vanishes.
+  const padL = 34, padB = 20, padT = 14, padR = 46;
+  const plotW = width - padL - padR;
   const plotH = height - padB - padT;
   const valid = points.filter((p) => p.y !== null);
   if (valid.length === 0) {
-    return <p style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>Not enough completed work yet to chart this.</p>;
+    return <p style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>Not enough data yet to chart this.</p>;
   }
   const stepX = plotW / Math.max(1, points.length - 1);
+  // Pixel coordinates get their own field names (px/py) rather than x/y --
+  // points already carry their own data "y" (the value being plotted), and
+  // a computed field of the same name spread in the wrong order previously
+  // clobbered it silently (see git history). Keeping them distinct means
+  // there's no ordering to get wrong and c.y always still means the value.
   const coords = points.map((p, i) => ({
-    x: padL + i * stepX,
-    y: p.y === null ? null : padT + plotH * (1 - p.y / yMax),
     ...p,
+    px: padL + i * stepX,
+    py: p.y === null ? null : padT + plotH * (1 - p.y / yMax),
   }));
-  const pathCoords = coords.filter((c) => c.y !== null);
-  const path = pathCoords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x},${c.y}`).join(" ");
+  const pathCoords = coords.filter((c) => c.py !== null);
+  const path = pathCoords.map((c, i) => `${i === 0 ? "M" : "L"}${c.px},${c.py}`).join(" ");
   const last = pathCoords[pathCoords.length - 1];
 
   return (
@@ -160,18 +169,18 @@ export function LineChart({ points, color, height = 140, yMax = 100, yUnit = "%"
         return (
           <g key={frac}>
             <line x1={padL} x2={width} y1={y} y2={y} stroke={LINE} strokeWidth={1} />
-            <text x={padL - 6} y={y + 3} textAnchor="end" fontFamily={MONO} fontSize={9} fill={MUTE}>{Math.round(yMax * frac)}{yUnit}</text>
+            <text x={padL - 6} y={y + 3} textAnchor="end" fontFamily={MONO} fontSize={9} fill={MUTE}>{Math.round(yMax * frac * 10) / 10}{yUnit}</text>
           </g>
         );
       })}
       <path d={path} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" strokeLinecap="round" />
       {pathCoords.map((c) => (
-        <circle key={c.week} cx={c.x} cy={c.y} r={c.week === last.week ? 4 : 2.5} fill={color} stroke="#fff" strokeWidth={2}>
-          <title>{`${c.week}: ${c.y}${yUnit} (${c.total} completed)`}</title>
+        <circle key={c.week} cx={c.px} cy={c.py} r={c.week === last.week ? 4 : 2.5} fill={color} stroke="#fff" strokeWidth={2}>
+          <title>{`${c.week}: ${c.y}${yUnit}${c.note ? ` (${c.note})` : ""}`}</title>
         </circle>
       ))}
       {last && (
-        <text x={last.x + 6} y={last.y + 3} fontFamily={MONO} fontSize={11} fontWeight={600} fill={INK}>{last.y}{yUnit}</text>
+        <text x={last.px + 8} y={last.py + 3} fontFamily={MONO} fontSize={11} fontWeight={600} fill={INK}>{last.y}{yUnit}</text>
       )}
     </svg>
   );
@@ -231,5 +240,138 @@ export function Timeline({ rows, onClick, height = 90 }) {
         );
       })}
     </svg>
+  );
+}
+
+// A tiny de-emphasized trend line for a StatTile -- past points in the
+// de-emphasis hue, only the current/last point picked out in the tile's
+// own accent color, per the stat-tile figure contract (value first,
+// sparkline strictly secondary).
+function Sparkline({ points, color, width = 56, height = 22 }) {
+  const max = Math.max(1, ...points);
+  const stepX = width / Math.max(1, points.length - 1);
+  const coords = points.map((v, i) => ({ x: i * stepX, y: height - 2 - (v / max) * (height - 4) }));
+  const path = coords.map((c, i) => `${i === 0 ? "M" : "L"}${c.x},${c.y}`).join(" ");
+  const last = coords[coords.length - 1];
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ flex: "none" }} aria-hidden="true">
+      <path d={path} fill="none" stroke={MUTE_SOFT} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={last.x} cy={last.y} r={2.5} fill={color} stroke="#fff" strokeWidth={1.5} />
+    </svg>
+  );
+}
+
+// A KPI-row entry -- label/value/optional sublabel/optional trend, the
+// "stat tile" figure the dataviz skill calls for when the data's job is a
+// single current headline number rather than a chart. Deliberately the
+// first thing Trends shows: it still reads as intentional on day one, long
+// before any panel below has enough history to plot.
+export function StatTile({ label, value, sublabel, color = INKBLUE, trend }) {
+  return (
+    <div style={{ flex: "1 1 150px", minWidth: 140, padding: "13px 15px", background: "#fff", border: `1px solid ${LINE}`, borderRadius: 10 }}>
+      <div style={{ fontFamily: MONO, fontSize: 10, color: MUTE, textTransform: "uppercase", letterSpacing: "0.045em" }}>{label}</div>
+      <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8, marginTop: 5 }}>
+        <div style={{ fontFamily: SANS, fontSize: 25, fontWeight: 600, color: INK, lineHeight: 1 }}>{value}</div>
+        {trend && trend.length > 1 && <Sparkline points={trend} color={color} />}
+      </div>
+      {sublabel && <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, marginTop: 5 }}>{sublabel}</div>}
+    </div>
+  );
+}
+
+// A day grid per row (Practice Consistency) -- compare presence on a grid,
+// one hue throughout (the row doesn't invent a gradient for a binary
+// done/not-done cell): filled at full color when done, an empty outlined
+// square otherwise. A slightly wider gap after every 7th cell groups the
+// grid into weeks for the eye without adding gridlines.
+export function Heatmap({ rows, color = INKBLUE, cell = 13, gap = 3, weekGap = 5 }) {
+  if (rows.length === 0) return null;
+  const days = rows[0]?.cells.length || 0;
+  const labelW = 130;
+  const xFor = (ci) => ci * (cell + gap) + Math.floor(ci / 7) * (weekGap - gap);
+  const width = labelW + xFor(days - 1) + cell + 4;
+  const rowH = cell + gap;
+  const height = rows.length * rowH;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto" }} role="img">
+      {rows.map((r, ri) => (
+        <g key={r.id}>
+          <text x={labelW - 10} y={ri * rowH + cell / 2 + 4} textAnchor="end" fontFamily={MONO} fontSize={10} fill={INK}>
+            {r.title.length > 18 ? `${r.title.slice(0, 17)}…` : r.title}
+          </text>
+          {r.cells.map((c, ci) => (
+            <rect
+              key={c.day} x={labelW + xFor(ci)} y={ri * rowH} width={cell} height={cell} rx={3}
+              fill={c.done ? color : "none"} stroke={c.done ? "none" : LINE} strokeWidth={1}
+            >
+              <title>{`${r.title} -- ${c.day}: ${c.done ? "done" : "not done"}`}</title>
+            </rect>
+          ))}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// A discipline's past+current streak lengths in order, oldest to newest --
+// different information from a single "current streak" number: whether
+// relapses are getting rarer, streaks getting longer. One hue throughout;
+// the ongoing segment reads at full color, closed-out ones at a lighter
+// tint of that same hue, so "current" is intensity, not a second color.
+export function SegmentBars({ segments, color = INKBLUE, height = 56, barW = 16, gap = 5 }) {
+  if (segments.length === 0) return null;
+  const max = Math.max(1, ...segments.map((s) => s.days));
+  const width = segments.length * (barW + gap);
+  // Fixed pixel size, not width:100% -- a handful of narrow bars stretched
+  // to fill a card's full width would drag height up with them (the
+  // viewBox's aspect ratio is nowhere near the card's), so this renders at
+  // its own natural size instead of the other charts' responsive pattern.
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img">
+      {segments.map((s, i) => {
+        const h = Math.max(3, (s.days / max) * (height - 14));
+        const x = i * (barW + gap);
+        const y = height - 14 - h;
+        return (
+          <g key={i}>
+            <rect x={x} y={y} width={barW} height={h} rx={3} fill={s.ongoing ? color : softTint(color)}>
+              <title>{s.ongoing ? `Current streak: ${s.days}d` : `Past streak: ${s.days}d`}</title>
+            </rect>
+            <text x={x + barW / 2} y={height - 3} textAnchor="middle" fontFamily={MONO} fontSize={8.5} fill={MUTE}>{s.days}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// One thin single-hue meter per pipeline stage, stacked -- deliberately
+// NOT one merged multi-hue bar with touching segments: STATUS_COLORS is a
+// muted UI-accent set (see theme.js's own note on why) that reads fine as
+// a dot beside its own label but fails a chart-grade adjacent-hue check
+// (validated -- INKBLUE/SLATE sit under the normal-vision floor when
+// placed edge to edge). A meter's track is a lighter step of that same
+// stage's hue, so state reads without ever needing two stages' colors to
+// be told apart from each other.
+export function StatusMeters({ stages }) {
+  const total = stages.reduce((sum, s) => sum + s.count, 0);
+  if (total === 0) return null;
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+      {stages.map((s) => {
+        const pct = Math.round((s.count / total) * 100);
+        return (
+          <div key={s.status}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 10.5, color: INK, marginBottom: 4 }}>
+              <span>{s.label}</span>
+              <span style={{ color: MUTE }}>{s.count}</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 999, background: softTint(s.color), overflow: "hidden" }}>
+              <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: s.color }} title={`${s.label}: ${s.count} (${pct}%)`} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

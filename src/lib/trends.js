@@ -9,8 +9,8 @@
 // parentKindId chain reaches a Goal-kind Kind) rather than the old
 // Session→Plan→Goal chain, since that chain no longer exists.
 
-import { weekStartISO, domainLabel } from "../constants";
-import { kindAncestors } from "./graph";
+import { weekStartISO, domainLabel, todayISO, addDaysISO, KIND_STATUSES } from "../constants";
+import { kindAncestors, practiceItemFor, disciplineStreak } from "./graph";
 
 function weeksBack(n) {
   const weeks = [];
@@ -129,4 +129,98 @@ export function resourceUsageCounts(data) {
   return Object.entries(counts)
     .map(([resource, count]) => ({ resource, count }))
     .sort((a, b) => b.count - a.count);
+}
+
+// Per active-practice day grid, most recent `days` days -- the same
+// find-or-nothing lookup the Plans tracker and Today/Week's own checkbox
+// use (practiceItemFor), so this can never show a day as done that
+// wouldn't also show done everywhere else. completionRate is over the
+// whole window, not just days the habit has existed, so a brand-new habit
+// starts low and visibly climbs as it's kept up -- the exact "populates as
+// engagement persists" behavior this panel is for.
+export function practiceConsistency(data, days = 28) {
+  const { practiceHabits = [], items = [] } = data;
+  const today = todayISO();
+  const dayList = Array.from({ length: days }, (_, i) => addDaysISO(today, i - (days - 1)));
+  return (practiceHabits || [])
+    .filter((h) => h.active !== false)
+    .map((h) => {
+      const cells = dayList.map((day) => ({ day, done: !!practiceItemFor(h.id, day, items)?.done }));
+      const doneCount = cells.filter((c) => c.done).length;
+      return { id: h.id, title: h.title, categoryId: h.categoryId, cells, completionRate: Math.round((doneCount / days) * 100) };
+    })
+    .sort((a, b) => b.completionRate - a.completionRate);
+}
+
+// Every discipline's full streak history, reconstructed from its own
+// append-only event trail rather than any stored "history" field -- a
+// "started" or "relapsed" event is the only thing that ever resets the
+// clock (see useSecretary.js's saveDiscipline), so each one marks a new
+// segment's start; a "resolved" event (or, failing that, now) closes the
+// final segment. Segments before the most recent one are always closed;
+// the last one is "ongoing" unless the discipline has since been resolved.
+export function disciplineStreakHistory(data) {
+  const { disciplines = [], events = [] } = data;
+  return (disciplines || [])
+    .map((d) => {
+      const discEvents = events
+        .filter((e) => e.entityType === "discipline" && e.entityId === d.id)
+        .sort((a, b) => a.at - b.at);
+      const starts = discEvents.filter((e) => e.to === "started" || e.to === "relapsed").map((e) => e.at);
+      const resolvedEvent = [...discEvents].reverse().find((e) => e.to === "resolved" || e.to === "deleted");
+
+      const segments = starts.length
+        ? starts.map((startAt, i) => {
+            const nextStart = starts[i + 1];
+            const closesOnResolve = !nextStart && resolvedEvent && resolvedEvent.at > startAt;
+            const endAt = nextStart || (closesOnResolve ? resolvedEvent.at : Date.now());
+            const ongoing = !nextStart && !closesOnResolve;
+            return { days: Math.max(0, Math.floor((endAt - startAt) / 86400000)), ongoing };
+          })
+        // No event history at all (e.g. seeded outside saveDiscipline) --
+        // fall back to the live calc so the panel still shows something.
+        : [{ days: disciplineStreak(d).days, ongoing: !d.resolved }];
+
+      // The last segment IS the current streak -- reading it back off
+      // segments (rather than a separate disciplineStreak(d) call here)
+      // means a resolved discipline's number freezes at its actual final
+      // length instead of continuing to grow off startedAt forever after
+      // resolution (startedAt itself never changes once resolved).
+      const currentStreakDays = segments[segments.length - 1].days;
+      const longestStreakDays = Math.max(...segments.map((s) => s.days), 0);
+      const totalRelapses = discEvents.filter((e) => e.to === "relapsed").length;
+
+      return {
+        id: d.id, title: d.title, type: d.type, resolved: !!d.resolved, focused: !!d.focused,
+        currentStreakDays, longestStreakDays, totalRelapses, segments,
+      };
+    })
+    .sort((a, b) => (a.resolved === b.resolved ? b.currentStreakDays - a.currentStreakDays : a.resolved ? 1 : -1));
+}
+
+// Count of Kinds per lifecycle status -- "the shape of the pipeline right
+// now" -- one entry per KIND_STATUSES bucket regardless of kindType, since
+// Trends' Pipeline panel splits by type itself when it wants to.
+export function kindStatusCounts(data, kindType = null) {
+  const { kinds = [] } = data;
+  const scoped = kindType ? kinds.filter((k) => k.kindType === kindType) : kinds;
+  return KIND_STATUSES.map((s) => ({
+    status: s.id, label: s.label, count: scoped.filter((k) => k.status === s.id).length,
+  }));
+}
+
+// Hours actually time-blocked (a timed, non-floating Item's durationMinutes)
+// per week, by the Item's own targetDay -- adoption of the time-blocking
+// feature itself, not just how much got done.
+export function timeBlockedHoursPerWeek(data, weeks = 12) {
+  const { items = [] } = data;
+  const weekList = weeksBack(weeks);
+  const buckets = Object.fromEntries(weekList.map((w) => [w, 0]));
+  for (const i of items) {
+    if (i.timing?.floating !== false || !i.timing?.time || !i.timing?.targetDay) continue;
+    const week = weekStartISO(new Date(`${i.timing.targetDay}T00:00:00`));
+    if (!(week in buckets)) continue;
+    buckets[week] += (i.timing.durationMinutes || 30) / 60;
+  }
+  return weekList.map((week) => ({ week, hours: Math.round(buckets[week] * 10) / 10 }));
 }
