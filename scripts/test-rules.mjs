@@ -304,6 +304,21 @@ try {
 } catch (e) {
   check("item with an empty title is rejected", false);
 }
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "items/item-progress"), validItem({
+    itemType: "other", domain: "practices", isRecurringPracticeItem: true, practiceHabitId: "habit1", progressAmount: 2,
+  })));
+  check("item with a progressAmount is allowed", true);
+} catch (e) {
+  check("item with a progressAmount is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "items/item-bad-progress"), validItem({ progressAmount: "two" })));
+  check("item with a wrong-typed progressAmount is rejected", true);
+} catch (e) {
+  check("item with a wrong-typed progressAmount is rejected", false);
+}
 
 try {
   const { categoryId: _cid, ...missingCategory } = validPracticeHabit();
@@ -318,6 +333,21 @@ try {
 } catch (e) {
   check("practice habit with a frequency map is allowed", false);
   console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "practiceHabits/habit-goal-linked"), validPracticeHabit({
+    linkedKindId: "kind1", progressUnit: "chapters", progressTarget: 12,
+  })));
+  check("practice habit with linkedKindId/progressUnit/progressTarget is allowed", true);
+} catch (e) {
+  check("practice habit with linkedKindId/progressUnit/progressTarget is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "practiceHabits/habit-bad-target"), validPracticeHabit({ progressTarget: "twelve" })));
+  check("practice habit with a wrong-typed progressTarget is rejected", true);
+} catch (e) {
+  check("practice habit with a wrong-typed progressTarget is rejected", false);
 }
 
 try {

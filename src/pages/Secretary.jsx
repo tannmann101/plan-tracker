@@ -81,6 +81,7 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
         payload.practiceHabitId = op.patch.practiceHabitId;
         payload.done = !!op.patch.done;
         payload.completedAt = op.patch.done ? Date.now() : null;
+        if (op.patch.progressAmount != null) payload.progressAmount = op.patch.progressAmount;
       }
       payload.createdVia = op.patch.createdVia || "capture";
       await secretary.saveEntity(family, payload);

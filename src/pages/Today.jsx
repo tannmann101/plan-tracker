@@ -45,7 +45,10 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
     .filter((i) => i.timing?.targetDay === d)
     .sort((a, b) => Number(!!a.done) - Number(!!b.done) || (a.timing?.time || "").localeCompare(b.timing?.time || ""))]));
 
-  const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
+  const toggleDone = (entity, next) => secretary.saveEntity("item", {
+    ...entity, done: next, completedAt: next ? Date.now() : null,
+    ...(entity.isRecurringPracticeItem ? { progressAmount: next ? (entity.progressAmount || 1) : 0 } : {}),
+  });
 
   const openAdd = (defaults) => { setAddDefaults(defaults); setAdding(true); };
   const onSlotClick = (iso, hour) => openAdd({ targetDay: iso, time: `${String(hour).padStart(2, "0")}:00` });

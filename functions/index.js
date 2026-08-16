@@ -122,6 +122,7 @@ function itemPatch(draft) {
   if (draft.practiceHabitId) {
     patch.isRecurringPracticeItem = true;
     patch.practiceHabitId = draft.practiceHabitId;
+    if (draft.progressAmount != null) patch.progressAmount = draft.progressAmount;
   }
   return patch;
 }
@@ -316,8 +317,9 @@ Schema:
     "time": string or null (ISO 24h "HH:MM" -- only set this for a genuinely time-blocked Item; leave null for a floating one),
     "durationMinutes": number or null (only meaningful alongside "time"; default 30 if the conversation doesn't say),
     "parentKindId": string or null,
-    "practiceHabitId": string or null (only set when checking a Practice habit off/on for a day -- an id from practiceHabits below; pair with "targetDay" and "done"),
-    "done": boolean or null (only meaningful alongside "practiceHabitId" -- true to mark that day's practice complete, false to un-mark it),
+    "practiceHabitId": string or null (only set when checking a Practice habit off/on for a day, or logging an amount against a goal-linked one -- an id from practiceHabits below; pair with "targetDay" and "done", and "progressAmount" for a goal-linked habit),
+    "done": boolean or null (only meaningful alongside "practiceHabitId" -- true to mark that day's practice complete, false to un-mark it; for a goal-linked habit, true whenever progressAmount is greater than 0),
+    "progressAmount": number or null (only meaningful alongside "practiceHabitId" for a habit that has progressUnit/progressTarget set -- the amount to log for that day in its progressUnit, e.g. chapters read; omit/null for a plain, non-goal-linked habit),
     "note": string (one sentence explaining the proposal -- when you scheduled around a conflict, say so here)
   }
 }
@@ -327,6 +329,8 @@ Only set proposedOperation when the conversation actually calls for creating or 
 Scheduling: when the household asks you to book, schedule, or time-block something, check existingItems below for that day before proposing a "time" -- an Item's time slot runs from its "time" for "durationMinutes" (default 30 if absent); existingItems includes both timed and floating Items so you have the full picture of what's already placed, but only timed ones (time set, not null) can actually collide. If the requested time collides with an existing Item, do not silently double-book it: either pick the nearest genuinely free slot that still fits what was asked (same day, closest to the requested time) and say so plainly in "note" and "reply", or, if nothing reasonable is free that day, set proposedOperation to null, explain the conflict in "reply", and ask how the household wants to resolve it (move the existing Item, pick a different day, or double-book on purpose). Never invent a "resolution" the household didn't ask for -- point out the conflict and let them decide when it's ambiguous.
 
 Practices: practiceHabits below lists every active Practice habit with today's completion state and this week's tally, so you can answer "did I do X today/this week" directly. If asked to check one off (or un-check it), propose an update-item targeting its "todayItemId" when set and the day in question is today (family "item", practiceHabitId set, done as asked) -- or, when there's no Item yet for that day (todayItemId null, or a day other than today), propose a create-item with the same practiceHabitId/targetDay/done, itemType "other", domain "practices", and leave time/durationMinutes null (a practice check-in is always floating). Never propose creating a brand-new Practice habit *definition* -- if asked to add one, tell the household to add it from Plans' Practices tab.
+
+Goal-linked practices: some practiceHabits build toward a Goal or Project instead of a plain daily checkbox -- those entries carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget (e.g. a "Read" habit linked to a "Read 1 book a month" Goal, progressUnit "chapters", progressCurrent 4, progressTarget 12). When the household reports progress on one of these ("I read 2 chapters today"), propose the same update-item/create-item shape as any other check-in, but set "progressAmount" to the amount and "done" to true (progressAmount 0 with done false to undo a day's log) -- never invent a running total yourself, it's always the sum of each day's progressAmount, computed client-side. Report progressCurrent/progressTarget/progressUnit plainly when asked how a goal is going. You can draft the Goal/Project Kind itself as a normal create-kind proposal when the household describes a new one -- but linking a Practice habit to it (setting its progressUnit/progressTarget) isn't something you can propose; direct the household to Plans' Practices tab to link the habit once the Kind exists, since it's a direct edit to the habit's own definition, not a create/update-item operation. Once a goal-linked habit's target is reached, the household closes it out from Plans ("Mark goal reached"), which turns it back into a plain weekly-checkbox habit -- you'll see linkedKindId disappear from that habit's entry afterward.
 
 Habits to Break: disciplines below lists every habit currently being eliminated (pulled "into focus"), each with its live streak and the next milestone it's working toward. Discuss progress, offer encouragement, and reference the streak/milestone naturally -- but you cannot log a relapse, change whether one is in focus, or mark one resolved yourself; there is no operation for that. If asked to do one of those, tell the household it's done from Plans' "Habits to Break" section, or from that habit's chip on Today/Week.
 
@@ -340,7 +344,7 @@ existingKinds (id/title/kindType/domain, for parentKindId/targetId matching): ${
 
 existingItems (id/title/domain/targetDay/floating/time/durationMinutes -- today through the next 2 weeks, for scheduling/overlap checks and general awareness): ${JSON.stringify(existingItems)}
 
-practiceHabits (id/title/categoryId/todayItemId/todayDone/weekDoneCount out of weekTotalDays): ${JSON.stringify(practiceHabits)}
+practiceHabits (id/title/categoryId/todayItemId/todayDone/weekDoneCount out of weekTotalDays; goal-linked ones also carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget): ${JSON.stringify(practiceHabits)}
 
 disciplines (id/title/type/streakDays/nextMilestoneLabel/daysToNextMilestone -- only ones currently in focus): ${JSON.stringify(disciplines)}
 
