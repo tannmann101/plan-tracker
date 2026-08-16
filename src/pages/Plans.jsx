@@ -1,13 +1,13 @@
 import { Fragment, useState } from "react";
-import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, LINE, DOMAIN_COLORS, STATUS_COLORS } from "../theme";
+import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox, Pill, ProgressBar } from "../ui";
+import { SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
-import { Field, TagsInput, MultiCheckList } from "../components/formFields";
+import { Field, TagsInput, MultiCheckList, DisciplineMilestonesEditor } from "../components/formFields";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import { Timeline } from "../components/charts";
-import { KIND_STATUSES, weekStartISO, addDaysISO } from "../constants";
-import { practiceItemFor, allTagsInUse } from "../lib/graph";
+import { KIND_STATUSES, weekStartISO, addDaysISO, domainLabel, DEFAULT_DISCIPLINE_MILESTONES } from "../constants";
+import { practiceItemFor, allTagsInUse, disciplineStreak } from "../lib/graph";
 
 const TOP_TABS = [
   { id: "practices", label: "Practices" },
@@ -201,7 +201,181 @@ function PracticesTab({ secretary }) {
           </table>
         </div>
       )}
+
+      <DisciplinesSection secretary={secretary} />
     </div>
+  );
+}
+
+// The inverse of a practice: not something you do and check off, but a bad
+// habit you're actively eliminating. "Focus" is the pull-into-background
+// toggle -- a focused, unresolved discipline shows as a chip on Today/Week
+// (TimeGrid.jsx). Streak days count up live from startedAt; "Slipped
+// today" resets that clock rather than requiring per-day check-ins, and
+// every meaningful transition is event-logged (useSecretary.js) so Trends
+// can plot streak history later.
+function DisciplinesSection({ secretary }) {
+  const disciplines = secretary.disciplines || [];
+  const active = disciplines.filter((d) => !d.resolved);
+  const resolved = disciplines.filter((d) => d.resolved);
+
+  const [editingId, setEditingId] = useState(null);
+  const [title, setTitle] = useState("");
+  const [domain, setDomain] = useState(secretary.domains[0]?.id || "");
+  const [resources, setResources] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [milestones, setMilestones] = useState(DEFAULT_DISCIPLINE_MILESTONES);
+
+  const tagSuggestions = allTagsInUse(secretary);
+
+  const resetForm = () => {
+    setEditingId(null);
+    setTitle("");
+    setDomain(secretary.domains[0]?.id || "");
+    setResources([]);
+    setTags([]);
+    setMilestones(DEFAULT_DISCIPLINE_MILESTONES);
+  };
+
+  const startEdit = (d) => {
+    setEditingId(d.id);
+    setTitle(d.title);
+    setDomain(d.domain);
+    setResources(d.resources || []);
+    setTags(d.tags || []);
+    setMilestones(d.milestones || []);
+  };
+
+  const save = async () => {
+    const t = title.trim();
+    if (!t || !domain) return;
+    const editing = editingId ? disciplines.find((d) => d.id === editingId) : null;
+    await secretary.saveDiscipline({
+      id: editingId || undefined,
+      title: t, domain, resources, tags, milestones,
+      focused: editing?.focused ?? true,
+      resolved: editing?.resolved || false,
+      startedAt: editing?.startedAt || Date.now(),
+    });
+    resetForm();
+  };
+
+  const slip = (d) => secretary.saveDiscipline({ ...d, startedAt: Date.now() });
+  const toggleFocus = (d) => secretary.saveDiscipline({ ...d, focused: !d.focused });
+  const resolve = (d) => secretary.saveDiscipline({ ...d, focused: false, resolved: true });
+
+  return (
+    <>
+      <SectionTitle note="not something you check off -- something you're weeding out">Habits to Break</SectionTitle>
+      <Note>
+        Pull a habit "into focus" and it shows up as a background chip on Today and Week while it's being dealt with, with a live streak count. "Slipped today" resets the clock rather than needing a daily check-in; every reset/pause/resolve is logged for Trends to use later.
+      </Note>
+
+      <div style={{ marginTop: 10 }}>
+        <SectionTitle note="habit definitions">{editingId ? "Edit Habit to Break" : "Add a Habit to Break"}</SectionTitle>
+        <Card>
+          <Field label="Name">
+            <Input value={title} onChange={setTitle} placeholder="e.g. Quit smoking" />
+          </Field>
+          <Field label="Domain">
+            <Select value={domain} onChange={setDomain} options={secretary.domains} />
+          </Field>
+          <Field label="Milestones (days since last reset)">
+            <DisciplineMilestonesEditor value={milestones} onChange={setMilestones} />
+          </Field>
+          <Field label="Resources">
+            <MultiCheckList options={secretary.resources} value={resources} onChange={setResources} />
+          </Field>
+          <Field label="Tags">
+            <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
+          </Field>
+          <div style={{ display: "flex", gap: 8 }}>
+            <Btn primary color={BRICK} disabled={!title.trim() || !domain} onClick={save}>
+              {editingId ? "Save changes" : "Add habit to break"}
+            </Btn>
+            {editingId && <Btn color={MUTE} onClick={resetForm}>Cancel</Btn>}
+          </div>
+        </Card>
+      </div>
+
+      {active.length === 0 ? (
+        <Note>No habits being tracked for elimination.</Note>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+          {active.map((d) => {
+            const { days, nextMilestone, percent } = disciplineStreak(d);
+            const sortedMilestones = [...(d.milestones || [])].sort((a, b) => a.days - b.days);
+            return (
+              <Card key={d.id}>
+                <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 10, flexWrap: "wrap" }}>
+                  <div>
+                    <button
+                      type="button" onClick={() => startEdit(d)} title="Edit"
+                      style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 13.5, fontWeight: 500, color: INK, textAlign: "left", textDecoration: editingId === d.id ? "underline" : "none" }}
+                    >
+                      {d.title}
+                    </button>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                      <Pill color={DOMAIN_COLORS[d.domain] || MUTE} tint={softTint(DOMAIN_COLORS[d.domain] || MUTE)}>{domainLabel(d.domain, secretary.domains)}</Pill>
+                      {d.focused && <Pill color={BRICK} tint={softTint(BRICK)}>in focus</Pill>}
+                    </div>
+                  </div>
+                  <button type="button" onClick={() => secretary.deleteDiscipline(d.id)} title="Delete" style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", fontSize: 13 }}>×</button>
+                </div>
+
+                <div style={{ fontFamily: SANS, fontSize: 22, fontWeight: 600, color: BRICK, marginTop: 10 }}>
+                  {days} {days === 1 ? "day" : "days"}
+                </div>
+                {nextMilestone ? (
+                  <>
+                    <ProgressBar percent={percent} color={BRICK} />
+                    <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, marginTop: 2 }}>
+                      {nextMilestone.days - days} day{nextMilestone.days - days === 1 ? "" : "s"} to "{nextMilestone.label}"
+                    </div>
+                  </>
+                ) : sortedMilestones.length > 0 ? (
+                  <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, marginTop: 4 }}>Past every milestone set for this.</div>
+                ) : null}
+
+                {sortedMilestones.length > 0 && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                    {sortedMilestones.map((m) => (
+                      <Pill key={m.id} color={m.days <= days ? BRICK : MUTE} tint={m.days <= days ? softTint(BRICK) : undefined}>
+                        {m.days <= days ? "✓ " : ""}{m.label}
+                      </Pill>
+                    ))}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                  <Btn small color={BRICK} onClick={() => slip(d)}>Slipped today</Btn>
+                  <Btn small color={MUTE} onClick={() => toggleFocus(d)}>{d.focused ? "Stop focusing" : "Pull into focus"}</Btn>
+                  <Btn small color={MUTE} onClick={() => resolve(d)}>Mark resolved</Btn>
+                </div>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+
+      {resolved.length > 0 && (
+        <div style={{ marginTop: 14 }}>
+          <SectionTitle note="fully broken">Resolved</SectionTitle>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {resolved.map((d) => {
+              const { days } = disciplineStreak(d);
+              return (
+                <Pill key={d.id} color={MUTE} title="Click to re-focus if it comes back">
+                  <span onClick={() => secretary.saveDiscipline({ ...d, resolved: false, focused: false })} style={{ cursor: "pointer" }}>
+                    {d.title} -- {days}d
+                  </span>
+                </Pill>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

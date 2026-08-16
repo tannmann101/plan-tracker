@@ -182,6 +182,24 @@ export function upcomingTimedItems(items, days = 14) {
     .map((i) => ({ id: i.id, title: i.title, domain: i.domain, targetDay: i.timing.targetDay, time: i.timing.time, durationMinutes: i.timing.durationMinutes || 30 }));
 }
 
+// Streak math for a discipline (Plans' "Habits to Break", §9.1 companion):
+// milestones are day-offsets from startedAt rather than fixed dates, so
+// they recompute automatically once a relapse resets startedAt to now --
+// there's no separate "current milestone" field to fall out of sync with
+// the clock. percent is against the span between the last-reached and
+// next milestone (or straight to 100 once every milestone is cleared).
+export function disciplineStreak(discipline) {
+  if (!discipline?.startedAt) return { days: 0, prevMilestone: null, nextMilestone: null, percent: null };
+  const days = Math.floor((Date.now() - discipline.startedAt) / 86400000);
+  const milestones = [...(discipline.milestones || [])].sort((a, b) => a.days - b.days);
+  const prevMilestone = [...milestones].reverse().find((m) => m.days <= days) || null;
+  const nextMilestone = milestones.find((m) => m.days > days) || null;
+  if (!nextMilestone) return { days, prevMilestone, nextMilestone: null, percent: milestones.length ? 100 : null };
+  const spanStart = prevMilestone?.days || 0;
+  const percent = Math.round(((days - spanStart) / (nextMilestone.days - spanStart)) * 100);
+  return { days, prevMilestone, nextMilestone, percent };
+}
+
 export function searchAll(query, data) {
   const q = query.trim().toLowerCase();
   if (!q) return [];

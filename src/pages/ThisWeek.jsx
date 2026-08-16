@@ -5,6 +5,7 @@ import { EntityCard } from "../components/EntityCard";
 import { TimeGridDay, TimeRangeControl, useTimeGridPrefs } from "../components/TimeGrid";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
+import DisciplineDetailModal from "../components/DisciplineDetailModal";
 import CalendarMonthView from "../components/CalendarMonthView";
 import { HorizontalBarChart } from "../components/charts";
 import { weekStartISO, addDaysISO, domainLabel } from "../constants";
@@ -33,7 +34,9 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
   const [adding, setAdding] = useState(false);
   const [addDefaults, setAddDefaults] = useState(null);
   const [editing, setEditing] = useState(null);
+  const [disciplineModal, setDisciplineModal] = useState(null);
 
+  const activeDisciplines = (secretary.disciplines || []).filter((d) => d.focused && !d.resolved);
   const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
   const weekEnd = weekDays[6];
 
@@ -84,6 +87,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                       timedItems={byDay[d].filter((i) => i.timing?.floating === false && i.timing?.time)}
                       startHour={gridPrefs.startHour} endHour={gridPrefs.endHour} pxPerHour={gridPrefs.pxPerHour}
                       onToggleDone={toggleDone} onEdit={openEdit} onSlotClick={onSlotClick}
+                      disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
                     />
                   ))}
                 </div>
@@ -131,6 +135,9 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
           family={editing.family} entity={editing.entity} secretary={secretary}
           onClose={() => setEditing(null)} onDeleted={() => setEditing(null)}
         />
+      )}
+      {disciplineModal && (
+        <DisciplineDetailModal discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)} />
       )}
     </div>
   );
