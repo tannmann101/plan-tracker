@@ -145,7 +145,7 @@ service cloud.firestore {
     // per-habit array with no cross-entity meaning to enforce.
     function isValidDiscipline(d) {
       return d.title is string && d.title.size() > 0 &&
-        d.domain in domainValues() &&
+        d.type is string && d.type.size() > 0 &&
         isOptionalList(d, 'resources') &&
         isOptionalList(d, 'tags') &&
         (!('milestones' in d) || d.milestones is list) &&

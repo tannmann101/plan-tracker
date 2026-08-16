@@ -203,6 +203,18 @@ export const DEFAULT_DISCIPLINE_MILESTONES = [
   { id: "m3", label: "2 months", days: 60 },
 ];
 
+// Seed for config/disciplineTypes -- a discipline is categorized by what
+// kind of habit it is (physical/behavioral), not by household domain the
+// way Kinds/Items are, since "quit smoking" and "stop doomscrolling" don't
+// really belong to Creative/Vocation/etc. The Add form's "Other" option
+// appends a new entry here (same household-editable-list pattern as
+// practice categories) so a custom type sticks around for next time.
+export const DEFAULT_DISCIPLINE_TYPES = [
+  { id: "physical", label: "Physical" },
+  { id: "behavioral", label: "Behavioral" },
+];
+export const disciplineTypeLabel = (id, types = DEFAULT_DISCIPLINE_TYPES) => types.find((t) => t.id === id)?.label || id;
+
 // -- Capture / review ----------------------------------------------------
 // A capture is just the raw intake record now -- triage always produces a
 // pendingOperation for review, never a direct write (see lib/claude.js,
