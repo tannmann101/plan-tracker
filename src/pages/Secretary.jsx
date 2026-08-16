@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, LINE } from "../theme";
+import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE } from "../theme";
 import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES } from "../constants";
 import { Field, TagsInput, MultiCheckList, KindParentPicker, DurationInput } from "../components/formFields";
-import { allTagsInUse, kindSubtreeIds, upcomingTimedItems } from "../lib/graph";
+import { allTagsInUse, kindSubtreeIds, upcomingItems, practiceHabitsSummary, disciplinesSummary, kindsNeedingAttention } from "../lib/graph";
 import { triageCapture, secretaryChat } from "../lib/claude";
 import WeeklyMeetingImport from "./WeeklyMeetingImport";
 
@@ -71,6 +71,17 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
             }
           : (base.timing || null);
       }
+      // A practice check-in proposal (secretaryChat) carries its own
+      // isRecurringPracticeItem/practiceHabitId/done, which the generic
+      // field-editing form above has no UI for and would otherwise drop --
+      // applied last so it isn't overwritten by the item branch's default
+      // done handling above.
+      if (family === "item" && op.patch.isRecurringPracticeItem) {
+        payload.isRecurringPracticeItem = true;
+        payload.practiceHabitId = op.patch.practiceHabitId;
+        payload.done = !!op.patch.done;
+        payload.completedAt = op.patch.done ? Date.now() : null;
+      }
       payload.createdVia = op.patch.createdVia || "capture";
       await secretary.saveEntity(family, payload);
       await secretary.deletePendingOperation(op.id);
@@ -98,6 +109,7 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
         <Pill color={INKBLUE}>{isUpdate ? "edit" : "new"}</Pill>
         <Pill>{family}</Pill>
         <Pill color={MUTE}>{op.sourceType}</Pill>
+        {op.patch.isRecurringPracticeItem && <Pill color={DEEPTEAL}>↻ practice check-in</Pill>}
         {unsorted && <Pill color={BRICK}>unsorted {Math.floor(ageMs / DAY_MS)}d</Pill>}
       </div>
 
@@ -179,8 +191,15 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
       await secretary.saveChatMessage({ role: "user", text });
       const history = [...messages, { role: "user", text }].slice(-20).map((m) => ({ role: m.role, text: m.text }));
       const existingKinds = (secretary.kinds || []).map((k) => ({ id: k.id, title: k.title, kindType: k.kindType, domain: k.domain }));
-      const existingItems = upcomingTimedItems(secretary.items);
-      const result = await secretaryChat({ messages: history, entityContext, existingKinds, existingItems });
+      const existingItems = upcomingItems(secretary.items);
+      const practiceHabits = practiceHabitsSummary(secretary);
+      const disciplines = disciplinesSummary(secretary);
+      const attention = kindsNeedingAttention(secretary);
+      const existingResources = secretary.resources || [];
+      const result = await secretaryChat({
+        messages: history, entityContext, existingKinds, existingItems,
+        practiceHabits, disciplines, attention, existingResources,
+      });
       await secretary.saveChatMessage({ role: "assistant", text: result.reply, pendingOperationId: result.pendingOperationId || null });
       if (result.pendingOperationId) {
         await secretary.refresh();
