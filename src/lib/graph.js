@@ -192,23 +192,46 @@ export function upcomingItems(items, days = 14) {
     }));
 }
 
+// A habit building toward a Goal/Project (§9.1 "goal-linked habits")
+// tracks a cumulative amount instead of a plain daily checkbox -- the sum
+// of every one of its Items' own progressAmount, all-time (not just this
+// week), against the habit's own progressTarget. Nothing but the target
+// itself is stored on the habit doc; the running total is always derived
+// from Items, the same single-source-of-truth discipline practiceItemFor
+// already uses for "done". Returns null for a habit that isn't linked.
+export function practiceHabitProgress(habit, items) {
+  if (!habit?.linkedKindId || !habit.progressTarget) return null;
+  const current = (items || [])
+    .filter((i) => i.isRecurringPracticeItem && i.practiceHabitId === habit.id)
+    .reduce((sum, i) => sum + (i.progressAmount || 0), 0);
+  const target = habit.progressTarget;
+  return { current, target, unit: habit.progressUnit || "", percent: target > 0 ? Math.min(100, Math.round((current / target) * 100)) : 0 };
+}
+
 // A live snapshot of each active practice habit's completion state, for
 // Secretary chat context -- lets it answer "did I do X today" and, when
 // asked to check one off, target the existing Item for that habit+day (or
 // know none exists yet) rather than guessing and risking a second Item for
-// the same habit+day (see practiceItemFor's single-Item contract).
+// the same habit+day (see practiceItemFor's single-Item contract). Also
+// carries a goal-linked habit's running progress so chat can talk about it
+// and log an amount against it without a second, separate query shape.
 export function practiceHabitsSummary(data) {
-  const { practiceHabits = [], items = [] } = data;
+  const { practiceHabits = [], items = [], kinds = [] } = data;
   const today = todayISO();
   const weekStart = weekStartISO();
   const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
   return (practiceHabits || []).filter((h) => h.active !== false).map((h) => {
     const todayItem = practiceItemFor(h.id, today, items);
     const weekDoneCount = weekDays.filter((d) => practiceItemFor(h.id, d, items)?.done).length;
+    const goal = practiceHabitProgress(h, items);
+    const linkedKind = h.linkedKindId ? (kinds || []).find((k) => k.id === h.linkedKindId) : null;
     return {
       id: h.id, title: h.title, categoryId: h.categoryId,
       todayItemId: todayItem?.id || null, todayDone: !!todayItem?.done,
+      todayProgressAmount: todayItem?.progressAmount || 0,
       weekDoneCount, weekTotalDays: 7,
+      linkedKindId: h.linkedKindId || null, linkedKindTitle: linkedKind?.title || null,
+      progressUnit: h.progressUnit || null, progressCurrent: goal?.current ?? null, progressTarget: h.progressTarget || null,
     };
   });
 }

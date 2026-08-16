@@ -2,12 +2,12 @@ import { Fragment, useState } from "react";
 import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox, Pill, ProgressBar } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
-import { Field, TagsInput, MultiCheckList, DisciplineMilestonesEditor } from "../components/formFields";
+import { Field, TagsInput, MultiCheckList, DisciplineMilestonesEditor, KindParentPicker } from "../components/formFields";
 import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import { Timeline } from "../components/charts";
 import { KIND_STATUSES, weekStartISO, addDaysISO, DEFAULT_DISCIPLINE_MILESTONES, disciplineTypeLabel } from "../constants";
-import { practiceItemFor, allTagsInUse, disciplineStreak } from "../lib/graph";
+import { practiceItemFor, allTagsInUse, disciplineStreak, practiceHabitProgress } from "../lib/graph";
 
 const TOP_TABS = [
   { id: "practices", label: "Practices" },
@@ -28,6 +28,7 @@ const OTHER_TYPE_ID = "__other__";
 function PracticesTab({ secretary }) {
   const categories = secretary.practiceCategories || [];
   const habits = secretary.practiceHabits || [];
+  const goalProjectKinds = (secretary.kinds || []).filter((k) => k.kindType === "project" || k.kindType === "goal");
 
   const [newCategory, setNewCategory] = useState("");
   const [editingHabitId, setEditingHabitId] = useState(null);
@@ -35,7 +36,12 @@ function PracticesTab({ secretary }) {
   const [habitCategory, setHabitCategory] = useState(categories[0]?.id || "");
   const [habitResources, setHabitResources] = useState([]);
   const [habitTags, setHabitTags] = useState([]);
+  const [habitLinkedKindId, setHabitLinkedKindId] = useState(null);
+  const [habitProgressUnit, setHabitProgressUnit] = useState("");
+  const [habitProgressTarget, setHabitProgressTarget] = useState("");
   const [weekStart, setWeekStart] = useState(() => weekStartISO());
+  const [editingCell, setEditingCell] = useState(null); // { habitId, day }
+  const [cellValue, setCellValue] = useState("");
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
   const tagSuggestions = allTagsInUse(secretary);
@@ -60,6 +66,9 @@ function PracticesTab({ secretary }) {
     setHabitCategory(categories[0]?.id || "");
     setHabitResources([]);
     setHabitTags([]);
+    setHabitLinkedKindId(null);
+    setHabitProgressUnit("");
+    setHabitProgressTarget("");
   };
 
   const startEditHabit = (habit) => {
@@ -68,19 +77,40 @@ function PracticesTab({ secretary }) {
     setHabitCategory(habit.categoryId);
     setHabitResources(habit.resources || []);
     setHabitTags(habit.tags || []);
+    setHabitLinkedKindId(habit.linkedKindId || null);
+    setHabitProgressUnit(habit.progressUnit || "");
+    setHabitProgressTarget(habit.progressTarget ? String(habit.progressTarget) : "");
   };
 
   const saveHabit = async () => {
     const title = habitTitle.trim();
     if (!title || !habitCategory) return;
+    if (habitLinkedKindId && (!habitProgressUnit.trim() || !Number(habitProgressTarget))) return;
     const editing = editingHabitId ? habits.find((h) => h.id === editingHabitId) : null;
     await secretary.savePracticeHabit({
       id: editingHabitId || undefined,
       createdAt: editing?.createdAt,
       title, categoryId: habitCategory, resources: habitResources, tags: habitTags,
       active: editing?.active !== false,
+      linkedKindId: habitLinkedKindId || null,
+      progressUnit: habitLinkedKindId ? habitProgressUnit.trim() : null,
+      progressTarget: habitLinkedKindId ? Number(habitProgressTarget) : null,
     });
     resetHabitForm();
+  };
+
+  // "Mark goal reached" is the explicit close-the-loop action (§ goal-
+  // linked habits): marks the linked Kind done (if it isn't already) and
+  // clears the habit's own linkedKindId/progressUnit/progressTarget, which
+  // is all it takes to turn it back into a plain weekly-checkbox habit --
+  // no separate "mode" flag to keep in sync, since the tracker below reads
+  // linkedKindId's presence directly to decide how to render a habit.
+  const markGoalReached = async (habit) => {
+    const kind = (secretary.kinds || []).find((k) => k.id === habit.linkedKindId);
+    if (kind && kind.status !== "done") {
+      await secretary.saveEntity("kind", { ...kind, status: "done" });
+    }
+    await secretary.savePracticeHabit({ ...habit, linkedKindId: null, progressUnit: null, progressTarget: null });
   };
 
   const toggleDay = async (habit, day) => {
@@ -95,6 +125,29 @@ function PracticesTab({ secretary }) {
         isRecurringPracticeItem: true, practiceHabitId: habit.id, createdVia: "add-form",
       });
     }
+  };
+
+  const openCellEditor = (habit, day, existingItem) => {
+    setEditingCell({ habitId: habit.id, day });
+    setCellValue(existingItem?.progressAmount ? String(existingItem.progressAmount) : "");
+  };
+
+  const commitCell = async (habit, day) => {
+    const amount = Number(cellValue) || 0;
+    const existing = practiceItemFor(habit.id, day, secretary.items);
+    if (amount <= 0) {
+      if (existing) await secretary.saveEntity("item", { ...existing, done: false, progressAmount: 0, completedAt: null });
+    } else if (existing) {
+      await secretary.saveEntity("item", { ...existing, done: true, progressAmount: amount, completedAt: existing.completedAt || Date.now() });
+    } else {
+      await secretary.saveEntity("item", {
+        title: habit.title, itemType: "other", domain: "practices", secondaryDomains: [],
+        resources: habit.resources || [], tags: habit.tags || [], parentKindId: null,
+        timing: { targetDay: day, floating: true }, done: true, completedAt: Date.now(), progressAmount: amount,
+        isRecurringPracticeItem: true, practiceHabitId: habit.id, createdVia: "add-form",
+      });
+    }
+    setEditingCell(null);
   };
 
   return (
@@ -127,8 +180,28 @@ function PracticesTab({ secretary }) {
         <Field label="Tags">
           <TagsInput value={habitTags} onChange={setHabitTags} suggestions={tagSuggestions} />
         </Field>
+        <Field label="Link to a Goal or Project (optional)">
+          <KindParentPicker kinds={goalProjectKinds} value={habitLinkedKindId} onChange={setHabitLinkedKindId} />
+        </Field>
+        {habitLinkedKindId && (
+          <>
+            <Note>
+              Linked habits drop the weekly checkbox for a numeric log instead -- click a day in the tracker below to record how much you did (pages read, minutes, reps, whatever unit fits). "Mark goal reached" on the tracker row closes it out: the Goal/Project gets marked done and this habit turns back into a plain weekly checkbox.
+            </Note>
+            <Field label="Progress unit (e.g. chapters, pages, minutes)">
+              <Input value={habitProgressUnit} onChange={setHabitProgressUnit} placeholder="chapters" />
+            </Field>
+            <Field label="Target amount">
+              <Input value={habitProgressTarget} onChange={setHabitProgressTarget} placeholder="12" type="number" />
+            </Field>
+          </>
+        )}
         <div style={{ display: "flex", gap: 8 }}>
-          <Btn primary color={INKBLUE} disabled={!habitTitle.trim() || !habitCategory} onClick={saveHabit}>
+          <Btn
+            primary color={INKBLUE}
+            disabled={!habitTitle.trim() || !habitCategory || (!!habitLinkedKindId && (!habitProgressUnit.trim() || !Number(habitProgressTarget)))}
+            onClick={saveHabit}
+          >
             {editingHabitId ? "Save changes" : "Add practice"}
           </Btn>
           {editingHabitId && <Btn color={MUTE} onClick={resetHabitForm}>Cancel</Btn>}
@@ -168,32 +241,75 @@ function PracticesTab({ secretary }) {
                   {habits.filter((h) => h.categoryId === cat.id).map((habit) => {
                     const weekItems = weekDays.map((day) => practiceItemFor(habit.id, day, secretary.items));
                     const doneCount = weekItems.filter((i) => i?.done).length;
+                    const goal = practiceHabitProgress(habit, secretary.items);
+                    const linkedKind = habit.linkedKindId ? (secretary.kinds || []).find((k) => k.id === habit.linkedKindId) : null;
                     return (
-                      <tr key={habit.id}>
-                        <td style={{ padding: "4px 10px 4px 0", borderBottom: `1px solid ${LINE}` }}>
-                          <button
-                            type="button" onClick={() => startEditHabit(habit)} title="Edit practice"
-                            style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 12.5, color: INK, textAlign: "left", textDecoration: editingHabitId === habit.id ? "underline" : "none" }}
-                          >
-                            {habit.title}
-                          </button>
-                        </td>
-                        {weekDays.map((day, i) => (
-                          <td key={day} style={{ textAlign: "center", padding: "4px", borderBottom: `1px solid ${LINE}` }}>
-                            <Checkbox checked={!!weekItems[i]?.done} onChange={() => toggleDay(habit, day)} />
+                      <Fragment key={habit.id}>
+                        <tr>
+                          <td style={{ padding: "4px 10px 4px 0", borderBottom: goal ? "none" : `1px solid ${LINE}` }}>
+                            <button
+                              type="button" onClick={() => startEditHabit(habit)} title="Edit practice"
+                              style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 12.5, color: INK, textAlign: "left", textDecoration: editingHabitId === habit.id ? "underline" : "none" }}
+                            >
+                              {habit.title}
+                            </button>
                           </td>
-                        ))}
-                        <td style={{ textAlign: "center", padding: "4px", borderBottom: `1px solid ${LINE}`, fontFamily: MONO, fontSize: 11, color: MUTE }}>
-                          {doneCount}/7
-                        </td>
-                        <td style={{ borderBottom: `1px solid ${LINE}` }}>
-                          <button
-                            type="button"
-                            onClick={() => { if (editingHabitId === habit.id) resetHabitForm(); secretary.deletePracticeHabit(habit.id); }}
-                            title="Delete practice" style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", fontSize: 13 }}
-                          >×</button>
-                        </td>
-                      </tr>
+                          {weekDays.map((day, i) => {
+                            const isEditing = editingCell && editingCell.habitId === habit.id && editingCell.day === day;
+                            return (
+                              <td key={day} style={{ textAlign: "center", padding: "4px", borderBottom: goal ? "none" : `1px solid ${LINE}` }}>
+                                {goal ? (
+                                  isEditing ? (
+                                    <input
+                                      autoFocus type="number" value={cellValue}
+                                      onChange={(e) => setCellValue(e.target.value)}
+                                      onBlur={() => commitCell(habit, day)}
+                                      onKeyDown={(e) => { if (e.key === "Enter") commitCell(habit, day); if (e.key === "Escape") setEditingCell(null); }}
+                                      style={{ width: 44, fontFamily: MONO, fontSize: 11, textAlign: "center", border: `1px solid ${LINE}`, borderRadius: 4, padding: "2px 0" }}
+                                    />
+                                  ) : (
+                                    <button
+                                      type="button" onClick={() => openCellEditor(habit, day, weekItems[i])}
+                                      title="Log an amount for this day"
+                                      style={{ border: "none", background: "none", cursor: "pointer", fontFamily: MONO, fontSize: 11.5, color: weekItems[i]?.progressAmount ? INK : MUTE, minWidth: 20 }}
+                                    >
+                                      {weekItems[i]?.progressAmount || "—"}
+                                    </button>
+                                  )
+                                ) : (
+                                  <Checkbox checked={!!weekItems[i]?.done} onChange={() => toggleDay(habit, day)} />
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td style={{ textAlign: "center", padding: "4px", borderBottom: goal ? "none" : `1px solid ${LINE}`, fontFamily: MONO, fontSize: 11, color: MUTE }}>
+                            {goal ? `${goal.current}${goal.unit ? ` ${goal.unit}` : ""}` : `${doneCount}/7`}
+                          </td>
+                          <td style={{ borderBottom: goal ? "none" : `1px solid ${LINE}` }}>
+                            <button
+                              type="button"
+                              onClick={() => { if (editingHabitId === habit.id) resetHabitForm(); secretary.deletePracticeHabit(habit.id); }}
+                              title="Delete practice" style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", fontSize: 13 }}
+                            >×</button>
+                          </td>
+                        </tr>
+                        {goal && (
+                          <tr>
+                            <td colSpan={10} style={{ padding: "0 0 10px", borderBottom: `1px solid ${LINE}` }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                                {linkedKind && <Pill color={DOMAIN_COLORS[linkedKind.domain]}>{linkedKind.title}</Pill>}
+                                <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE, flex: "none" }}>
+                                  {goal.current} / {goal.target} {goal.unit}
+                                </span>
+                                <div style={{ flex: 1, minWidth: 100 }}>
+                                  <ProgressBar percent={goal.percent} color={INKBLUE} />
+                                </div>
+                                <Btn small color={MUTE} onClick={() => markGoalReached(habit)}>Mark goal reached</Btn>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
                     );
                   })}
                 </Fragment>

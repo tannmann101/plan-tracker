@@ -45,7 +45,10 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
     .filter((i) => i.timing.targetDay === d)
     .sort((a, b) => (a.timing.floating === false ? 0 : 1) - (b.timing.floating === false ? 0 : 1) || (a.timing.time || "").localeCompare(b.timing.time || ""))]));
 
-  const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
+  const toggleDone = (entity, next) => secretary.saveEntity("item", {
+    ...entity, done: next, completedAt: next ? Date.now() : null,
+    ...(entity.isRecurringPracticeItem ? { progressAmount: next ? (entity.progressAmount || 1) : 0 } : {}),
+  });
   const openEdit = (fam, e) => setEditing({ family: fam, entity: e });
   const openAdd = (defaults) => { setAddDefaults(defaults); setAdding(true); };
   const onSlotClick = (iso, hour) => openAdd({ targetDay: iso, time: `${String(hour).padStart(2, "0")}:00` });
