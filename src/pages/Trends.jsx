@@ -1,7 +1,8 @@
+import { useState } from "react";
 import { Btn, SectionTitle, Note, Card, Pill } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, DEEPTEAL, BRICK, OCHRE, MOSS, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS } from "../theme";
 import {
-  WeeklyBarChart, HorizontalBarChart, LineChart, Legend,
+  WeeklyBarChart, BarChart, DetailList, LineChart, Legend,
   StatTile, Heatmap, SegmentBars, StatusMeters, niceMax,
 } from "../components/charts";
 import {
@@ -10,6 +11,8 @@ import {
 } from "../lib/trends";
 import { kindProgress, practiceHabitsSummary, kindsNeedingAttention } from "../lib/graph";
 import { domainLabel, disciplineTypeLabel } from "../constants";
+import EditEntityModal from "../components/EditEntityModal";
+import DisciplineDetailModal from "../components/DisciplineDetailModal";
 
 const TOP_DOMAIN_SERIES = 6;
 const PRACTICE_DAYS = 28;
@@ -51,20 +54,38 @@ function weeklySeriesFor(weekly, domains) {
   return { series, data };
 }
 
-export default function Trends({ secretary, onBack }) {
+export default function Trends({ secretary, onBack, onNavigate }) {
+  const [editing, setEditing] = useState(null);
+  const [disciplineModal, setDisciplineModal] = useState(null);
+  const [expandedWeek, setExpandedWeek] = useState(null);
+  const [expandedStatus, setExpandedStatus] = useState(null);
+  const [expandedDistDomain, setExpandedDistDomain] = useState(null);
+  const [expandedResource, setExpandedResource] = useState(null);
+
+  const openEntity = (family, entity) => setEditing({ family, entity });
+  const openKindById = (kindId) => {
+    const kind = (secretary.kinds || []).find((k) => k.id === kindId);
+    if (kind) openEntity("kind", kind);
+  };
+  const openDisciplineById = (id) => {
+    const discipline = (secretary.disciplines || []).find((d) => d.id === id);
+    if (discipline) setDisciplineModal(discipline);
+  };
+
   const weekly = itemsCompletedPerWeek(secretary, 12);
   const { series, data } = weeklySeriesFor(weekly, secretary.domains);
   const distribution = domainDistribution(secretary, secretary.domains).slice(0, 10)
-    .map((d) => ({ label: d.label, count: d.count, color: DOMAIN_COLORS[d.domainId] || MUTE }));
+    .map((d) => ({ id: d.domainId, label: d.label, count: d.count, color: DOMAIN_COLORS[d.domainId] || MUTE, entities: d.entities }));
   const cycleTimes = kindCycleTimes(secretary);
   const alignment = alignmentRateOverTime(secretary, 12).map((a) => ({ week: a.week, y: a.rate, note: `${a.total} completed` }));
-  const resourceUsage = resourceUsageCounts(secretary).slice(0, 10).map((r) => ({ label: r.resource, count: r.count, color: INKBLUE }));
+  const resourceUsage = resourceUsageCounts(secretary).slice(0, 10)
+    .map((r) => ({ id: r.resource, label: r.resource, count: r.count, color: INKBLUE, entities: r.entities }));
   const goalProgressRows = (secretary.kinds || [])
     .filter((k) => k.kindType === "goal" && k.status !== "done")
-    .map((k) => ({ label: k.title, ...kindProgress(k.id, secretary), color: DOMAIN_COLORS[k.domain] || MUTE }))
+    .map((k) => ({ id: k.id, label: k.title, ...kindProgress(k.id, secretary), color: DOMAIN_COLORS[k.domain] || MUTE }))
     .filter((g) => g.percent !== null)
     .sort((a, b) => a.percent - b.percent)
-    .map((g) => ({ label: g.label, count: g.percent, color: g.color }));
+    .map((g) => ({ id: g.id, label: g.label, count: g.percent, color: g.color }));
 
   const practiceRows = practiceConsistency(secretary, PRACTICE_DAYS);
   const practiceHabits = practiceHabitsSummary(secretary);
@@ -81,52 +102,64 @@ export default function Trends({ secretary, onBack }) {
   const longestActiveStreak = focusedDisciplines.length ? Math.max(...focusedDisciplines.map((d) => d.currentStreakDays)) : null;
   const hoursThisWeek = hoursPerWeek[hoursPerWeek.length - 1]?.hours ?? 0;
 
+  const expandedWeekRow = weekly.find((w) => w.week === expandedWeek);
+  const expandedStatusStage = pipelineStages.find((s) => s.status === expandedStatus);
+  const expandedDistRow = distribution.find((d) => d.id === expandedDistDomain);
+  const expandedResourceRow = resourceUsage.find((r) => r.id === expandedResource);
+
+  const scrollTo = (id) => () => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+
   return (
     <div>
       <Btn small onClick={onBack} color={MUTE}>← Back</Btn>
       <SectionTitle>Trends</SectionTitle>
 
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 4 }}>
-        <StatTile label="Completed this week" value={completedThisWeek} color={INKBLUE} trend={weekly.map((w) => w.total)} />
+        <StatTile label="Completed this week" value={completedThisWeek} color={INKBLUE} trend={weekly.map((w) => w.total)} onClick={scrollTo("items-completed")} />
         <StatTile
           label="Practices today"
           value={practiceHabits.length ? `${practicesDoneToday}/${practiceHabits.length}` : "—"}
           sublabel={practiceHabits.length ? null : "none tracked yet"}
           color={DEEPTEAL}
+          onClick={() => onNavigate?.("/plans")}
         />
         <StatTile
           label="Longest active streak"
           value={longestActiveStreak !== null ? `${longestActiveStreak}d` : "—"}
           sublabel={focusedDisciplines.length ? null : "none in focus"}
           color={BRICK}
+          onClick={scrollTo("habits-to-break")}
         />
-        <StatTile label="Needs attention" value={attentionList.length} color={attentionList.length ? OCHRE : MUTE} />
-        <StatTile label="Time-blocked this week" value={`${hoursThisWeek}h`} color={INKBLUE} trend={hoursPerWeek.map((h) => h.hours)} />
+        <StatTile label="Needs attention" value={attentionList.length} color={attentionList.length ? OCHRE : MUTE} onClick={scrollTo("needs-attention")} />
+        <StatTile label="Time-blocked this week" value={`${hoursThisWeek}h`} color={INKBLUE} trend={hoursPerWeek.map((h) => h.hours)} onClick={scrollTo("time-blocked-hours")} />
       </div>
 
-      <SectionTitle note="last 12 weeks">Items Completed</SectionTitle>
+      <SectionTitle id="items-completed" note="last 12 weeks -- click a bar to see what's counted">Items Completed</SectionTitle>
       <Note>What kind of work is actually getting accomplished, week by week.</Note>
       <Card style={{ marginTop: 10 }}>
         <Legend series={series} />
-        <WeeklyBarChart data={data} series={series} />
+        <WeeklyBarChart data={data} series={series} onBarClick={(week) => setExpandedWeek(expandedWeek === week ? null : week)} activeId={expandedWeek} />
+        {expandedWeekRow && <DetailList items={expandedWeekRow.items} onOpen={openEntity} emptyLabel="Nothing completed that week." />}
       </Card>
 
-      <SectionTitle note={`last ${PRACTICE_DAYS} days`}>Practice Consistency</SectionTitle>
+      <SectionTitle note={`last ${PRACTICE_DAYS} days -- click a filled square to open that check-in`}>Practice Consistency</SectionTitle>
       <Note>Each row is an active Practice; a filled square is a day it was checked off -- on Today/Week or Plans' tracker, same Item either way.</Note>
       {practiceRows.length === 0 ? (
         <Note>No active Practices yet -- add one from Plans to start seeing your consistency here.</Note>
       ) : (
-        <Card style={{ marginTop: 10, overflowX: "auto" }}><Heatmap rows={practiceRows} color={DEEPTEAL} /></Card>
+        <Card style={{ marginTop: 10, overflowX: "auto" }}>
+          <Heatmap rows={practiceRows} color={DEEPTEAL} onCellClick={(item) => openEntity("item", item)} />
+        </Card>
       )}
 
-      <SectionTitle note={`${disciplineHistory.length} tracked`}>Habits to Break</SectionTitle>
+      <SectionTitle id="habits-to-break" note={`${disciplineHistory.length} tracked -- click one for its detail`}>Habits to Break</SectionTitle>
       <Note>Each bar sequence is one habit's past streaks in order, then the current one -- bars trending taller means relapses are getting rarer.</Note>
       {disciplineHistory.length === 0 ? (
         <Note>No habits being eliminated yet -- add one from Plans' "Habits to Break" to start tracking streak history here.</Note>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 10 }}>
           {disciplineHistory.map((d) => (
-            <Card key={d.id}>
+            <Card key={d.id} onClick={() => openDisciplineById(d.id)} style={{ cursor: "pointer" }}>
               <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
                 <div>
                   <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500 }}>{d.title}</div>
@@ -157,27 +190,33 @@ export default function Trends({ secretary, onBack }) {
         </div>
       )}
 
-      <SectionTitle note={`${goalProgressRows.length} open, measurable`}>Goal Progress</SectionTitle>
+      <SectionTitle note={`${goalProgressRows.length} open, measurable -- click a bar to open that Goal`}>Goal Progress</SectionTitle>
       <Note>How far along each open Goal is -- done Items over its whole subtree, low to high.</Note>
       {goalProgressRows.length === 0 ? (
         <Note>No open Goal has any Items under it yet to measure.</Note>
       ) : (
-        <Card style={{ marginTop: 10 }}><HorizontalBarChart rows={goalProgressRows} max={100} /></Card>
+        <Card style={{ marginTop: 10 }}><BarChart rows={goalProgressRows} max={100} onBarClick={openKindById} /></Card>
       )}
 
       <SectionTitle>Pipeline</SectionTitle>
-      <Note>Every Project, Goal, and Practice, by where it sits in the kanban right now.</Note>
+      <Note>Every Project, Goal, and Practice, by where it sits in the kanban right now -- click a stage to see what's in it.</Note>
       {pipelineStages.every((s) => s.count === 0) ? <Note>Nothing recorded yet.</Note> : (
-        <Card style={{ marginTop: 10 }}><StatusMeters stages={pipelineStages} /></Card>
+        <Card style={{ marginTop: 10 }}>
+          <StatusMeters stages={pipelineStages} onStageClick={(status) => setExpandedStatus(expandedStatus === status ? null : status)} activeStatus={expandedStatus} />
+          {expandedStatusStage && <DetailList items={expandedStatusStage.entities} onOpen={openEntity} />}
+        </Card>
       )}
 
       <SectionTitle>Domain Distribution</SectionTitle>
-      <Note>Every Kind and Item, counted under its primary domain.</Note>
+      <Note>Every Kind and Item, counted under its primary domain -- click a bar to see what's counted.</Note>
       {distribution.length === 0 ? <Note>Nothing recorded yet.</Note> : (
-        <Card style={{ marginTop: 10 }}><HorizontalBarChart rows={distribution} /></Card>
+        <Card style={{ marginTop: 10 }}>
+          <BarChart rows={distribution} onBarClick={(id) => setExpandedDistDomain(expandedDistDomain === id ? null : id)} activeId={expandedDistDomain} />
+          {expandedDistRow && <DetailList items={expandedDistRow.entities} onOpen={openEntity} />}
+        </Card>
       )}
 
-      <SectionTitle note="last 12 weeks">Time-Blocked Hours</SectionTitle>
+      <SectionTitle id="time-blocked-hours" note="last 12 weeks">Time-Blocked Hours</SectionTitle>
       <Note>Hours actually placed on the clock -- a timed, non-floating Item's duration -- each week, versus left floating.</Note>
       <Card style={{ marginTop: 10 }}><LineChart points={hoursPoints} color={INKBLUE} yMax={hoursYMax} yUnit="h" /></Card>
 
@@ -185,18 +224,21 @@ export default function Trends({ secretary, onBack }) {
       <Note>Of the Items completed each week, the share whose parentKindId chain actually reaches a Goal.</Note>
       <Card style={{ marginTop: 10 }}><LineChart points={alignment} color={INKBLUE} /></Card>
 
-      <SectionTitle note={`${resourceUsage.length}`}>Where It's Landing</SectionTitle>
+      <SectionTitle note={`${resourceUsage.length} -- click a bar to see what's counted`}>Where It's Landing</SectionTitle>
       <Note>Kinds and Items by resource -- how much is actually reaching Calendar, Reading notebook, Finance Tracker, and so on.</Note>
       {resourceUsage.length === 0 ? <Note>Nothing recorded yet.</Note> : (
-        <Card style={{ marginTop: 10 }}><HorizontalBarChart rows={resourceUsage} /></Card>
+        <Card style={{ marginTop: 10 }}>
+          <BarChart rows={resourceUsage} onBarClick={(id) => setExpandedResource(expandedResource === id ? null : id)} activeId={expandedResource} />
+          {expandedResourceRow && <DetailList items={expandedResourceRow.entities} onOpen={openEntity} />}
+        </Card>
       )}
 
-      <SectionTitle note={`${cycleTimes.length} completed`}>Goal Cycle Time</SectionTitle>
+      <SectionTitle note={`${cycleTimes.length} completed -- click one to open it`}>Goal Cycle Time</SectionTitle>
       <Note>Days from a Goal's creation to its completion.</Note>
       {cycleTimes.length === 0 ? <Note>No Goals completed yet.</Note> : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
           {cycleTimes.map((c) => (
-            <Card key={c.kindId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <Card key={c.kindId} onClick={() => openKindById(c.kindId)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, cursor: "pointer" }}>
               <div>
                 <div style={{ fontFamily: SANS, fontSize: 13, color: INK }}>{c.title}</div>
                 <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
@@ -209,14 +251,14 @@ export default function Trends({ secretary, onBack }) {
         </div>
       )}
 
-      <SectionTitle note={`${attentionList.length}`}>Needs Attention</SectionTitle>
+      <SectionTitle id="needs-attention" note={`${attentionList.length} -- click one to open it`}>Needs Attention</SectionTitle>
       <Note>Projects, Goals, and Practices that are overdue, stalled, or have nothing attached yet -- the same flag shown on their card, gathered in one place.</Note>
       {attentionList.length === 0 ? (
         <Note>Nothing needs attention right now.</Note>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
           {attentionList.map((a) => (
-            <Card key={a.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+            <Card key={a.id} onClick={() => openKindById(a.id)} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, cursor: "pointer" }}>
               <div>
                 <div style={{ fontFamily: SANS, fontSize: 13, color: INK }}>{a.title}</div>
                 <div style={{ fontFamily: MONO, fontSize: 10.5, color: ATTENTION_COLORS[a.level], marginTop: 4 }}>{a.hint}</div>
@@ -225,6 +267,16 @@ export default function Trends({ secretary, onBack }) {
             </Card>
           ))}
         </div>
+      )}
+
+      {editing && (
+        <EditEntityModal
+          family={editing.family} entity={editing.entity} secretary={secretary}
+          onClose={() => setEditing(null)} onDeleted={() => setEditing(null)}
+        />
+      )}
+      {disciplineModal && (
+        <DisciplineDetailModal discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)} />
       )}
     </div>
   );

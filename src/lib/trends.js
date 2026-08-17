@@ -29,38 +29,44 @@ function weeksBack(n) {
 export function itemsCompletedPerWeek(data, weeks = 12) {
   const { events = [], items = [] } = data;
   const weekList = weeksBack(weeks);
-  const buckets = Object.fromEntries(weekList.map((w) => [w, {}]));
+  const buckets = Object.fromEntries(weekList.map((w) => [w, { byDomain: {}, items: [] }]));
 
-  const domainForItem = (itemId) => items.find((i) => i.id === itemId)?.domain || null;
+  const itemFor = (itemId) => items.find((i) => i.id === itemId) || null;
 
   for (const e of events) {
     if (e.entityType !== "item" || e.to !== "true") continue;
     const week = weekStartISO(new Date(e.at));
     if (!(week in buckets)) continue;
-    const domain = domainForItem(e.entityId) || "unknown";
-    buckets[week][domain] = (buckets[week][domain] || 0) + 1;
+    const item = itemFor(e.entityId);
+    const domain = item?.domain || "unknown";
+    buckets[week].byDomain[domain] = (buckets[week].byDomain[domain] || 0) + 1;
+    // The event log outlives a deleted Item -- only list ones that still
+    // resolve, so a drilldown never offers a click-through to nothing.
+    if (item) buckets[week].items.push({ family: "item", entity: item });
   }
 
   return weekList.map((week) => {
-    const byDomain = buckets[week];
+    const { byDomain, items: weekItems } = buckets[week];
     const total = Object.values(byDomain).reduce((a, b) => a + b, 0);
-    return { week, total, byDomain };
+    return { week, total, byDomain, items: weekItems };
   });
 }
 
 // Count of Kinds+Items per primary domain -- "what kind of work is
-// actually happening."
+// actually happening." entities carries the actual Kind/Item refs behind
+// each count (family-tagged) so a chart can drill into exactly what it's
+// counting rather than just showing the number.
 export function domainDistribution(data, domains) {
   const { kinds = [], items = [] } = data;
-  const counts = {};
-  for (const list of [kinds, items]) {
-    for (const item of list) {
-      if (!item.domain) continue;
-      counts[item.domain] = (counts[item.domain] || 0) + 1;
+  const buckets = {};
+  for (const [family, list] of [["kind", kinds], ["item", items]]) {
+    for (const entity of list) {
+      if (!entity.domain) continue;
+      (buckets[entity.domain] ||= []).push({ family, entity });
     }
   }
-  return Object.entries(counts)
-    .map(([domainId, count]) => ({ domainId, label: domainLabel(domainId, domains), count }))
+  return Object.entries(buckets)
+    .map(([domainId, entities]) => ({ domainId, label: domainLabel(domainId, domains), count: entities.length, entities }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -118,16 +124,17 @@ export function alignmentRateOverTime(data, weeks = 12) {
 
 // Count of Kinds+Items per resource -- replaces the old per-Session
 // tool_location count now that resources[] (flat, not domain-scoped)
-// stands in for the routing table (§3.2).
+// stands in for the routing table (§3.2). entities behaves the same as
+// domainDistribution's -- the actual family-tagged refs behind each count.
 export function resourceUsageCounts(data) {
-  const counts = {};
-  for (const list of [data.kinds || [], data.items || []]) {
-    for (const e of list) {
-      for (const r of e.resources || []) counts[r] = (counts[r] || 0) + 1;
+  const buckets = {};
+  for (const [family, list] of [["kind", data.kinds || []], ["item", data.items || []]]) {
+    for (const entity of list) {
+      for (const r of entity.resources || []) (buckets[r] ||= []).push({ family, entity });
     }
   }
-  return Object.entries(counts)
-    .map(([resource, count]) => ({ resource, count }))
+  return Object.entries(buckets)
+    .map(([resource, entities]) => ({ resource, count: entities.length, entities }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -145,7 +152,10 @@ export function practiceConsistency(data, days = 28) {
   return (practiceHabits || [])
     .filter((h) => h.active !== false)
     .map((h) => {
-      const cells = dayList.map((day) => ({ day, done: !!practiceItemFor(h.id, day, items)?.done }));
+      const cells = dayList.map((day) => {
+        const item = practiceItemFor(h.id, day, items);
+        return { day, done: !!item?.done, item: item || null };
+      });
       const doneCount = cells.filter((c) => c.done).length;
       return { id: h.id, title: h.title, categoryId: h.categoryId, cells, completionRate: Math.round((doneCount / days) * 100) };
     })
@@ -204,9 +214,10 @@ export function disciplineStreakHistory(data) {
 export function kindStatusCounts(data, kindType = null) {
   const { kinds = [] } = data;
   const scoped = kindType ? kinds.filter((k) => k.kindType === kindType) : kinds;
-  return KIND_STATUSES.map((s) => ({
-    status: s.id, label: s.label, count: scoped.filter((k) => k.status === s.id).length,
-  }));
+  return KIND_STATUSES.map((s) => {
+    const entities = scoped.filter((k) => k.status === s.id).map((entity) => ({ family: "kind", entity }));
+    return { status: s.id, label: s.label, count: entities.length, entities };
+  });
 }
 
 // Hours actually time-blocked (a timed, non-floating Item's durationMinutes)
