@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, Btn, Input, Select } from "../ui";
-import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, BRICK } from "../theme";
+import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, BRICK, LINE } from "../theme";
 import { KIND_STATUSES, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, DEFAULT_DURATION_MINUTES } from "../constants";
 import { allTagsInUse, kindSubtreeIds, itemsForKind } from "../lib/graph";
 import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker, DurationInput } from "./formFields";
@@ -191,7 +191,7 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
 
       {confirmingDelete ? (
-        <div style={{ borderTop: "1px solid #E4DECC", marginTop: 14, paddingTop: 14 }}>
+        <div style={{ borderTop: `1px solid ${LINE}`, marginTop: 14, paddingTop: 14 }}>
           {family === "kind" && linkedItems.length > 0 && (
             <>
               <p style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE, margin: "0 0 8px" }}>

@@ -100,7 +100,13 @@ export function WeeklyBarChart({ data, series, height = 160 }) {
 // Ranked horizontal bars -- domain distribution, tool-location usage. Label
 // to the left, value at the bar's end (outside when the bar itself is too
 // short to hold it comfortably).
-export function HorizontalBarChart({ rows, height = 22, max: fixedMax }) {
+// onBarClick/activeId are optional -- when given (Workspace's Domain
+// distribution panel), a bar becomes an alternate control for the exact
+// same filter its page's Pill row already sets, dimming every bar but the
+// active one so the chart itself reads as a live filter state, not just a
+// static picture. Omitting them (ThisWeek's own Domain distribution panel)
+// leaves the chart purely informational, unchanged from before.
+export function HorizontalBarChart({ rows, height = 22, max: fixedMax, onBarClick, activeId }) {
   const max = fixedMax ?? Math.max(1, ...rows.map((r) => r.count));
   const width = 640;
   const labelW = 150;
@@ -111,11 +117,17 @@ export function HorizontalBarChart({ rows, height = 22, max: fixedMax }) {
         const w = Math.max(2, (r.count / max) * barMaxW);
         const y = i * height;
         const insideFits = w > 24;
+        const dimmed = activeId && r.id != null && activeId !== r.id;
         return (
-          <g key={r.label}>
+          <g
+            key={r.label}
+            onClick={onBarClick && r.id != null ? () => onBarClick(r.id) : undefined}
+            style={{ cursor: onBarClick && r.id != null ? "pointer" : "default" }}
+            opacity={dimmed ? 0.4 : 1}
+          >
             <text x={labelW - 8} y={y + height / 2 + 4} textAnchor="end" fontFamily={MONO} fontSize={10.5} fill={INK}>{r.label}</text>
             <rect x={labelW} y={y + 4} width={w} height={height - 10} rx={3} fill={r.color}>
-              <title>{`${r.label}: ${r.count}`}</title>
+              <title>{onBarClick ? `${r.label}: ${r.count} -- click to filter` : `${r.label}: ${r.count}`}</title>
             </rect>
             <text
               x={labelW + (insideFits ? w - 6 : w + 6)} y={y + height / 2 + 4}

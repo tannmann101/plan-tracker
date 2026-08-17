@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Btn, SectionTitle, Note } from "../ui";
-import { SANS, MONO, INK, MUTE, LINE, INKBLUE, INKBLUE_SOFT, CARD, RADIUS_SM } from "../theme";
+import { SANS, MONO, INK, MUTE, LINE, INKBLUE, INKBLUE_SOFT, CARD, HEAD_BG, RADIUS_SM } from "../theme";
 import { EntityCard } from "./EntityCard";
 import AddForm from "./AddForm";
 import EditEntityModal from "./EditEntityModal";
@@ -82,7 +82,7 @@ export default function CalendarMonthView({ secretary, onNavigateKind }) {
               onClick={() => setSelectedDay(iso)}
               style={{
                 aspectRatio: "1", border: `1px solid ${isSelected ? INKBLUE : LINE}`,
-                background: isSelected ? INKBLUE_SOFT : isToday ? "#F9F7F1" : CARD,
+                background: isSelected ? INKBLUE_SOFT : isToday ? HEAD_BG : CARD,
                 borderRadius: RADIUS_SM, cursor: "pointer", display: "flex", flexDirection: "column",
                 alignItems: "flex-start", justifyContent: "space-between", padding: 5, opacity: inMonth ? 1 : 0.35,
               }}

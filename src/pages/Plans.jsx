@@ -1,6 +1,6 @@
 import { Fragment, useState } from "react";
 import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox, Pill, ProgressBar } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS, STATUS_COLORS, softTint } from "../theme";
+import { SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS, STATUS_COLORS, HEAD_BG, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
 import { Field, TagsInput, MultiCheckList, DisciplineMilestonesEditor, KindParentPicker } from "../components/formFields";
 import AddForm from "../components/AddForm";
@@ -559,7 +559,7 @@ function KanbanTab({ secretary, onNavigateKind }) {
             key={col.id}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); if (dragId) moveTo(dragId, col.id); setDragId(null); }}
-            style={{ minHeight: 120, background: "#F6F2E6", border: `1px solid ${LINE}`, borderRadius: 10, padding: 8 }}
+            style={{ minHeight: 120, background: HEAD_BG, border: `1px solid ${LINE}`, borderRadius: 10, padding: 8 }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[col.id] || MUTE }} />
