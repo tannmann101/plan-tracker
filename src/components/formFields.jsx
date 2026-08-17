@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Btn, Input } from "../ui";
-import { MONO, SANS, INK, MUTE, INKBLUE, LINE } from "../theme";
+import { MONO, SANS, INK, MUTE, INKBLUE, INKBLUE_SOFT, LINE } from "../theme";
 import { DURATION_OPTIONS } from "../constants";
 
 // Shared building blocks for AddForm.jsx and EditEntityModal.jsx -- kept in
@@ -35,7 +35,7 @@ export function TagsInput({ value, onChange, suggestions }) {
           {value.map((t) => (
             <span key={t} style={{
               display: "inline-flex", alignItems: "center", gap: 4, fontFamily: MONO, fontSize: 10.5,
-              color: INKBLUE, background: "#DEE6EA", borderRadius: 999, padding: "2px 8px",
+              color: INKBLUE, background: INKBLUE_SOFT, borderRadius: 999, padding: "2px 8px",
             }}>
               {t}
               <button type="button" onClick={() => onChange(value.filter((x) => x !== t))} style={{ border: "none", background: "none", color: INKBLUE, cursor: "pointer", padding: 0, fontSize: 12, lineHeight: 1 }}>×</button>
