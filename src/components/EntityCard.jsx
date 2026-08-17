@@ -11,6 +11,23 @@ function timingLabel(timing) {
   return null;
 }
 
+// A household with a couple dozen resources configured turns "one pill per
+// resource/tag" into a card that's mostly pills -- cap each list and fold
+// the rest into a single "+N" pill instead. Nothing is lost: the full list
+// is still one click away in the edit modal, and card heights across a
+// board grid stop being wildly uneven because of one heavily-tagged ticket.
+const PILL_CAP = 4;
+function cappedPills(list, render) {
+  const shown = list.slice(0, PILL_CAP);
+  const hidden = list.length - shown.length;
+  return (
+    <>
+      {shown.map(render)}
+      {hidden > 0 && <Pill color={MUTE}>+{hidden} more</Pill>}
+    </>
+  );
+}
+
 // Shared ticket card for Kinds and Items -- Today, Week/Calendar, Plans'
 // kanban, Workspace's boards, and Log's rows all render through this (or a
 // thin wrapper) rather than bespoke per-page markup (§15). A Kind shows its
@@ -45,8 +62,8 @@ export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, 
           {family === "kind" && <Pill color={STATUS_COLORS[entity.status] || MUTE}>{kindStatusLabel(entity.status)}</Pill>}
           {family === "kind" && <Pill>{kindTypeLabel(entity.kindType)}</Pill>}
           {family === "item" && <Pill>{itemTypeLabel(entity.itemType)}</Pill>}
-          {(entity.resources || []).map((r) => <Pill key={r} color={MUTE}>{r}</Pill>)}
-          {(entity.tags || []).map((t) => <Pill key={t}>#{t}</Pill>)}
+          {cappedPills(entity.resources || [], (r) => <Pill key={r} color={MUTE}>{r}</Pill>)}
+          {cappedPills(entity.tags || [], (t) => <Pill key={t}>#{t}</Pill>)}
           {timing && <Pill color={MUTE}>{timing}</Pill>}
           {entity.retro && <Pill color={MUTE}>retro</Pill>}
           {entity.isRecurringPracticeItem && (

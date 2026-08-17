@@ -16,28 +16,31 @@ import Today from "./pages/Today";
 import ThisWeek from "./pages/ThisWeek";
 import Plans from "./pages/Plans";
 import Workspace from "./pages/Workspace";
-import Trends from "./pages/Trends";
 import Log from "./pages/Log";
 import Secretary from "./pages/Secretary";
 import SearchPage from "./pages/Search";
 import Settings from "./pages/Settings";
 
-// §4 -- flat tabbed shell on mobile: top bar (Today/Week/Plans/Workspace/
-// Trends) + hamburger (Search/Log/Secretary/Settings), completely unchanged
-// from the original mobile-first design. Desktop (see useViewport) gets its
-// own shell below -- a persistent sidebar for the same five primary tabs, a
+// §4 -- flat tabbed shell on mobile: top bar (Today/Week/Plans/Workspace)
+// + hamburger (Search/Log/Secretary/Settings), completely unchanged from
+// the original mobile-first design. Desktop (see useViewport) gets its own
+// shell below -- a persistent sidebar for the same four primary tabs, a
 // "More" dropdown standing in for the hamburger (Search/Log/Settings), a
 // distinctly-styled Secretary shortcut (its own page, not lumped into
 // More), and a dockable Secretary chat panel for quick in-context questions
 // without leaving the current page -- reusing every page/hook/handler here
 // unchanged, just laid out differently. Both accounts render and act
 // identically (§13) -- there is no isOwner branch left anywhere here.
+//
+// Trends used to be a fifth tab here; it's retired (folded into
+// Workspace's own Views gallery, per the household's "land every view in
+// one place" request) rather than kept as a second, now-redundant
+// analytics page.
 const TOP_TABS = [
   { path: "/today", label: "Today" },
   { path: "/week", label: "Week" },
   { path: "/plans", label: "Plans" },
   { path: "/workspace", label: "Workspace" },
-  { path: "/trends", label: "Trends" },
 ];
 
 const MENU_ITEMS = [
@@ -109,8 +112,6 @@ function Shell({ user }) {
     <Plans {...pageProps} />
   ) : path === "/workspace" ? (
     <Workspace {...pageProps} focusKindId={focusKindId} onFocusHandled={() => setFocusKindId(null)} />
-  ) : path === "/trends" ? (
-    <Trends {...pageProps} />
   ) : path === "/search" ? (
     <SearchPage {...pageProps} />
   ) : path === "/log" ? (
