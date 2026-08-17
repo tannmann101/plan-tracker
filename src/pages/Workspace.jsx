@@ -5,12 +5,15 @@ import { useViewport } from "../useViewport";
 import { EntityCard } from "../components/EntityCard";
 import EditEntityModal from "../components/EditEntityModal";
 import AddForm from "../components/AddForm";
-import { Timeline, HorizontalBarChart, WeeklyBarChart } from "../components/charts";
+import { Timeline, BarChart, WeeklyBarChart, DetailList } from "../components/charts";
 import { SecretaryChatPanel } from "./Secretary";
 import { KIND_STATUSES, domainLabel, weekStartISO, addDaysISO } from "../constants";
 
 // Last `n` week-starts (oldest first), each with a count of Items whose
 // completedAt fell in that week -- the tasks-completed-over-time panel.
+// items carries the actual completed Items (family-tagged) behind each
+// week's count so the WeeklyBarChart can drill down the same way every
+// other chart on this page now does.
 function completedByWeek(items, n = 8) {
   const weeks = [];
   let cursor = weekStartISO();
@@ -20,8 +23,8 @@ function completedByWeek(items, n = 8) {
   }
   return weeks.map((week) => {
     const end = addDaysISO(week, 7);
-    const count = (items || []).filter((it) => it.done && it.completedAt && it.completedAt >= new Date(`${week}T00:00:00`).getTime() && it.completedAt < new Date(`${end}T00:00:00`).getTime()).length;
-    return { week, count };
+    const weekItems = (items || []).filter((it) => it.done && it.completedAt && it.completedAt >= new Date(`${week}T00:00:00`).getTime() && it.completedAt < new Date(`${end}T00:00:00`).getTime());
+    return { week, count: weekItems.length, items: weekItems.map((entity) => ({ family: "item", entity })) };
   });
 }
 
@@ -78,6 +81,7 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
   const [focused, setFocused] = useState(null); // { family, entity } -- scopes the chat panel
+  const [expandedWeek, setExpandedWeek] = useState(null);
 
   // Arriving here via a "why is this here" chain's Kind link (InfoModal's
   // onNavigateKind) focuses the chat on that Kind without forcing the edit
@@ -115,13 +119,20 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
   const weekEnd = addDaysISO(weekStart, 7);
   const weekItems = (secretary.items || []).filter((i) => i.timing?.targetDay && i.timing.targetDay >= weekStart && i.timing.targetDay < weekEnd);
 
-  const domainCounts = {};
-  for (const e of [...(secretary.kinds || []), ...(secretary.items || [])]) domainCounts[e.domain] = (domainCounts[e.domain] || 0) + 1;
-  const domainRows = Object.entries(domainCounts).sort((a, b) => b[1] - a[1])
-    .map(([id, count]) => ({ label: domainLabel(id, secretary.domains), count, color: DOMAIN_COLORS[id] || MUTE, id }));
+  const domainBuckets = {};
+  for (const [family, list] of [["kind", secretary.kinds || []], ["item", secretary.items || []]]) {
+    for (const entity of list) {
+      if (!entity.domain) continue;
+      (domainBuckets[entity.domain] ||= []).push({ family, entity });
+    }
+  }
+  const domainRows = Object.entries(domainBuckets).sort((a, b) => b[1].length - a[1].length)
+    .map(([id, entities]) => ({ label: domainLabel(id, secretary.domains), count: entities.length, color: DOMAIN_COLORS[id] || MUTE, id, entities }));
+  const expandedDomainRow = domainRows.find((r) => r.id === domainFilter);
 
   const completedSeries = [{ key: "count", label: "Completed", color: INKBLUE }];
   const completedData = completedByWeek(secretary.items);
+  const expandedWeekRow = completedData.find((d) => d.week === expandedWeek);
 
   const timelineRows = (secretary.kinds || [])
     .filter((k) => k.timing?.dueDate)
@@ -195,16 +206,20 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
         </Card>
 
         <Card>
-          <ExpandableRail title="Domain distribution -- click a bar to filter">
+          <ExpandableRail title="Domain distribution -- click a bar to filter the board, below">
             {domainRows.length === 0 ? <Note>Nothing yet.</Note> : (
-              <HorizontalBarChart rows={domainRows} onBarClick={(id) => setDomainFilter(domainFilter === id ? null : id)} activeId={domainFilter} />
+              <>
+                <BarChart rows={domainRows} onBarClick={(id) => setDomainFilter(domainFilter === id ? null : id)} activeId={domainFilter} />
+                {expandedDomainRow && <DetailList items={expandedDomainRow.entities} onOpen={openTicket} />}
+              </>
             )}
           </ExpandableRail>
         </Card>
 
         <Card>
-          <ExpandableRail title="Completed, last 8 weeks">
-            <WeeklyBarChart data={completedData} series={completedSeries} />
+          <ExpandableRail title="Completed, last 8 weeks -- click a bar to see what's done">
+            <WeeklyBarChart data={completedData} series={completedSeries} onBarClick={(week) => setExpandedWeek(expandedWeek === week ? null : week)} activeId={expandedWeek} />
+            {expandedWeekRow && <DetailList items={expandedWeekRow.items} onOpen={openTicket} emptyLabel="Nothing completed this week." />}
           </ExpandableRail>
         </Card>
       </div>

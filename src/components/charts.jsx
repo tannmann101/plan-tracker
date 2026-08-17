@@ -7,7 +7,7 @@
 // baseline hover tooltip rather than a full custom tooltip layer, kept
 // deliberately light given how many other surfaces this release touches.
 
-import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, CARD, softTint } from "../theme";
+import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, CARD, DOMAIN_COLORS, softTint } from "../theme";
 import { todayISO } from "../constants";
 
 const NUM = (n) => n.toLocaleString();
@@ -38,7 +38,10 @@ export function Legend({ series }) {
 // Grouped/stacked weekly bar chart -- one bar-group per week, one segment
 // per series (domain), height 160px. Labels only the final week's total
 // (the "current" endpoint) and the y-axis max, per the sparing-labels rule.
-export function WeeklyBarChart({ data, series, height = 160 }) {
+// onBarClick/activeId, when given, make a whole week's bar-group (every
+// stacked segment together) a control for revealing that week's actual
+// entities via DetailList, same contract as BarChart's.
+export function WeeklyBarChart({ data, series, height = 160, onBarClick, activeId }) {
   const width = 640;
   const padL = 34, padB = 20, padT = 10;
   const plotW = width - padL - 8;
@@ -70,14 +73,20 @@ export function WeeklyBarChart({ data, series, height = 160 }) {
           return { key: s.key, color: s.color, x, y, h, v };
         });
         const isLast = i === data.length - 1;
+        const dimmed = activeId && activeId !== d.week;
         return (
-          <g key={d.week}>
+          <g
+            key={d.week}
+            onClick={onBarClick ? () => onBarClick(d.week) : undefined}
+            style={{ cursor: onBarClick ? "pointer" : "default" }}
+            opacity={dimmed ? 0.4 : 1}
+          >
             {segments.map((seg, si) => seg.h > 0 && (
               <rect
                 key={seg.key} x={seg.x} y={seg.y} width={barW} height={Math.max(seg.h, 1)}
                 fill={seg.color} rx={si === segments.length - 1 ? 3 : 0}
               >
-                <title>{`${d.week}: ${series.find((s) => s.key === seg.key)?.label} = ${seg.v}`}</title>
+                <title>{onBarClick ? `${d.week}: ${total} -- click to see what's counted` : `${d.week}: ${series.find((s) => s.key === seg.key)?.label} = ${seg.v}`}</title>
               </rect>
             ))}
             {isLast && total > 0 && (
@@ -97,27 +106,45 @@ export function WeeklyBarChart({ data, series, height = 160 }) {
   );
 }
 
-// Ranked horizontal bars -- domain distribution, tool-location usage. Label
-// to the left, value at the bar's end (outside when the bar itself is too
-// short to hold it comfortably).
-// onBarClick/activeId are optional -- when given (Workspace's Domain
-// distribution panel), a bar becomes an alternate control for the exact
-// same filter its page's Pill row already sets, dimming every bar but the
-// active one so the chart itself reads as a live filter state, not just a
-// static picture. Omitting them (ThisWeek's own Domain distribution panel)
-// leaves the chart purely informational, unchanged from before.
-export function HorizontalBarChart({ rows, height = 22, max: fixedMax, onBarClick, activeId }) {
-  const max = fixedMax ?? Math.max(1, ...rows.map((r) => r.count));
+// Ranked vertical bars -- domain distribution, resource usage, goal
+// progress. Category along the x-axis, value as bar height, gridlines at
+// 0/50%/100% of the max like every other chart here. A sparing value label
+// sits above each bar; the category label below is truncated to keep long
+// domain/resource/goal names from colliding, with the full text always in
+// the native <title> tooltip.
+// onBarClick/activeId are optional -- when given, a bar becomes an
+// alternate control for whatever filter/drilldown the page wires up
+// (Workspace's Domain distribution sets a page filter; Trends' panels open
+// a DetailList of the actual entities the bar is counting), dimming every
+// bar but the active one so the chart itself reads as a live control
+// state, not just a static picture. Omitting them leaves it purely
+// informational.
+export function BarChart({ rows, height = 200, max: fixedMax, onBarClick, activeId }) {
   const width = 640;
-  const labelW = 150;
-  const barMaxW = width - labelW - 40;
+  const padL = 34, padR = 10, padT = 22, padB = 34;
+  const plotW = width - padL - padR;
+  const plotH = height - padT - padB;
+  const max = fixedMax ?? niceMax(Math.max(1, ...rows.map((r) => r.count)));
+  const bandW = plotW / rows.length;
+  const barW = Math.min(42, bandW - 10);
+
   return (
-    <svg viewBox={`0 0 ${width} ${rows.length * height}`} style={{ width: "100%", height: "auto" }} role="img">
+    <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto" }} role="img">
+      {[0, 0.5, 1].map((frac) => {
+        const y = padT + plotH * (1 - frac);
+        return (
+          <g key={frac}>
+            <line x1={padL} x2={width - padR} y1={y} y2={y} stroke={LINE} strokeWidth={1} />
+            <text x={padL - 6} y={y + 3} textAnchor="end" fontFamily={MONO} fontSize={9} fill={MUTE}>{NUM(Math.round(max * frac))}</text>
+          </g>
+        );
+      })}
       {rows.map((r, i) => {
-        const w = Math.max(2, (r.count / max) * barMaxW);
-        const y = i * height;
-        const insideFits = w > 24;
+        const h = Math.max(2, (r.count / max) * plotH);
+        const x = padL + i * bandW + (bandW - barW) / 2;
+        const y = padT + plotH - h;
         const dimmed = activeId && r.id != null && activeId !== r.id;
+        const label = r.label.length > 12 ? `${r.label.slice(0, 11)}…` : r.label;
         return (
           <g
             key={r.label}
@@ -125,21 +152,50 @@ export function HorizontalBarChart({ rows, height = 22, max: fixedMax, onBarClic
             style={{ cursor: onBarClick && r.id != null ? "pointer" : "default" }}
             opacity={dimmed ? 0.4 : 1}
           >
-            <text x={labelW - 8} y={y + height / 2 + 4} textAnchor="end" fontFamily={MONO} fontSize={10.5} fill={INK}>{r.label}</text>
-            <rect x={labelW} y={y + 4} width={w} height={height - 10} rx={3} fill={r.color}>
-              <title>{onBarClick ? `${r.label}: ${r.count} -- click to filter` : `${r.label}: ${r.count}`}</title>
+            <rect x={x} y={y} width={barW} height={h} rx={3} fill={r.color}>
+              <title>{onBarClick ? `${r.label}: ${r.count} -- click to see what's counted` : `${r.label}: ${r.count}`}</title>
             </rect>
-            <text
-              x={labelW + (insideFits ? w - 6 : w + 6)} y={y + height / 2 + 4}
-              textAnchor={insideFits ? "end" : "start"} fontFamily={MONO} fontSize={10} fontWeight={600}
-              fill={insideFits ? "#fff" : INK}
-            >
-              {r.count}
-            </text>
+            <text x={x + barW / 2} y={y - 6} textAnchor="middle" fontFamily={MONO} fontSize={10} fontWeight={600} fill={INK}>{r.count}</text>
+            <text x={x + barW / 2} y={height - padB + 14} textAnchor="middle" fontFamily={MONO} fontSize={9} fill={MUTE}>{label}</text>
           </g>
         );
       })}
     </svg>
+  );
+}
+
+// The actual entities behind a chart value, as a compact clickable list --
+// the answer to "what is this number actually counting." Each row opens
+// straight into the page's own edit modal (onOpen(family, entity)) rather
+// than making the household leave the chart to go find it. Shared by every
+// drilldown-capable chart below (BarChart bars, WeeklyBarChart bars,
+// Heatmap cells, SegmentBars segments, StatusMeters stages) so there's one
+// implementation of "show me what's in this bucket," not five.
+export function DetailList({ items, onOpen, emptyLabel = "Nothing in this bucket." }) {
+  if (!items || items.length === 0) return <p style={{ fontFamily: MONO, fontSize: 11, color: MUTE, margin: "8px 0 0" }}>{emptyLabel}</p>;
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", gap: 2, marginTop: 8, maxHeight: 240, overflowY: "auto",
+      border: `1px solid ${LINE}`, borderRadius: 8, padding: 4,
+    }}>
+      {items.map(({ family, entity }) => (
+        <button
+          key={`${family}-${entity.id}`}
+          type="button"
+          onClick={() => onOpen(family, entity)}
+          className="ui-detail-row"
+          style={{
+            display: "flex", alignItems: "center", gap: 8, border: "none", background: "none",
+            textAlign: "left", cursor: "pointer", padding: "6px 7px", borderRadius: 6,
+            fontFamily: SANS, fontSize: 12, color: INK,
+          }}
+        >
+          <span style={{ width: 6, height: 6, borderRadius: "50%", background: DOMAIN_COLORS[entity.domain] || MUTE, flex: "none" }} />
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entity.title}</span>
+          <span style={{ fontFamily: MONO, fontSize: 9.5, color: MUTE, flex: "none" }}>{family}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -278,16 +334,28 @@ function Sparkline({ points, color, width = 56, height = 22 }) {
 // single current headline number rather than a chart. Deliberately the
 // first thing Trends shows: it still reads as intentional on day one, long
 // before any panel below has enough history to plot.
-export function StatTile({ label, value, sublabel, color = INKBLUE, trend }) {
+// onClick is optional -- when given, the whole tile becomes a jump to
+// wherever this number's detail actually lives (another panel further
+// down this same page, or another page entirely), so a KPI is never a
+// dead end.
+export function StatTile({ label, value, sublabel, color = INKBLUE, trend, onClick }) {
+  const Tag = onClick ? "button" : "div";
   return (
-    <div style={{ flex: "1 1 150px", minWidth: 140, padding: "13px 15px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10 }}>
+    <Tag
+      type={onClick ? "button" : undefined}
+      onClick={onClick}
+      style={{
+        flex: "1 1 150px", minWidth: 140, padding: "13px 15px", background: CARD, border: `1px solid ${LINE}`, borderRadius: 10,
+        textAlign: "left", font: "inherit", cursor: onClick ? "pointer" : "default",
+      }}
+    >
       <div style={{ fontFamily: MONO, fontSize: 10, color: MUTE, textTransform: "uppercase", letterSpacing: "0.045em" }}>{label}</div>
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 8, marginTop: 5 }}>
         <div style={{ fontFamily: SANS, fontSize: 25, fontWeight: 600, color: INK, lineHeight: 1 }}>{value}</div>
         {trend && trend.length > 1 && <Sparkline points={trend} color={color} />}
       </div>
       {sublabel && <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, marginTop: 5 }}>{sublabel}</div>}
-    </div>
+    </Tag>
   );
 }
 
@@ -296,7 +364,9 @@ export function StatTile({ label, value, sublabel, color = INKBLUE, trend }) {
 // done/not-done cell): filled at full color when done, an empty outlined
 // square otherwise. A slightly wider gap after every 7th cell groups the
 // grid into weeks for the eye without adding gridlines.
-export function Heatmap({ rows, color = INKBLUE, cell = 13, gap = 3, weekGap = 5 }) {
+// onCellClick(item) is optional and only ever fires for a cell that has a
+// real check-in behind it (c.item) -- a blank day has nothing to drill into.
+export function Heatmap({ rows, color = INKBLUE, cell = 13, gap = 3, weekGap = 5, onCellClick }) {
   if (rows.length === 0) return null;
   const days = rows[0]?.cells.length || 0;
   const labelW = 130;
@@ -315,8 +385,10 @@ export function Heatmap({ rows, color = INKBLUE, cell = 13, gap = 3, weekGap = 5
             <rect
               key={c.day} x={labelW + xFor(ci)} y={ri * rowH} width={cell} height={cell} rx={3}
               fill={c.done ? color : "none"} stroke={c.done ? "none" : LINE} strokeWidth={1}
+              onClick={onCellClick && c.item ? () => onCellClick(c.item) : undefined}
+              style={{ cursor: onCellClick && c.item ? "pointer" : "default" }}
             >
-              <title>{`${r.title} -- ${c.day}: ${c.done ? "done" : "not done"}`}</title>
+              <title>{`${r.title} -- ${c.day}: ${c.done ? "done -- click to open" : "not done"}`}</title>
             </rect>
           ))}
         </g>
@@ -365,21 +437,29 @@ export function SegmentBars({ segments, color = INKBLUE, height = 56, barW = 16,
 // placed edge to edge). A meter's track is a lighter step of that same
 // stage's hue, so state reads without ever needing two stages' colors to
 // be told apart from each other.
-export function StatusMeters({ stages }) {
+// onStageClick/activeStatus are optional -- a stage becomes a toggle for
+// showing exactly which Kinds sit in it right now (Trends renders a
+// DetailList underneath from the same stage's entities).
+export function StatusMeters({ stages, onStageClick, activeStatus }) {
   const total = stages.reduce((sum, s) => sum + s.count, 0);
   if (total === 0) return null;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
       {stages.map((s) => {
         const pct = Math.round((s.count / total) * 100);
+        const dimmed = activeStatus && activeStatus !== s.status;
         return (
-          <div key={s.status}>
+          <div
+            key={s.status}
+            onClick={onStageClick && s.count > 0 ? () => onStageClick(s.status) : undefined}
+            style={{ cursor: onStageClick && s.count > 0 ? "pointer" : "default", opacity: dimmed ? 0.45 : 1 }}
+          >
             <div style={{ display: "flex", justifyContent: "space-between", fontFamily: MONO, fontSize: 10.5, color: INK, marginBottom: 4 }}>
               <span>{s.label}</span>
               <span style={{ color: MUTE }}>{s.count}</span>
             </div>
             <div style={{ height: 8, borderRadius: 999, background: softTint(s.color), overflow: "hidden" }}>
-              <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: s.color }} title={`${s.label}: ${s.count} (${pct}%)`} />
+              <div style={{ width: `${pct}%`, height: "100%", borderRadius: 999, background: s.color }} title={`${s.label}: ${s.count} (${pct}%)${onStageClick && s.count > 0 ? " -- click to see what's in it" : ""}`} />
             </div>
           </div>
         );

@@ -29,6 +29,7 @@ export function GlobalStyle() {
       .ui-btn:active:not(:disabled) { transform: translateY(1px); }
       .ui-btn:focus-visible { outline: 2px solid var(--btn-c); outline-offset: 2px; }
       .ui-tab:hover { background: rgb(var(--shadow-rgb) / 0.05); }
+      .ui-detail-row:hover { background: ${HEAD_BG}; }
       .ui-card-link:hover { border-color: ${INKBLUE}; box-shadow: 0 1px 2px rgb(var(--shadow-rgb) / 0.06), 0 10px 26px rgb(var(--shadow-rgb) / 0.1); }
       .ui-check { transition: background ${TRANSITION}, border-color ${TRANSITION}; cursor: pointer; }
       .ui-fab { transition: transform 120ms ease, box-shadow ${TRANSITION}; }
@@ -75,9 +76,9 @@ export function Wordmark({ size = 18 }) {
   );
 }
 
-export function SectionTitle({ children, note }) {
+export function SectionTitle({ children, note, id }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "32px 0 10px", gap: 10, flexWrap: "wrap" }}>
+    <div id={id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "32px 0 10px", gap: 10, flexWrap: "wrap" }}>
       <h2 style={{
         fontFamily: SERIF, fontSize: 15.5, fontWeight: 600, color: INK, margin: 0,
         letterSpacing: "0.01em", display: "flex", alignItems: "center", gap: 8,

@@ -8,7 +8,7 @@ import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import DisciplineDetailModal from "../components/DisciplineDetailModal";
 import CalendarMonthView from "../components/CalendarMonthView";
-import { HorizontalBarChart } from "../components/charts";
+import { BarChart, DetailList } from "../components/charts";
 import { weekStartISO, addDaysISO, domainLabel } from "../constants";
 
 const VIEW_TABS = [
@@ -37,6 +37,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
   const [addDefaults, setAddDefaults] = useState(null);
   const [editing, setEditing] = useState(null);
   const [disciplineModal, setDisciplineModal] = useState(null);
+  const [expandedDomain, setExpandedDomain] = useState(null);
 
   const activeDisciplines = (secretary.disciplines || []).filter((d) => d.focused && !d.resolved);
   const weekDays = Array.from({ length: 7 }, (_, i) => addDaysISO(weekStart, i));
@@ -55,11 +56,15 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
   const openAdd = (defaults) => { setAddDefaults(defaults); setAdding(true); };
   const onSlotClick = (iso, hour) => openAdd({ targetDay: iso, time: `${String(hour).padStart(2, "0")}:00` });
 
-  const domainCounts = {};
-  for (const i of weekItems) domainCounts[i.domain] = (domainCounts[i.domain] || 0) + 1;
-  const domainRows = Object.entries(domainCounts)
-    .sort((a, b) => b[1] - a[1])
-    .map(([id, count]) => ({ label: domainLabel(id, secretary.domains), count, color: DOMAIN_COLORS[id] || MUTE }));
+  const domainBuckets = {};
+  for (const i of weekItems) (domainBuckets[i.domain] ||= []).push(i);
+  const domainRows = Object.entries(domainBuckets)
+    .sort((a, b) => b[1].length - a[1].length)
+    .map(([id, list]) => ({
+      id, label: domainLabel(id, secretary.domains), count: list.length, color: DOMAIN_COLORS[id] || MUTE,
+      entities: list.map((entity) => ({ family: "item", entity })),
+    }));
+  const expandedRow = domainRows.find((r) => r.id === expandedDomain);
 
   return (
     <div>
@@ -125,8 +130,13 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
 
         {view === "week" && (
           <div style={isDesktop ? { flex: "0 1 360px", minWidth: 300, maxWidth: 400 } : { flex: "1 1 260px", minWidth: 260 }}>
-            <ExpandableRail title="Domain distribution, this week">
-              {domainRows.length === 0 ? <Note>Nothing placed this week yet.</Note> : <HorizontalBarChart rows={domainRows} />}
+            <ExpandableRail title="Domain distribution, this week -- click a bar to see what's in it">
+              {domainRows.length === 0 ? <Note>Nothing placed this week yet.</Note> : (
+                <>
+                  <BarChart rows={domainRows} onBarClick={(id) => setExpandedDomain(expandedDomain === id ? null : id)} activeId={expandedDomain} />
+                  {expandedRow && <DetailList items={expandedRow.entities} onOpen={openEdit} />}
+                </>
+              )}
             </ExpandableRail>
           </div>
         )}

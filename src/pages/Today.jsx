@@ -114,16 +114,20 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
         </div>
 
         <div style={isDesktop ? { flex: "0 1 360px", minWidth: 300, maxWidth: 400 } : { flex: "1 1 260px", minWidth: 260 }}>
-          <ExpandableRail title="Goal progress">
+          <ExpandableRail title="Goal progress -- click one to open it">
             {goals.length === 0 ? (
               <Note>No open Goals yet.</Note>
             ) : goals.map((g) => {
               const progress = kindProgress(g.id, secretary);
               return (
-                <div key={g.id} style={{ marginBottom: 16 }}>
+                <button
+                  key={g.id} type="button" onClick={() => setEditing({ family: "kind", entity: g })}
+                  style={{ display: "block", width: "100%", border: "none", background: "none", padding: 0, marginBottom: 16, textAlign: "left", cursor: "pointer" }}
+                >
                   <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500 }}>{g.title}</div>
                   <ProgressBar percent={progress.percent} color={DOMAIN_COLORS[g.domain] || INKBLUE} />
-                </div>
+                  <div style={{ fontFamily: MONO, fontSize: 10, color: MUTE, marginTop: 3 }}>{progress.done}/{progress.total} Items done</div>
+                </button>
               );
             })}
           </ExpandableRail>
