@@ -262,7 +262,18 @@ export function LineChart({ points, color, height = 140, yMax = 100, yUnit = "%"
 // Goal) instead of just a point marker at its due date. Rows without a
 // date are dropped; onClick, when given, makes a row tap-through to that
 // Kind.
-export function Timeline({ rows, onClick, height = 90 }) {
+// Four label tiers (near-above, near-below, far-above, far-below) cycling
+// by index, rather than the old 2-way alternation -- two due dates that
+// land close together in x now have a real chance of landing in different
+// tiers instead of guaranteed-colliding labels above/below the same lane.
+const TIMELINE_TIERS = [
+  { dy: -16, ty: -20 },
+  { dy: 16, ty: 28 },
+  { dy: -32, ty: -36 },
+  { dy: 32, ty: 44 },
+];
+
+export function Timeline({ rows, onClick, height = 150 }) {
   const dated = (rows || []).filter((r) => r.date).sort((a, b) => a.date.localeCompare(b.date));
   if (dated.length === 0) {
     return <p style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>Nothing with a due date to place on a timeline yet.</p>;
@@ -276,7 +287,7 @@ export function Timeline({ rows, onClick, height = 90 }) {
   const minT = new Date(`${minD}T00:00:00`).getTime();
   const maxT = Math.max(new Date(`${maxD}T00:00:00`).getTime(), minT + DAY);
   const x = (d) => padL + ((new Date(`${d}T00:00:00`).getTime() - minT) / (maxT - minT)) * (width - padL - padR);
-  const laneY = height - 26;
+  const laneY = height - 46;
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} style={{ width: "100%", height: "auto" }} role="img">
@@ -287,7 +298,7 @@ export function Timeline({ rows, onClick, height = 90 }) {
       </g>
       {dated.map((r, i) => {
         const cx = x(r.date);
-        const above = i % 2 === 0;
+        const tier = TIMELINE_TIERS[i % TIMELINE_TIERS.length];
         const hasRange = r.startDate && r.startDate < r.date;
         return (
           <g
@@ -298,10 +309,14 @@ export function Timeline({ rows, onClick, height = 90 }) {
             {hasRange && (
               <rect x={x(r.startDate)} y={laneY - 3} width={Math.max(2, cx - x(r.startDate))} height={6} rx={3} fill={r.color || INKBLUE} opacity={0.35} />
             )}
-            <line x1={cx} x2={cx} y1={laneY} y2={above ? laneY - 16 : laneY + 16} stroke={r.color || INKBLUE} strokeWidth={1} />
+            <line x1={cx} x2={cx} y1={laneY} y2={laneY + tier.dy} stroke={r.color || INKBLUE} strokeWidth={1} />
             <circle cx={cx} cy={laneY} r={4} fill={r.color || INKBLUE} />
-            <text x={cx} y={above ? laneY - 20 : laneY + 28} textAnchor="middle" fontFamily={SANS} fontSize={10} fill={INK}>
-              {r.title.length > 16 ? `${r.title.slice(0, 15)}…` : r.title}
+            <text
+              x={cx} y={laneY + tier.ty}
+              textAnchor={cx < 40 ? "start" : cx > width - 40 ? "end" : "middle"}
+              fontFamily={SANS} fontSize={10} fill={INK}
+            >
+              {r.title.length > 20 ? `${r.title.slice(0, 19)}…` : r.title}
             </text>
             <title>{hasRange ? `${r.title}: ${r.startDate} → ${r.date}` : `${r.title}: ${r.date}`}</title>
           </g>
