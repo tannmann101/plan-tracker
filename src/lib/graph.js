@@ -192,6 +192,27 @@ export function upcomingItems(items, days = 14) {
     }));
 }
 
+// How booked one day is within the household's own TimeGrid display window
+// (startHour/endHour, §useTimeGridPrefs -- the same "active hours" concept
+// secretaryChat now reasons over too). Takes the day's Items already split
+// the way TimeGridDay itself needs them (floating vs timed), so this can be
+// called from both TimeGridDay's own per-day badge and a week-level summary
+// without either one re-deriving the split. Purely a display/attention
+// signal -- nothing here writes anything or calls Secretary.
+export function dayScheduleLoad(floatingItems, timedItems, startHour, endHour) {
+  const timedMinutes = timedItems.reduce((sum, i) => sum + (i.timing?.durationMinutes || 30), 0);
+  const windowMinutes = Math.max(60, (endHour - startHour) * 60);
+  const percentBusy = Math.min(1, timedMinutes / windowMinutes);
+  return {
+    timedMinutes,
+    windowMinutes,
+    freeMinutes: Math.max(0, windowMinutes - timedMinutes),
+    percentBusy,
+    isEmpty: floatingItems.length === 0 && timedItems.length === 0,
+    isOverloaded: percentBusy >= 0.85,
+  };
+}
+
 // A habit building toward a Goal/Project (§9.1 "goal-linked habits")
 // tracks a cumulative amount instead of a plain daily checkbox -- the sum
 // of every one of its Items' own progressAmount, all-time (not just this

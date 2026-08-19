@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, DOMAIN_COLORS, BG, softTint } from "../theme";
+import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, MOSS, DOMAIN_COLORS, BG, softTint } from "../theme";
 import { Checkbox } from "../ui";
 import { useViewport } from "../useViewport";
-import { disciplineStreak } from "../lib/graph";
+import { disciplineStreak, dayScheduleLoad } from "../lib/graph";
+import { todayISO } from "../constants";
 
 const MIN_BLOCK_PX = 16;
 
@@ -161,22 +162,63 @@ function layoutTimedItems(timedItems) {
   return laid;
 }
 
+// The gaps between timed Items, clipped to the grid's own [startHour,
+// endHour] window -- the "actual free/busy, rendered visually" the
+// household asked for, rather than only something Secretary chat can
+// describe in words. Same sweep shape as layoutTimedItems above, just
+// walking the complement instead of the overlaps.
+function freeIntervals(timedItems, startHour, endHour) {
+  const dayStart = startHour * 60, dayEnd = endHour * 60;
+  const busy = timedItems
+    .map((i) => {
+      const start = timeToMinutes(i.timing.time);
+      const duration = i.timing.durationMinutes || 30;
+      return [Math.max(dayStart, start), Math.min(dayEnd, start + duration)];
+    })
+    .filter(([s, e]) => e > s)
+    .sort((a, b) => a[0] - b[0]);
+
+  const free = [];
+  let cursor = dayStart;
+  for (const [s, e] of busy) {
+    if (s > cursor) free.push([cursor, s]);
+    cursor = Math.max(cursor, e);
+  }
+  if (cursor < dayEnd) free.push([cursor, dayEnd]);
+  return free;
+}
+
 // One day's column: a floating-items strip on top, then the hour grid with
 // timed Items positioned/sized by time+duration. Shared by Today (a single
 // column) and Week (seven), so the actual "time blocking" behavior --
 // placement, overlap warnings, click-an-empty-slot-to-add -- exists once.
 export function TimeGridDay({
   iso, label, isToday, floatingItems, timedItems, startHour, endHour, pxPerHour = 52,
-  onToggleDone, onEdit, onSlotClick, disciplines = [], onDisciplineClick,
+  onToggleDone, onEdit, onSlotClick, disciplines = [], onDisciplineClick, onAskSecretary,
 }) {
   const gridHeight = (endHour - startHour) * pxPerHour;
   const laid = layoutTimedItems(timedItems);
+  const free = freeIntervals(timedItems, startHour, endHour);
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
+  const load = dayScheduleLoad(floatingItems, timedItems, startHour, endHour);
+  const showEmptyBadge = load.isEmpty && iso >= todayISO();
 
   return (
     <div>
-      <div style={{ fontFamily: MONO, fontSize: 11, color: isToday ? INKBLUE : INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>
-        {label}
+      <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+        <div style={{ fontFamily: MONO, fontSize: 11, color: isToday ? INKBLUE : INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+          {label}
+        </div>
+        {load.isOverloaded && (
+          <span style={{ fontFamily: MONO, fontSize: 9.5, color: BRICK, background: softTint(BRICK), border: `1px solid ${BRICK}55`, borderRadius: 999, padding: "1px 6px" }}>
+            booked solid
+          </span>
+        )}
+        {!load.isOverloaded && showEmptyBadge && (
+          <span style={{ fontFamily: MONO, fontSize: 9.5, color: MOSS, background: softTint(MOSS), border: `1px solid ${MOSS}55`, borderRadius: 999, padding: "1px 6px" }}>
+            nothing scheduled
+          </span>
+        )}
       </div>
 
       {disciplines.length > 0 && (
@@ -190,12 +232,23 @@ export function TimeGridDay({
       {floatingItems.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
           {floatingItems.map((item) => (
-            <FloatingChip key={item.id} item={item} onToggleDone={onToggleDone} onEdit={onEdit} />
+            <FloatingChip key={item.id} item={item} onToggleDone={onToggleDone} onEdit={onEdit} onAskSecretary={onAskSecretary} />
           ))}
         </div>
       )}
 
       <div style={{ position: "relative", height: gridHeight, border: `1px solid ${LINE}`, borderRadius: 6, overflow: "hidden" }}>
+        {free.filter(([s, e]) => e - s >= 20).map(([s, e]) => (
+          <div
+            key={`free-${s}`}
+            style={{
+              position: "absolute", left: 0, right: 0, pointerEvents: "none",
+              top: ((s - startHour * 60) / 60) * pxPerHour, height: ((e - s) / 60) * pxPerHour,
+              background: softTint(MOSS), opacity: 0.35,
+            }}
+          />
+        ))}
+
         {hours.map((h, i) => (
           <div
             key={h}
@@ -233,6 +286,19 @@ export function TimeGridDay({
                 {item.title}
               </div>
               {overlapping && <div style={{ fontFamily: MONO, fontSize: 9, color: BRICK, fontWeight: 600 }}>⚠ overlap</div>}
+              {onAskSecretary && height >= 32 && (
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); onAskSecretary("item", item); }}
+                  title="Ask Secretary about this"
+                  style={{
+                    position: "absolute", top: 1, right: 1, border: "none", background: "none", padding: 1,
+                    cursor: "pointer", fontSize: 9, lineHeight: 1, color: INKBLUE, opacity: 0.75,
+                  }}
+                >
+                  💬
+                </button>
+              )}
             </div>
           );
         })}
@@ -241,7 +307,7 @@ export function TimeGridDay({
   );
 }
 
-function FloatingChip({ item, onToggleDone, onEdit }) {
+function FloatingChip({ item, onToggleDone, onEdit, onAskSecretary }) {
   const domainColor = DOMAIN_COLORS[item.domain] || MUTE;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 6, background: softTint(domainColor), border: `1px solid ${domainColor}55`, borderRadius: 6, padding: "3px 6px" }}>
@@ -253,6 +319,16 @@ function FloatingChip({ item, onToggleDone, onEdit }) {
         {item.isRecurringPracticeItem && <span title="Tracked as a Practice -- same box as Plans' weekly tracker">↻ </span>}
         {item.title}
       </span>
+      {onAskSecretary && (
+        <button
+          type="button"
+          onClick={() => onAskSecretary("item", item)}
+          title="Ask Secretary about this"
+          style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontSize: 11, lineHeight: 1, flex: "none" }}
+        >
+          💬
+        </button>
+      )}
     </div>
   );
 }
