@@ -37,6 +37,26 @@ function transitionValue(type, entity) {
   return type === "item" ? String(!!entity.done) : entity.status;
 }
 
+// Deep-walks a compound step's patch, swapping any string exactly matching
+// "$ref:sN" for the real id a same-bundle step with ref "sN" already
+// produced -- the mechanism that lets e.g. a new Session's parentKindId
+// point at a Project created earlier in the same bundle, before either
+// existed. A ref that hasn't resolved yet (typo, or the model referenced a
+// step that comes later) is left as the literal string rather than thrown
+// away, so a bad proposal fails loudly (an invalid parentKindId) instead
+// of silently landing null.
+function resolveRefs(value, refMap) {
+  if (typeof value === "string") {
+    const m = /^\$ref:(.+)$/.exec(value);
+    return m && refMap[m[1]] ? refMap[m[1]] : value;
+  }
+  if (Array.isArray(value)) return value.map((v) => resolveRefs(v, refMap));
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, resolveRefs(v, refMap)]));
+  }
+  return value;
+}
+
 // Refresh-on-open sync, not live push: the app loads everything once on
 // mount and whenever refresh() is called explicitly -- Secretary is driven
 // by a weekly meeting plus occasional capture, not sub-second cross-device
@@ -294,6 +314,53 @@ export function useSecretary(enabled) {
     }
   }, [disciplines]);
 
+  // Applies an approved compound pendingOperation -- a bundle of linked
+  // steps (see functions/index.js's secretaryChat prompt) approved and
+  // written together via the review log's "Approve all". Steps run in
+  // order through the exact same saveEntity/savePracticeHabit/
+  // saveDiscipline paths every other write in the app uses (no forked
+  // write logic, same discipline as the single-op review card), and each
+  // step's created id is recorded under its own "ref" so a LATER step in
+  // the same bundle can point at it (e.g. a new Session's parentKindId
+  // referencing the Project a step earlier just created) via a literal
+  // "$ref:sN" string, resolved here before that step is written.
+  const applyCompoundOperation = useCallback(async (op) => {
+    setSaveStatus("saving");
+    try {
+      const refMap = {};
+      for (const sub of op.ops || []) {
+        const patch = resolveRefs(sub.patch, refMap);
+        let id;
+        if (sub.entityType === "kind" || sub.entityType === "item") {
+          const list = sub.entityType === "kind" ? kinds : items;
+          const base = sub.action === "update" && sub.targetId ? (list || []).find((e) => e.id === sub.targetId) || {} : {};
+          const payload = { ...base, ...patch };
+          if (sub.action === "update") payload.id = sub.targetId;
+          if (sub.entityType === "kind" && !payload.status) payload.status = base.status || "not-started";
+          if (sub.entityType === "item" && payload.done == null) payload.done = base.done || false;
+          id = await saveEntity(sub.entityType, payload);
+        } else if (sub.entityType === "practiceHabit") {
+          const base = sub.action === "update" && sub.targetId ? (practiceHabits || []).find((h) => h.id === sub.targetId) || {} : {};
+          const payload = { ...base, ...patch };
+          if (sub.action === "update") payload.id = sub.targetId;
+          id = await savePracticeHabit(payload);
+        } else if (sub.entityType === "discipline") {
+          const base = sub.action === "update" && sub.targetId ? (disciplines || []).find((d) => d.id === sub.targetId) || {} : {};
+          const { relapse, ...rest } = patch;
+          const payload = { ...base, ...rest, ...(relapse ? { startedAt: Date.now() } : {}) };
+          if (sub.action === "update") payload.id = sub.targetId;
+          id = await saveDiscipline(payload);
+        }
+        if (sub.ref && id) refMap[sub.ref] = id;
+      }
+      setSaveStatus("idle");
+    } catch (err) {
+      console.error("Failed to apply compound operation", err);
+      setSaveStatus("error");
+      throw err;
+    }
+  }, [kinds, items, practiceHabits, disciplines, saveEntity, savePracticeHabit, saveDiscipline]);
+
   // Captures are just the raw intake record now -- not event-logged (same
   // "plain document" treatment as before), since triage always drafts a
   // pendingOperation for review rather than writing anything directly.
@@ -415,7 +482,8 @@ export function useSecretary(enabled) {
     domains, resources, practiceCategories, disciplineTypes,
     status, saveStatus, refresh,
     saveEntity, deleteEntity, savePracticeHabit, deletePracticeHabit, saveDiscipline, deleteDiscipline,
-    saveCapture, deleteCapture, savePendingOperation, deletePendingOperation, saveChatMessage, saveConfig,
+    saveCapture, deleteCapture, savePendingOperation, deletePendingOperation, applyCompoundOperation,
+    saveChatMessage, saveConfig,
   };
 }
 

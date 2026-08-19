@@ -442,6 +442,46 @@ try {
   check("update-kind/item pending operation with a targetId is allowed", false);
   console.error(e.message);
 }
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "pendingOperations/op-compound"), {
+    opType: "compound",
+    targetId: null,
+    ops: [
+      { ref: "s1", entityType: "kind", action: "create", targetId: null, patch: { title: "New Project", kindType: "project", domain: "projects", status: "not-started" } },
+      { ref: "s2", entityType: "item", action: "update", targetId: "item1", patch: { parentKindId: "$ref:s1" } },
+    ],
+    sourceType: "chat",
+    status: "pending",
+    createdAt: now(),
+  }));
+  check("compound pending operation with a non-empty ops list is allowed", true);
+} catch (e) {
+  check("compound pending operation with a non-empty ops list is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "pendingOperations/op-compound-empty"), {
+    opType: "compound",
+    targetId: null,
+    ops: [],
+    sourceType: "chat",
+    status: "pending",
+    createdAt: now(),
+  }));
+  check("compound pending operation with an empty ops list is rejected", true);
+} catch (e) {
+  check("compound pending operation with an empty ops list is rejected", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "pendingOperations/op-discipline"), validPendingOperation({
+    opType: "update-discipline", targetId: "discipline1", sourceType: "chat", patch: { focused: true },
+  })));
+  check("update-discipline pending operation is allowed", true);
+} catch (e) {
+  check("update-discipline pending operation is allowed", false);
+  console.error(e.message);
+}
 
 // -- Captures: narrowed to raw intake only --
 

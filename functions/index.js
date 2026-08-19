@@ -127,21 +127,76 @@ function itemPatch(draft) {
   return patch;
 }
 
+// A discipline patch, for the one thing Secretary chat can now actually do
+// to an existing "Habits to Break" entry: pull it into/out of focus, log a
+// relapse (translated to a fresh startedAt client-side at approval time --
+// never trust an AI-supplied timestamp for that), or mark it resolved.
+// Only ever an update (see the prompt: chat never creates a discipline),
+// so unlike kindPatch/itemPatch this is intentionally partial -- only the
+// field(s) actually being changed, never a full-object replacement, since
+// there's no "everything else defaults to empty" story that would make
+// sense for a habit that already exists.
+function disciplinePatch(draft) {
+  const patch = {};
+  if (typeof draft.focused === 'boolean') patch.focused = draft.focused;
+  if (typeof draft.resolved === 'boolean') patch.resolved = draft.resolved;
+  if (draft.relapse === true) patch.relapse = true;
+  return patch;
+}
+
+// A practice-habit patch -- compound-only (see the prompt), for linking an
+// existing habit to a Goal/Project it's meant to build toward. Also
+// intentionally partial, same reasoning as disciplinePatch.
+function practiceHabitPatch(draft) {
+  const patch = {};
+  if (draft.linkedKindId) patch.linkedKindId = draft.linkedKindId;
+  if (draft.progressUnit) patch.progressUnit = draft.progressUnit;
+  if (typeof draft.progressTarget === 'number') patch.progressTarget = draft.progressTarget;
+  return patch;
+}
+
+// Turns one raw compound step from the model's JSON into the {ref,
+// entityType, action, targetId, patch} shape isValidPendingOperation's
+// `ops` list expects. Returns null for a step whose opType doesn't match
+// anything recognized, so the caller can drop it rather than write a
+// step the client wouldn't know how to apply.
+function normalizeCompoundStep(step) {
+  const opType = step.opType || '';
+  const action = opType.startsWith('create') ? 'create' : 'update';
+  let entityType, patch;
+  if (opType.endsWith('kind')) { entityType = 'kind'; patch = kindPatch(step); }
+  else if (opType.endsWith('item')) { entityType = 'item'; patch = itemPatch(step); }
+  else if (opType === 'update-discipline') { entityType = 'discipline'; patch = disciplinePatch(step); }
+  else if (opType === 'update-practiceHabit') { entityType = 'practiceHabit'; patch = practiceHabitPatch(step); }
+  else return null;
+  return {
+    ref: step.ref || null,
+    entityType,
+    action,
+    targetId: action === 'update' ? (step.targetId || null) : null,
+    patch,
+  };
+}
+
 // Writes a pendingOperation -- the one path, server-side, that every AI
 // draft in this file goes through. Nothing here ever touches /kinds or
 // /items directly; that only happens client-side, after a human approves
-// the operation from the Secretary review log (§5).
-async function createPendingOperation({ opType, targetId, patch, sourceCaptureId, sourceType }) {
+// the operation from the Secretary review log (§5). `opType: 'compound'`
+// carries `ops` (a list of linked steps) instead of a single `patch` --
+// see isValidPendingOperation in firestore.rules for the shape.
+async function createPendingOperation({ opType, targetId, patch, ops, sourceCaptureId, sourceType }) {
   const now = Date.now();
-  const ref = await db.collection('pendingOperations').add({
+  const payload = {
     opType,
     targetId: targetId || null,
-    patch,
     sourceCaptureId: sourceCaptureId || null,
     sourceType,
     status: 'pending',
     createdAt: now,
-  });
+  };
+  if (opType === 'compound') payload.ops = ops;
+  else payload.patch = patch;
+  const ref = await db.collection('pendingOperations').add(payload);
   return ref.id;
 }
 
@@ -306,11 +361,13 @@ exports.secretaryChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 
 Schema:
 {
   "reply": string (your conversational reply, in Secretary's voice -- courteous, precise, unhurried),
-  "proposedOperation": null, or:
+  "proposedOperation": null, or a single step, or a compound bundle of steps -- see below.
+
+  A single step:
   {
-    "opType": one of ["create-kind", "create-item", "update-kind", "update-item"],
-    "targetId": string or null (required, and must be an id from existingKinds/entityContext/practiceHabits' todayItemId, when opType starts with "update"),
-    "family": "kind" or "item",
+    "opType": one of ["create-kind", "create-item", "update-kind", "update-item", "update-discipline"],
+    "targetId": string or null (required, and must be an id from existingKinds/existingItems/entityContext/practiceHabits' todayItemId/disciplines, when opType starts with "update"),
+    "family": "kind" or "item" (omit/ignore for "update-discipline"),
     "title": string, "kindType": string or null, "itemType": string or null,
     "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "secondaryDomains": [string], "tags": [string],
     "targetDay": string or null (ISO date, YYYY-MM-DD),
@@ -320,11 +377,20 @@ Schema:
     "practiceHabitId": string or null (only set when checking a Practice habit off/on for a day, or logging an amount against a goal-linked one -- an id from practiceHabits below; pair with "targetDay" and "done", and "progressAmount" for a goal-linked habit),
     "done": boolean or null (only meaningful alongside "practiceHabitId" -- true to mark that day's practice complete, false to un-mark it; for a goal-linked habit, true whenever progressAmount is greater than 0),
     "progressAmount": number or null (only meaningful alongside "practiceHabitId" for a habit that has progressUnit/progressTarget set -- the amount to log for that day in its progressUnit, e.g. chapters read; omit/null for a plain, non-goal-linked habit),
+    "focused": boolean or null (opType "update-discipline" only -- true to pull it into focus, false to stop focusing it),
+    "resolved": boolean or null (opType "update-discipline" only -- true to mark it resolved/broken for good),
+    "relapse": boolean or null (opType "update-discipline" only -- true to log a relapse today, resetting its streak clock),
     "note": string (one sentence explaining the proposal -- when you scheduled around a conflict, say so here)
   }
-}
 
-Only set proposedOperation when the conversation actually calls for creating or changing a Kind/Item, or checking a Practice habit off/on -- most turns should just be a reply with proposedOperation null. Never invent an update to something the household didn't ask to change.
+  A compound bundle, when the request genuinely needs more than one linked write at once (see "Compound proposals" below):
+  {
+    "compound": true,
+    "steps": [ <same shape as a single step above, each optionally carrying a "ref" (e.g. "s1") that a LATER step in this same array can point back to>, ... ],
+    "note": string
+  }
+
+Only set proposedOperation when the conversation actually calls for creating or changing something -- most turns should just be a reply with proposedOperation null. Never invent an update to something the household didn't ask to change.
 
 Scheduling: when the household asks you to book, schedule, or time-block something, check existingItems below for that day before proposing a "time" -- an Item's time slot runs from its "time" for "durationMinutes" (default 30 if absent); existingItems includes both timed and floating Items so you have the full picture of what's already placed, but only timed ones (time set, not null) can actually collide. If the requested time collides with an existing Item, do not silently double-book it: either pick the nearest genuinely free slot that still fits what was asked (same day, closest to the requested time) and say so plainly in "note" and "reply", or, if nothing reasonable is free that day, set proposedOperation to null, explain the conflict in "reply", and ask how the household wants to resolve it (move the existing Item, pick a different day, or double-book on purpose). Never invent a "resolution" the household didn't ask for -- point out the conflict and let them decide when it's ambiguous.
 
@@ -332,7 +398,9 @@ Practices: practiceHabits below lists every active Practice habit with today's c
 
 Goal-linked practices: some practiceHabits build toward a Goal or Project instead of a plain daily checkbox -- those entries carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget (e.g. a "Read" habit linked to a "Read 1 book a month" Goal, progressUnit "chapters", progressCurrent 4, progressTarget 12). When the household reports progress on one of these ("I read 2 chapters today"), propose the same update-item/create-item shape as any other check-in, but set "progressAmount" to the amount and "done" to true (progressAmount 0 with done false to undo a day's log) -- never invent a running total yourself, it's always the sum of each day's progressAmount, computed client-side. Report progressCurrent/progressTarget/progressUnit plainly when asked how a goal is going. You can draft the Goal/Project Kind itself as a normal create-kind proposal when the household describes a new one -- but linking a Practice habit to it (setting its progressUnit/progressTarget) isn't something you can propose; direct the household to Plans' Practices tab to link the habit once the Kind exists, since it's a direct edit to the habit's own definition, not a create/update-item operation. Once a goal-linked habit's target is reached, the household closes it out from Plans ("Mark goal reached"), which turns it back into a plain weekly-checkbox habit -- you'll see linkedKindId disappear from that habit's entry afterward.
 
-Habits to Break: disciplines below lists every habit currently being eliminated (pulled "into focus"), each with its live streak and the next milestone it's working toward. Discuss progress, offer encouragement, and reference the streak/milestone naturally -- but you cannot log a relapse, change whether one is in focus, or mark one resolved yourself; there is no operation for that. If asked to do one of those, tell the household it's done from Plans' "Habits to Break" section, or from that habit's chip on Today/Week.
+Habits to Break: disciplines below lists every unresolved habit being eliminated, whether or not it's currently "in focus," each with "focused" (true/false), its live streak, and the next milestone it's working toward. Discuss progress and offer encouragement, and now you can act too -- propose a single-step "update-discipline" (targetId = its id from disciplines below) to pull one into focus ("focused": true), stop focusing it ("focused": false), log a relapse today ("relapse": true -- resets the streak clock to right now), or mark it resolved for good ("resolved": true). Only set the field(s) actually being asked for; never propose creating a brand-new discipline yourself -- if asked to add one, tell the household to add it from Plans' "Habits to Break" section.
+
+Compound proposals: some requests need more than one linked write at once -- promoting a single Item into its own Project or Goal with that Item becoming a nested Session under it, or turning a Practice habit (or a discipline you just helped focus) into a Goal with milestones and several scheduled Sessions, optionally linking the habit to that Goal in the same bundle. For these, set "proposedOperation" to the compound shape from the schema above instead of a single step. Give a step a short "ref" (like "s1") ONLY if a LATER step in the SAME bundle needs to point at the entity it creates -- reference it there as the literal string "$ref:s1" in whatever field takes that id (almost always "parentKindId" or "linkedKindId"); refs only resolve within their own bundle, never across separate proposals. A step targeting an EXISTING entity (opType starting with "update") must set "targetId" to a real id from existingKinds/existingItems/practiceHabits/disciplines below, and should echo back every field of that entity you are not intentionally changing (its current title/domain/tags/resources/targetDay/time/durationMinutes) -- omitting a field on an update risks clearing it, the same as with a single-step update. Use compound only when the request genuinely needs more than one write; a single create or edit should still be a single-step proposedOperation, not a one-step "compound." One opType only ever makes sense as a compound step, never standalone: "update-practiceHabit" (targetId = its id from practiceHabits, "linkedKindId" set to the Goal/Project's id -- often "$ref:sN" for one created earlier in the same bundle -- plus "progressUnit"/"progressTarget" if the household described how progress is measured, e.g. "chapters" / 12).
 
 Attention: attention below lists Projects/Goals/Practices that are overdue, stalled with nothing scheduled soon, or have nothing attached yet. Mention these proactively when relevant -- especially if asked something like "what should I focus on" or "what's falling behind" -- rather than only reacting to direct questions about a specific one.
 
@@ -346,7 +414,7 @@ existingItems (id/title/domain/targetDay/floating/time/durationMinutes -- today 
 
 practiceHabits (id/title/categoryId/todayItemId/todayDone/weekDoneCount out of weekTotalDays; goal-linked ones also carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget): ${JSON.stringify(practiceHabits)}
 
-disciplines (id/title/type/streakDays/nextMilestoneLabel/daysToNextMilestone -- only ones currently in focus): ${JSON.stringify(disciplines)}
+disciplines (id/title/type/focused/streakDays/nextMilestoneLabel/daysToNextMilestone -- every unresolved one, focused or not): ${JSON.stringify(disciplines)}
 
 attention (id/title/kindType/domain/level/label/hint -- Kinds needing a next step): ${JSON.stringify(attention)}
 
@@ -364,15 +432,32 @@ existingResources: ${JSON.stringify(existingResources)}`;
   }
 
   let pendingOperationId = null;
-  if (parsed.proposedOperation) {
+  if (parsed.proposedOperation?.compound) {
+    const ops = (Array.isArray(parsed.proposedOperation.steps) ? parsed.proposedOperation.steps : [])
+      .map(normalizeCompoundStep)
+      .filter(Boolean);
+    for (const op of ops) {
+      if (op.entityType === 'kind' || op.entityType === 'item') op.patch.createdVia = 'secretary-chat';
+    }
+    if (ops.length > 0) {
+      pendingOperationId = await createPendingOperation({ opType: 'compound', ops, sourceType: 'chat' });
+    }
+  } else if (parsed.proposedOperation) {
     const draft = parsed.proposedOperation;
-    const family = draft.family === 'kind' ? 'kind' : 'item';
-    const patch = family === 'kind' ? kindPatch(draft) : itemPatch(draft);
-    patch.createdVia = 'secretary-chat';
-    if (draft.opType?.startsWith('update') && draft.targetId) {
-      pendingOperationId = await createPendingOperation({ opType: draft.opType, targetId: draft.targetId, patch, sourceType: 'chat' });
+    if (draft.opType === 'update-discipline') {
+      if (draft.targetId) {
+        const patch = disciplinePatch(draft);
+        pendingOperationId = await createPendingOperation({ opType: 'update-discipline', targetId: draft.targetId, patch, sourceType: 'chat' });
+      }
     } else {
-      pendingOperationId = await createPendingOperation({ opType: family === 'kind' ? 'create-kind' : 'create-item', patch, sourceType: 'chat' });
+      const family = draft.family === 'kind' ? 'kind' : 'item';
+      const patch = family === 'kind' ? kindPatch(draft) : itemPatch(draft);
+      patch.createdVia = 'secretary-chat';
+      if (draft.opType?.startsWith('update') && draft.targetId) {
+        pendingOperationId = await createPendingOperation({ opType: draft.opType, targetId: draft.targetId, patch, sourceType: 'chat' });
+      } else {
+        pendingOperationId = await createPendingOperation({ opType: family === 'kind' ? 'create-kind' : 'create-item', patch, sourceType: 'chat' });
+      }
     }
   }
 

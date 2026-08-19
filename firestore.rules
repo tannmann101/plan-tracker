@@ -56,7 +56,7 @@ service cloud.firestore {
     }
 
     function pendingOpTypeValues() {
-      return ['create-kind', 'create-item', 'update-kind', 'update-item'];
+      return ['create-kind', 'create-item', 'update-kind', 'update-item', 'update-discipline', 'compound'];
     }
 
     function pendingOpStatusValues() {
@@ -194,10 +194,19 @@ service cloud.firestore {
     // directly. `patch` is intentionally loose (a map of whatever fields
     // the draft proposes); it's only ever committed client-side after a
     // human approves it, same discipline the prior rework's captures used.
+    //
+    // A 'compound' op is the one exception to the single-`patch` shape --
+    // a bundle of linked writes (e.g. promoting an Item into a nested
+    // Session under a brand-new Kind) that all get approved or discarded
+    // together. `ops` holds that list; left loose per-element (each a map)
+    // the same way `patch` itself is, and the same way timing/milestones
+    // are elsewhere in this file -- deep validation of AI-authored content
+    // isn't this layer's job, only "is it shaped like the thing the client
+    // knows how to apply."
     function isValidPendingOperation(d) {
       return d.opType in pendingOpTypeValues() &&
         (!('targetId' in d) || d.targetId == null || d.targetId is string) &&
-        d.patch is map &&
+        (d.opType == 'compound' ? (d.ops is list && d.ops.size() > 0) : d.patch is map) &&
         (!('sourceCaptureId' in d) || d.sourceCaptureId == null || d.sourceCaptureId is string) &&
         d.sourceType in ['capture', 'chat', 'weekly-import'] &&
         d.status in pendingOpStatusValues() &&
