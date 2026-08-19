@@ -70,10 +70,26 @@ function PanelHeader({ children, note, action }) {
 // column-per-status. Everything else (title, domain, tags, parent
 // reassignment, dates, delete) is still one click into the full edit modal
 // via the card body itself.
-function WorkspaceTicket({ family, entity, secretary, onEdit, onNavigateKind, onToggleDone, onAskSecretary }) {
+//
+// Drag-and-drop reparenting lives here too: an Item ticket is a native drag
+// source (onReparentItem given), and a Kind ticket is its drop target --
+// dropping an Item onto a Kind sets that Item's parentKindId, a direct
+// alternative to the edit modal's parent picker. Same direct-write,
+// separate-from-Secretary path TimeGrid's reschedule drag uses.
+function WorkspaceTicket({ family, entity, secretary, onEdit, onNavigateKind, onToggleDone, onAskSecretary, onReparentItem }) {
+  const [dragOver, setDragOver] = useState(false);
   const changeStatus = (status) => secretary.saveEntity("kind", { ...entity, status });
+
   if (family !== "kind") {
-    return <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} onAskSecretary={onAskSecretary} />;
+    return (
+      <div
+        draggable={!!onReparentItem}
+        onDragStart={onReparentItem ? (e) => e.dataTransfer.setData("text/plain", entity.id) : undefined}
+        style={{ cursor: onReparentItem ? "grab" : "default" }}
+      >
+        <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} onAskSecretary={onAskSecretary} />
+      </div>
+    );
   }
   // The status control reads as part of the same card, not a floating
   // sibling -- a shared border/radius wrapper with the EntityCard's own
@@ -81,7 +97,17 @@ function WorkspaceTicket({ family, entity, secretary, onEdit, onNavigateKind, on
   // line above the footer strip, rather than two independently-bordered
   // pieces stacked with a gap between them.
   return (
-    <div style={{ border: `1px solid ${LINE}`, borderRadius: RADIUS, overflow: "hidden" }}>
+    <div
+      onDragOver={onReparentItem ? (e) => { e.preventDefault(); setDragOver(true); } : undefined}
+      onDragLeave={onReparentItem ? () => setDragOver(false) : undefined}
+      onDrop={onReparentItem ? (e) => {
+        e.preventDefault();
+        setDragOver(false);
+        const itemId = e.dataTransfer.getData("text/plain");
+        if (itemId) onReparentItem(itemId, entity.id);
+      } : undefined}
+      style={{ border: `1px solid ${dragOver ? INKBLUE : LINE}`, borderRadius: RADIUS, overflow: "hidden" }}
+    >
       <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} onAskSecretary={onAskSecretary} style={{ border: "none", borderRadius: 0, boxShadow: "none" }} />
       <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderTop: `1px solid ${LINE}` }}>
         <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[entity.status] || MUTE, flex: "none" }} />
@@ -205,6 +231,14 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
   const openTicket = (family, entity) => {
     setEditing({ family, entity });
     setFocused({ family, entity });
+  };
+  // Direct drag-and-drop reparenting -- see TimeGrid's own reschedule drag
+  // for the "writes straight through secretary.saveEntity, not via
+  // propose-then-confirm" note; this is the same direct-manipulation path.
+  const reparentItem = (itemId, kindId) => {
+    const item = (secretary.items || []).find((i) => i.id === itemId);
+    if (!item || item.parentKindId === kindId) return;
+    secretary.saveEntity("item", { ...item, parentKindId: kindId });
   };
   const openKind = (kindId) => {
     const kind = (secretary.kinds || []).find((k) => k.id === kindId);
@@ -454,12 +488,12 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
       <SectionTitle note={`${kinds.length + items.length} tickets`}>Board</SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
         {kinds.map((k) => (
-          <WorkspaceTicket key={`kind-${k.id}`} family="kind" entity={k} secretary={secretary} onEdit={openTicket} onNavigateKind={onNavigateKind} onAskSecretary={askSecretaryLocal} />
+          <WorkspaceTicket key={`kind-${k.id}`} family="kind" entity={k} secretary={secretary} onEdit={openTicket} onNavigateKind={onNavigateKind} onAskSecretary={askSecretaryLocal} onReparentItem={reparentItem} />
         ))}
         {items.map((i) => {
           const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
           return (
-            <WorkspaceTicket key={`item-${i.id}`} family="item" entity={i} secretary={secretary} onToggleDone={toggleDone} onEdit={openTicket} onNavigateKind={onNavigateKind} onAskSecretary={askSecretaryLocal} />
+            <WorkspaceTicket key={`item-${i.id}`} family="item" entity={i} secretary={secretary} onToggleDone={toggleDone} onEdit={openTicket} onNavigateKind={onNavigateKind} onAskSecretary={askSecretaryLocal} onReparentItem={reparentItem} />
           );
         })}
       </div>

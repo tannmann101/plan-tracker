@@ -125,6 +125,25 @@ function minutesLabel(mins) {
   return `${h12}${ampm}`;
 }
 
+// Minute-precision label for the drag-snap indicator -- minutesLabel's own
+// hour-only form ("9am") collapses every quarter-hour to the same text, so
+// dragging wouldn't visibly confirm which 15-minute mark it's about to land
+// on.
+function preciseMinutesLabel(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  if (m === 0) return minutesLabel(mins);
+  const ampm = h < 12 ? "am" : "pm";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, "0")}${ampm}`;
+}
+
+function minutesToTimeStr(mins) {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
 // Clusters a day's timed items into overlap groups via a sweep over start
 // time, so genuinely overlapping blocks render side-by-side (each taking
 // 1/clusterSize of the column width) rather than hiding behind each other
@@ -192,19 +211,60 @@ function freeIntervals(timedItems, startHour, endHour) {
 // timed Items positioned/sized by time+duration. Shared by Today (a single
 // column) and Week (seven), so the actual "time blocking" behavior --
 // placement, overlap warnings, click-an-empty-slot-to-add -- exists once.
+//
+// onReschedule(itemId, patch), when given, turns every timed block and
+// floating chip into a native HTML5 drag source and turns this whole
+// column into two drop targets: the hour grid itself (drop -> timed, snapped
+// to the nearest 15 minutes) and everything else in the column -- header,
+// floating strip, even when it's currently empty -- (drop -> floating).
+// The grid's own onDrop stops propagation so a precise drop there doesn't
+// also fire the column's "make floating" handler. This writes directly via
+// secretary.saveEntity (see Today/Week's own rescheduleItem), same as the
+// Plans kanban's existing native drag-and-drop -- a human-initiated direct-
+// manipulation path, separate from Secretary's own propose-then-confirm.
 export function TimeGridDay({
   iso, label, isToday, floatingItems, timedItems, startHour, endHour, pxPerHour = 52,
-  onToggleDone, onEdit, onSlotClick, disciplines = [], onDisciplineClick, onAskSecretary,
+  onToggleDone, onEdit, onSlotClick, disciplines = [], onDisciplineClick, onAskSecretary, onReschedule,
 }) {
+  const [dragOverMinutes, setDragOverMinutes] = useState(null);
   const gridHeight = (endHour - startHour) * pxPerHour;
   const laid = layoutTimedItems(timedItems);
   const free = freeIntervals(timedItems, startHour, endHour);
   const hours = Array.from({ length: endHour - startHour + 1 }, (_, i) => startHour + i);
   const load = dayScheduleLoad(floatingItems, timedItems, startHour, endHour);
   const showEmptyBadge = load.isEmpty && iso >= todayISO();
+  const canDrag = !!onReschedule;
+
+  const dragStart = (itemId) => (e) => e.dataTransfer.setData("text/plain", itemId);
+
+  const handleGridDragOver = (e) => {
+    if (!canDrag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const minutesFromTop = ((e.clientY - rect.top) / pxPerHour) * 60;
+    const snapped = Math.max(0, Math.min((endHour - startHour) * 60, Math.round(minutesFromTop / 15) * 15));
+    setDragOverMinutes(snapped);
+  };
+  const handleGridDrop = (e) => {
+    if (!canDrag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const itemId = e.dataTransfer.getData("text/plain");
+    if (itemId && dragOverMinutes != null) {
+      onReschedule(itemId, { targetDay: iso, floating: false, time: minutesToTimeStr(startHour * 60 + dragOverMinutes) });
+    }
+    setDragOverMinutes(null);
+  };
+  const handleColumnDrop = (e) => {
+    if (!canDrag) return;
+    e.preventDefault();
+    const itemId = e.dataTransfer.getData("text/plain");
+    if (itemId) onReschedule(itemId, { targetDay: iso, floating: true, time: null });
+  };
 
   return (
-    <div>
+    <div onDragOver={canDrag ? (e) => e.preventDefault() : undefined} onDrop={canDrag ? handleColumnDrop : undefined}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
         <div style={{ fontFamily: MONO, fontSize: 11, color: isToday ? INKBLUE : INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>
           {label}
@@ -232,12 +292,20 @@ export function TimeGridDay({
       {floatingItems.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
           {floatingItems.map((item) => (
-            <FloatingChip key={item.id} item={item} onToggleDone={onToggleDone} onEdit={onEdit} onAskSecretary={onAskSecretary} />
+            <FloatingChip
+              key={item.id} item={item} onToggleDone={onToggleDone} onEdit={onEdit} onAskSecretary={onAskSecretary}
+              draggable={canDrag} onDragStart={canDrag ? dragStart(item.id) : undefined}
+            />
           ))}
         </div>
       )}
 
-      <div style={{ position: "relative", height: gridHeight, border: `1px solid ${LINE}`, borderRadius: RADIUS_CHIP, overflow: "hidden" }}>
+      <div
+        style={{ position: "relative", height: gridHeight, border: `1px solid ${LINE}`, borderRadius: RADIUS_CHIP, overflow: "hidden" }}
+        onDragOver={canDrag ? handleGridDragOver : undefined}
+        onDragLeave={canDrag ? () => setDragOverMinutes(null) : undefined}
+        onDrop={canDrag ? handleGridDrop : undefined}
+      >
         {free.filter(([s, e]) => e - s >= 20).map(([s, e]) => (
           <div
             key={`free-${s}`}
@@ -264,6 +332,14 @@ export function TimeGridDay({
           </div>
         ))}
 
+        {dragOverMinutes != null && (
+          <div style={{ position: "absolute", left: 0, right: 0, top: (dragOverMinutes / 60) * pxPerHour, height: 2, background: INKBLUE, pointerEvents: "none", zIndex: 5 }}>
+            <span style={{ position: "absolute", right: 3, top: -13, fontFamily: MONO, fontSize: 9, fontWeight: 600, color: "#fff", background: INKBLUE, padding: "0 4px", borderRadius: 3, whiteSpace: "nowrap" }}>
+              {preciseMinutesLabel(startHour * 60 + dragOverMinutes)}
+            </span>
+          </div>
+        )}
+
         {laid.map(({ item, start, end, column, columns, overlapping }) => {
           const top = Math.max(0, (start - startHour * 60) / 60) * pxPerHour;
           const height = Math.max(MIN_BLOCK_PX, ((end - start) / 60) * pxPerHour);
@@ -273,12 +349,14 @@ export function TimeGridDay({
           return (
             <div
               key={item.id}
+              draggable={canDrag}
+              onDragStart={canDrag ? dragStart(item.id) : undefined}
               onClick={(e) => { e.stopPropagation(); onEdit?.("item", item); }}
               title={overlapping ? "Overlaps with another Item" : item.title}
               style={{
                 position: "absolute", top, height, left: `${column * widthPct}%`, width: `calc(${widthPct}% - 3px)`,
                 background: softTint(color), border: `1px solid ${color}`, borderLeft: `3px solid ${color}`,
-                borderRadius: RADIUS_CHIP, padding: "2px 5px", overflow: "hidden", cursor: "pointer",
+                borderRadius: RADIUS_CHIP, padding: "2px 5px", overflow: "hidden", cursor: canDrag ? "grab" : "pointer",
               }}
             >
               <div style={{ fontFamily: SANS, fontSize: 10.5, fontWeight: 600, color: INK, lineHeight: 1.25, textDecoration: item.done ? "line-through" : "none" }}>
@@ -307,10 +385,18 @@ export function TimeGridDay({
   );
 }
 
-function FloatingChip({ item, onToggleDone, onEdit, onAskSecretary }) {
+function FloatingChip({ item, onToggleDone, onEdit, onAskSecretary, draggable, onDragStart }) {
   const domainColor = DOMAIN_COLORS[item.domain] || MUTE;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, background: softTint(domainColor), border: `1px solid ${domainColor}${TINT_ALPHA}`, borderRadius: RADIUS_CHIP, padding: "3px 6px" }}>
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      style={{
+        display: "flex", alignItems: "center", gap: 6, background: softTint(domainColor),
+        border: `1px solid ${domainColor}${TINT_ALPHA}`, borderRadius: RADIUS_CHIP, padding: "3px 6px",
+        cursor: draggable ? "grab" : "default",
+      }}
+    >
       {onToggleDone && <Checkbox checked={!!item.done} onChange={(next) => onToggleDone(item, next)} color={domainColor} />}
       <span
         onClick={() => onEdit?.("item", item)}
