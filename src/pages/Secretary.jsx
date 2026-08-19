@@ -171,6 +171,142 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
   );
 }
 
+// A one-line human-readable summary of a single compound step, for the
+// review card below -- not editable (unlike ReviewOperationCard's full
+// form), since a bundle's whole point is several linked writes reviewed
+// as one unit; adjusting a single field is a follow-up chat message away.
+function stepSummary(step, secretary) {
+  const verb = step.action === "create" ? "Create" : "Update";
+  const kindLabel = { kind: "Kind", item: "Item", practiceHabit: "Practice habit", discipline: "Discipline" }[step.entityType] || step.entityType;
+  const existing = step.action === "update" && step.targetId
+    ? [...(secretary.kinds || []), ...(secretary.items || []), ...(secretary.practiceHabits || []), ...(secretary.disciplines || [])]
+      .find((e) => e.id === step.targetId)
+    : null;
+  const title = step.patch.title || existing?.title || "(untitled)";
+  const detail = [];
+  if (step.patch.parentKindId) detail.push("nested under a Kind in this bundle");
+  if (step.patch.linkedKindId) detail.push("linked to a Kind in this bundle");
+  if (step.patch.focused === true) detail.push("pulled into focus");
+  if (step.patch.relapse) detail.push("relapse logged");
+  if (step.patch.resolved === true) detail.push("marked resolved");
+  return `${verb} ${kindLabel}: ${title}${detail.length ? ` -- ${detail.join(", ")}` : ""}`;
+}
+
+// A bundle of linked steps (§ compound proposals) -- approved or discarded
+// as one unit, since the whole point is that they only make sense together
+// (a new Project plus the Item becoming its nested Session, say). Approving
+// runs every step through secretary.applyCompoundOperation, which is the
+// exact same saveEntity/savePracticeHabit/saveDiscipline path any other
+// write in the app uses -- no forked write logic, just run in sequence
+// with each step's id available to the ones after it.
+function ReviewCompoundOperationCard({ op, secretary, onResolved }) {
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const approve = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await secretary.applyCompoundOperation(op);
+      await secretary.deletePendingOperation(op.id);
+      onResolved?.();
+    } catch (err) {
+      setError(err.message || "Could not approve that.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const discard = async () => {
+    setSaving(true);
+    try {
+      await secretary.deletePendingOperation(op.id);
+      onResolved?.();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+        <Pill color={INKBLUE}>bundle · {op.ops.length} step{op.ops.length === 1 ? "" : "s"}</Pill>
+        <Pill color={MUTE}>{op.sourceType}</Pill>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
+        {op.ops.map((step, i) => (
+          <div key={i} style={{ fontFamily: SANS, fontSize: 12.5, color: INK, padding: "7px 10px", background: HEAD_BG, borderRadius: 8 }}>
+            {i + 1}. {stepSummary(step, secretary)}
+          </div>
+        ))}
+      </div>
+      {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn primary color={INKBLUE} disabled={saving} onClick={approve}>{saving ? "Saving…" : "Approve all"}</Btn>
+        <Btn color={MUTE} disabled={saving} onClick={discard}>Discard</Btn>
+      </div>
+    </Card>
+  );
+}
+
+// The narrow slice of "Habits to Break" Secretary chat can now actually
+// change on an existing discipline -- focus/unfocus, log a relapse, mark
+// resolved. No field-editing form (unlike ReviewOperationCard) since
+// there's nothing to fill in, just a toggle to confirm or discard.
+function ReviewDisciplineOperationCard({ op, secretary, onResolved }) {
+  const target = (secretary.disciplines || []).find((d) => d.id === op.targetId);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const changes = [];
+  if (op.patch.relapse) changes.push("log a relapse (streak resets to today)");
+  if (op.patch.focused === true) changes.push("pull into focus");
+  if (op.patch.focused === false) changes.push("stop focusing");
+  if (op.patch.resolved === true) changes.push("mark resolved");
+
+  const approve = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      if (!target) throw new Error("That habit no longer exists.");
+      const { relapse, ...rest } = op.patch;
+      await secretary.saveDiscipline({ ...target, ...rest, ...(relapse ? { startedAt: Date.now() } : {}) });
+      await secretary.deletePendingOperation(op.id);
+      onResolved?.();
+    } catch (err) {
+      setError(err.message || "Could not approve that.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const discard = async () => {
+    setSaving(true);
+    try {
+      await secretary.deletePendingOperation(op.id);
+      onResolved?.();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+        <Pill color={BRICK}>habit update</Pill>
+        <Pill color={MUTE}>{op.sourceType}</Pill>
+      </div>
+      <div style={{ fontFamily: SANS, fontSize: 13, color: INK, marginBottom: 6 }}>{target?.title || "(this habit no longer exists)"}</div>
+      <div style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE, marginBottom: 10 }}>{changes.join(", ") || "no changes proposed"}</div>
+      {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn primary color={INKBLUE} disabled={saving || !target} onClick={approve}>{saving ? "Saving…" : "Approve"}</Btn>
+        <Btn color={MUTE} disabled={saving} onClick={discard}>Discard</Btn>
+      </div>
+    </Card>
+  );
+}
+
 // Persistent chat -- exported so Workspace (§10) can embed the exact same
 // panel scoped to whatever ticket was clicked, rather than a second chat
 // implementation. entityContext, when given, is sent to secretaryChat so
@@ -287,7 +423,13 @@ export default function Secretary({ secretary, onBack }) {
         <Note>Nothing waiting on you right now.</Note>
       ) : (
         pending.map((op) => (
-          <ReviewOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
+          op.opType === "compound" ? (
+            <ReviewCompoundOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
+          ) : op.opType === "update-discipline" ? (
+            <ReviewDisciplineOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
+          ) : (
+            <ReviewOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
+          )
         ))
       )}
 

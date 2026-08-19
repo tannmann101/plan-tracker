@@ -236,17 +236,19 @@ export function practiceHabitsSummary(data) {
   });
 }
 
-// Focused (in-progress), unresolved disciplines with their live streak --
-// Secretary chat context so it can discuss progress and offer
-// encouragement, but it deliberately can't log a relapse, change focus, or
-// mark one resolved itself; those stay direct actions in Plans/Today, the
-// same boundary practice habit definitions already have.
+// Every unresolved discipline (not just focused ones) with its live
+// streak -- Secretary chat context so it can discuss progress, offer
+// encouragement, and now actually act (pull one into focus, log a
+// relapse, mark one resolved) via an update-discipline proposal, same
+// propose-then-confirm discipline every other write in this pipeline
+// follows. `focused` rides along so the model can tell which ones are
+// already in focus versus which it could pull into focus.
 export function disciplinesSummary(data) {
   const { disciplines = [] } = data;
-  return (disciplines || []).filter((d) => d.focused && !d.resolved).map((d) => {
+  return (disciplines || []).filter((d) => !d.resolved).map((d) => {
     const { days, nextMilestone } = disciplineStreak(d);
     return {
-      id: d.id, title: d.title, type: d.type, streakDays: days,
+      id: d.id, title: d.title, type: d.type, focused: !!d.focused, streakDays: days,
       nextMilestoneLabel: nextMilestone?.label || null,
       daysToNextMilestone: nextMilestone ? nextMilestone.days - days : null,
     };
