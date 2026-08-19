@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { Btn, SectionTitle, Note, Pill, Input, TabBar, IconButton } from "../ui";
-import { MONO, SANS, INK, MUTE, LINE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
+import { Btn, SectionTitle, Note, Pill, Input, TabBar, IconButton, Select } from "../ui";
+import { MONO, SANS, INK, MUTE, LINE, INKBLUE, DOMAIN_COLORS, SIZE_TITLE, SIZE_META, LETTER_META, GAP_ROW, softTint } from "../theme";
 import EditEntityModal from "../components/EditEntityModal";
-import { domainLabel, kindTypeLabel, itemTypeLabel, weekStartISO } from "../constants";
+import { domainLabel, kindTypeLabel, itemTypeLabel, weekStartISO, formatShortDate } from "../constants";
 
 const ROLLUP_TABS = [
   { id: "all", label: "All" },
@@ -90,10 +90,7 @@ export default function Log({ secretary, onBack, onAskSecretary }) {
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", margin: "12px 0" }}>
         <Input value={query} onChange={setQuery} placeholder="Search title…" width={220} />
         <Input value={tagFilter} onChange={setTagFilter} placeholder="Tag contains…" width={160} />
-        <select value={domainFilter} onChange={(e) => setDomainFilter(e.target.value)} style={{ fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8 }}>
-          <option value="all">All domains</option>
-          {secretary.domains.map((d) => <option key={d.id} value={d.id}>{d.label}</option>)}
-        </select>
+        <Select value={domainFilter} onChange={setDomainFilter} options={[{ id: "all", label: "All domains" }, ...secretary.domains]} />
         <Input type="date" value={from} onChange={setFrom} width={140} />
         <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>→</span>
         <Input type="date" value={to} onChange={setTo} width={140} />
@@ -115,14 +112,14 @@ export default function Log({ secretary, onBack, onAskSecretary }) {
               <thead>
                 <tr>
                   {["Title", "Kind/Item", "Date", "Description", "Tags", ""].map((h) => (
-                    <th key={h} style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "0 10px 8px 0", borderBottom: `1px solid ${LINE}` }}>{h}</th>
+                    <th key={h} style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META, textAlign: "left", padding: "0 10px 8px 0", borderBottom: `1px solid ${LINE}` }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {group.rows.map(({ family: fam, entity }) => (
                   <tr key={`${fam}-${entity.id}`} onClick={() => setEditing({ family: fam, entity })} style={{ cursor: "pointer" }}>
-                    <td style={{ padding: "8px 10px 8px 0", borderBottom: `1px solid ${LINE}`, fontFamily: SANS, fontSize: 13, color: INK, textDecoration: (fam === "item" && entity.done) || (fam === "kind" && entity.status === "done") ? "line-through" : "none" }}>
+                    <td style={{ padding: "8px 10px 8px 0", borderBottom: `1px solid ${LINE}`, fontFamily: SANS, fontSize: SIZE_TITLE, color: INK, textDecoration: (fam === "item" && entity.done) || (fam === "kind" && entity.status === "done") ? "line-through" : "none" }}>
                       {entity.title}
                     </td>
                     <td style={{ padding: "8px 10px 8px 0", borderBottom: `1px solid ${LINE}` }}>
@@ -131,13 +128,13 @@ export default function Log({ secretary, onBack, onAskSecretary }) {
                       </Pill>
                     </td>
                     <td style={{ padding: "8px 10px 8px 0", borderBottom: `1px solid ${LINE}`, fontFamily: MONO, fontSize: 11.5, color: MUTE }}>
-                      {rowDate(fam, entity) || "—"}
+                      {formatShortDate(rowDate(fam, entity)) || "—"}
                     </td>
                     <td style={{ padding: "8px 10px 8px 0", borderBottom: `1px solid ${LINE}`, fontFamily: MONO, fontSize: 11.5, color: MUTE }}>
                       {rowDescription(fam, entity, secretary.domains)}
                     </td>
                     <td style={{ padding: "8px 10px 8px 0", borderBottom: `1px solid ${LINE}` }}>
-                      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+                      <div style={{ display: "flex", gap: GAP_ROW, flexWrap: "wrap" }}>
                         {(entity.tags || []).map((t) => <Pill key={t}>#{t}</Pill>)}
                       </div>
                     </td>

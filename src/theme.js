@@ -72,7 +72,35 @@ export const REDBROWN = "var(--redbrown)";
 
 export const RADIUS = 12;
 export const RADIUS_SM = 8;
+// A third radius step for small nested containers -- a time-block, a chip,
+// a compact chat bubble -- that shouldn't round as tightly as a button
+// (RADIUS_SM) or as generously as a full card (RADIUS). Formalizes what
+// was previously a scatter of literal 4/6/7/10 values with no name.
+export const RADIUS_CHIP = 6;
 export const SHADOW_CARD = "var(--shadow-card)";
+
+// Spacing roles -- one canonical value per relationship, so near-identical
+// UI elsewhere (a card list here, a pill row there, a form's button row
+// somewhere else) can't quietly drift onto different arbitrary pixel
+// values for what is, structurally, the same relationship.
+export const GAP_STACK = 10;   // vertical gap between sibling cards/rows in a list
+export const GAP_ROW = 6;      // gap between pills/chips/inline items in a row
+export const GAP_HEADER = 10;  // margin-bottom between a header row and the body below it
+export const GAP_ACTIONS = 16; // margin-top above a form/card's button row
+
+// Typography roles -- "card title" and "uppercase mono meta label" are
+// used dozens of times across the app; giving each one name+value here
+// (rather than every call site picking a nearby number) is what keeps a
+// Workspace ticket's title, a Log row's title, and a Secretary review
+// card's title reading as the same visual role.
+export const SIZE_TITLE = 13.5;
+export const SIZE_META = 10.5;
+export const LETTER_META = "0.05em";
+
+// The alpha suffix used to derive a tinted chip/pill's border from its own
+// color (e.g. `${color}${TINT_ALPHA}`) -- one value instead of the "33" vs
+// "55" split that had crept in with no reasoning behind the difference.
+export const TINT_ALPHA = "40";
 // Space-separated r g b channels (not a full rgba() string) so call sites
 // that need a custom alpha can write `rgb(var(--shadow-rgb) / 0.28)` --
 // swaps to a legible dark-mode shadow color the same way every other token

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Modal, IconButton } from "../ui";
-import { MONO, SERIF, INK, MUTE, LINE, INKBLUE } from "../theme";
+import { Modal, IconButton, ModalHeading } from "../ui";
+import { MONO, INK, MUTE, LINE, INKBLUE, RADIUS_SM, GAP_ACTIONS, GAP_ROW } from "../theme";
 import { traceFor } from "../lib/graph";
 
 // Small info icon every Kind/Item card carries -- tapping it shows the
@@ -18,20 +18,18 @@ function TraceButton({ family, entity, data, onNavigateKind }) {
       <IconButton title="Why is this here?" onClick={() => setOpen(true)}>i</IconButton>
       {open && (
         <Modal onClose={() => setOpen(false)} width={380}>
-          <h3 style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: INK, margin: "0 0 12px" }}>
-            Why this is here
-          </h3>
+          <ModalHeading>Why this is here</ModalHeading>
           <TraceChain
             family={family}
             entity={entity}
             data={data}
             onNavigateKind={onNavigateKind ? (kindId) => { setOpen(false); onNavigateKind(kindId); } : null}
           />
-          <div style={{ textAlign: "right", marginTop: 16 }}>
+          <div style={{ textAlign: "right", marginTop: GAP_ACTIONS }}>
             <button
               type="button"
               onClick={() => setOpen(false)}
-              style={{ border: `1px solid ${LINE}`, background: "transparent", color: MUTE, fontFamily: MONO, fontSize: 11.5, padding: "5px 12px", borderRadius: 7, cursor: "pointer" }}
+              style={{ border: `1px solid ${LINE}`, background: "transparent", color: MUTE, fontFamily: MONO, fontSize: 11.5, padding: "5px 12px", borderRadius: RADIUS_SM, cursor: "pointer" }}
             >
               close
             </button>
@@ -93,7 +91,7 @@ export function KindChainLine({ family, entity, data, onNavigateKind }) {
     return <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, marginTop: 6 }}>not attached to anything</div>;
   }
   return (
-    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 4, marginTop: 6 }}>
+    <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: GAP_ROW, marginTop: 6 }}>
       {chain.map((step, i) => (
         <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
           {i > 0 && <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE }}>›</span>}

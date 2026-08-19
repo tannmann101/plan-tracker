@@ -1,6 +1,9 @@
 import { Fragment, useState } from "react";
-import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox, Pill, ProgressBar, IconButton } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS, STATUS_COLORS, HEAD_BG, softTint } from "../theme";
+import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox, Pill, ProgressBar, IconButton, Stat, Nested } from "../ui";
+import {
+  SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS, STATUS_COLORS, HEAD_BG,
+  RADIUS, SIZE_TITLE, GAP_STACK, GAP_ROW, GAP_ACTIONS, softTint,
+} from "../theme";
 import { EntityCard } from "../components/EntityCard";
 import { Field, TagsInput, MultiCheckList, DisciplineMilestonesEditor, KindParentPicker } from "../components/formFields";
 import AddForm from "../components/AddForm";
@@ -196,7 +199,7 @@ function PracticesTab({ secretary, onAskSecretary }) {
             </Field>
           </>
         )}
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
           <Btn
             primary color={INKBLUE}
             disabled={!habitTitle.trim() || !habitCategory || (!!habitLinkedKindId && (!habitProgressUnit.trim() || !Number(habitProgressTarget)))}
@@ -250,7 +253,7 @@ function PracticesTab({ secretary, onAskSecretary }) {
                             <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                               <button
                                 type="button" onClick={() => startEditHabit(habit)} title="Edit practice"
-                                style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 12.5, color: INK, textAlign: "left", textDecoration: editingHabitId === habit.id ? "underline" : "none" }}
+                                style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: SIZE_TITLE, color: INK, textAlign: "left", textDecoration: editingHabitId === habit.id ? "underline" : "none" }}
                               >
                                 {habit.title}
                               </button>
@@ -409,42 +412,40 @@ function DisciplinesSection({ secretary, onAskSecretary }) {
         Pull a habit "into focus" and it shows up as a background chip on Today and Week while it's being dealt with, with a live streak count. "Slipped today" resets the clock rather than needing a daily check-in; every reset/pause/resolve is logged for Trends to use later.
       </Note>
 
-      <div style={{ marginTop: 10 }}>
-        <SectionTitle note="habit definitions">{editingId ? "Edit Habit to Break" : "Add a Habit to Break"}</SectionTitle>
-        <Card>
-          <Field label="Name">
-            <Input value={title} onChange={setTitle} placeholder="e.g. Quit smoking" />
+      <SectionTitle note="habit definitions">{editingId ? "Edit Habit to Break" : "Add a Habit to Break"}</SectionTitle>
+      <Card>
+        <Field label="Name">
+          <Input value={title} onChange={setTitle} placeholder="e.g. Quit smoking" />
+        </Field>
+        <Field label="Type">
+          <Select value={type} onChange={setType} options={typeOptions} />
+        </Field>
+        {type === OTHER_TYPE_ID && (
+          <Field label="New type name">
+            <Input value={otherTypeText} onChange={setOtherTypeText} placeholder="e.g. Spiritual" />
           </Field>
-          <Field label="Type">
-            <Select value={type} onChange={setType} options={typeOptions} />
-          </Field>
-          {type === OTHER_TYPE_ID && (
-            <Field label="New type name">
-              <Input value={otherTypeText} onChange={setOtherTypeText} placeholder="e.g. Spiritual" />
-            </Field>
-          )}
-          <Field label="Milestones (days since last reset)">
-            <DisciplineMilestonesEditor value={milestones} onChange={setMilestones} />
-          </Field>
-          <Field label="Resources">
-            <MultiCheckList options={secretary.resources} value={resources} onChange={setResources} />
-          </Field>
-          <Field label="Tags">
-            <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
-          </Field>
-          <div style={{ display: "flex", gap: 8 }}>
-            <Btn primary color={BRICK} disabled={!title.trim() || !type || (type === OTHER_TYPE_ID && !otherTypeText.trim())} onClick={save}>
-              {editingId ? "Save changes" : "Add habit to break"}
-            </Btn>
-            {editingId && <Btn color={MUTE} onClick={resetForm}>Cancel</Btn>}
-          </div>
-        </Card>
-      </div>
+        )}
+        <Field label="Milestones (days since last reset)">
+          <DisciplineMilestonesEditor value={milestones} onChange={setMilestones} />
+        </Field>
+        <Field label="Resources">
+          <MultiCheckList options={secretary.resources} value={resources} onChange={setResources} />
+        </Field>
+        <Field label="Tags">
+          <TagsInput value={tags} onChange={setTags} suggestions={tagSuggestions} />
+        </Field>
+        <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
+          <Btn primary color={BRICK} disabled={!title.trim() || !type || (type === OTHER_TYPE_ID && !otherTypeText.trim())} onClick={save}>
+            {editingId ? "Save changes" : "Add habit to break"}
+          </Btn>
+          {editingId && <Btn color={MUTE} onClick={resetForm}>Cancel</Btn>}
+        </div>
+      </Card>
 
       {active.length === 0 ? (
         <Note>No habits being tracked for elimination.</Note>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: GAP_STACK, marginTop: 14 }}>
           {active.map((d) => {
             const { days, nextMilestone, percent } = disciplineStreak(d);
             const sortedMilestones = [...(d.milestones || [])].sort((a, b) => a.days - b.days);
@@ -454,11 +455,11 @@ function DisciplinesSection({ secretary, onAskSecretary }) {
                   <div>
                     <button
                       type="button" onClick={() => startEdit(d)} title="Edit"
-                      style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 13.5, fontWeight: 500, color: INK, textAlign: "left", textDecoration: editingId === d.id ? "underline" : "none" }}
+                      style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: SIZE_TITLE, fontWeight: 500, color: INK, textAlign: "left", textDecoration: editingId === d.id ? "underline" : "none" }}
                     >
                       {d.title}
                     </button>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                    <div style={{ display: "flex", gap: GAP_ROW, flexWrap: "wrap", marginTop: 6 }}>
                       <Pill color={MUTE}>{disciplineTypeLabel(d.type, secretary.disciplineTypes)}</Pill>
                       {d.focused && <Pill color={BRICK} tint={softTint(BRICK)}>in focus</Pill>}
                     </div>
@@ -466,8 +467,8 @@ function DisciplinesSection({ secretary, onAskSecretary }) {
                   <button type="button" onClick={() => secretary.deleteDiscipline(d.id)} title="Delete" style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", fontSize: 13 }}>×</button>
                 </div>
 
-                <div style={{ fontFamily: SANS, fontSize: 22, fontWeight: 600, color: BRICK, marginTop: 10 }}>
-                  {days} {days === 1 ? "day" : "days"}
+                <div style={{ marginTop: 10 }}>
+                  <Stat label="Current streak" value={`${days} ${days === 1 ? "day" : "days"}`} color={BRICK} size={22} />
                 </div>
                 {nextMilestone ? (
                   <>
@@ -481,16 +482,18 @@ function DisciplinesSection({ secretary, onAskSecretary }) {
                 ) : null}
 
                 {sortedMilestones.length > 0 && (
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
-                    {sortedMilestones.map((m) => (
-                      <Pill key={m.id} color={m.days <= days ? BRICK : MUTE} tint={m.days <= days ? softTint(BRICK) : undefined}>
-                        {m.days <= days ? "✓ " : ""}{m.label}
-                      </Pill>
-                    ))}
-                  </div>
+                  <Nested>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: GAP_ROW, marginTop: 10 }}>
+                      {sortedMilestones.map((m) => (
+                        <Pill key={m.id} color={m.days <= days ? BRICK : MUTE} tint={m.days <= days ? softTint(BRICK) : undefined}>
+                          {m.days <= days ? "✓ " : ""}{m.label}
+                        </Pill>
+                      ))}
+                    </div>
+                  </Nested>
                 )}
 
-                <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS, flexWrap: "wrap" }}>
                   <Btn small color={BRICK} onClick={() => slip(d)}>Slipped today</Btn>
                   <Btn small color={MUTE} onClick={() => toggleFocus(d)}>{d.focused ? "Stop focusing" : "Pull into focus"}</Btn>
                   <Btn small color={MUTE} onClick={() => resolve(d)}>Mark resolved</Btn>
@@ -565,13 +568,13 @@ function KanbanTab({ secretary, onNavigateKind, onAskSecretary }) {
             key={col.id}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => { e.preventDefault(); if (dragId) moveTo(dragId, col.id); setDragId(null); }}
-            style={{ minHeight: 120, background: HEAD_BG, border: `1px solid ${LINE}`, borderRadius: 10, padding: 8 }}
+            style={{ minHeight: 120, background: HEAD_BG, border: `1px solid ${LINE}`, borderRadius: RADIUS, padding: 8 }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[col.id] || MUTE }} />
               <span style={{ fontFamily: MONO, fontSize: 10.5, color: INK, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>{col.label}</span>
             </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: GAP_STACK }}>
               {kinds.filter((k) => k.status === col.id).map((k) => (
                 <div key={k.id} draggable onDragStart={() => setDragId(k.id)}>
                   <EntityCard

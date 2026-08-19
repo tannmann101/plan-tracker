@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE, CARD, HEAD_BG } from "../theme";
+import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea, CheckboxRow, Nested } from "../ui";
+import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE, CARD, HEAD_BG, SIZE_TITLE, GAP_ACTIONS, RADIUS_SM, RADIUS_CHIP } from "../theme";
 import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES, todayISO } from "../constants";
 import { Field, TagsInput, MultiCheckList, KindParentPicker, DurationInput } from "../components/formFields";
 import { allTagsInUse, kindSubtreeIds, upcomingItems, practiceHabitsSummary, disciplinesSummary, kindsNeedingAttention } from "../lib/graph";
@@ -143,10 +143,7 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
       </Field>
       {family === "item" && targetDay && (
         <>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: SANS, fontSize: 12.5, color: INK, cursor: "pointer", marginBottom: 12 }}>
-            <input type="checkbox" checked={floating} onChange={(e) => setFloating(e.target.checked)} />
-            Floating (no specific time)
-          </label>
+          <CheckboxRow checked={floating} onChange={setFloating}>Floating (no specific time)</CheckboxRow>
           {!floating && (
             <>
               <Field label="Time">
@@ -164,7 +161,7 @@ function ReviewOperationCard({ op, secretary, onResolved }) {
       </Field>
 
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
-      <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
         <Btn primary color={INKBLUE} disabled={saving || !title.trim()} onClick={approve}>{saving ? "Saving…" : "Approve"}</Btn>
         <Btn color={MUTE} disabled={saving} onClick={discard}>Discard</Btn>
       </div>
@@ -191,6 +188,17 @@ function stepSummary(step, secretary) {
   if (step.patch.relapse) detail.push("relapse logged");
   if (step.patch.resolved === true) detail.push("marked resolved");
   return `${verb} ${kindLabel}: ${title}${detail.length ? ` -- ${detail.join(", ")}` : ""}`;
+}
+
+// Whether a compound step points back at an earlier step in its own
+// bundle (its parentKindId/linkedKindId is still the literal "$ref:sN"
+// placeholder, not yet resolved to a real id -- that only happens client-
+// side at approval time). Drives the review card's indent below, so a
+// step that stepSummary's own text already calls "nested under" or
+// "linked to" a Kind in this bundle reads that way visually too.
+function isRefNestedStep(step) {
+  const ref = (v) => typeof v === "string" && v.startsWith("$ref:");
+  return ref(step.patch.parentKindId) || ref(step.patch.linkedKindId);
 }
 
 // A bundle of linked steps (§ compound proposals) -- approved or discarded
@@ -235,14 +243,17 @@ function ReviewCompoundOperationCard({ op, secretary, onResolved }) {
         <Pill color={MUTE}>{op.sourceType}</Pill>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12 }}>
-        {op.ops.map((step, i) => (
-          <div key={i} style={{ fontFamily: SANS, fontSize: 12.5, color: INK, padding: "7px 10px", background: HEAD_BG, borderRadius: 8 }}>
-            {i + 1}. {stepSummary(step, secretary)}
-          </div>
-        ))}
+        {op.ops.map((step, i) => {
+          const row = (
+            <div style={{ fontFamily: SANS, fontSize: 12.5, color: INK, padding: "7px 10px", background: HEAD_BG, borderRadius: RADIUS_CHIP }}>
+              {i + 1}. {stepSummary(step, secretary)}
+            </div>
+          );
+          return isRefNestedStep(step) ? <Nested key={i}>{row}</Nested> : <div key={i}>{row}</div>;
+        })}
       </div>
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
         <Btn primary color={INKBLUE} disabled={saving} onClick={approve}>{saving ? "Saving…" : "Approve all"}</Btn>
         <Btn color={MUTE} disabled={saving} onClick={discard}>Discard</Btn>
       </div>
@@ -297,10 +308,10 @@ function ReviewDisciplineOperationCard({ op, secretary, onResolved }) {
         <Pill color={BRICK}>habit update</Pill>
         <Pill color={MUTE}>{op.sourceType}</Pill>
       </div>
-      <div style={{ fontFamily: SANS, fontSize: 13, color: INK, marginBottom: 6 }}>{target?.title || "(this habit no longer exists)"}</div>
-      <div style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE, marginBottom: 10 }}>{changes.join(", ") || "no changes proposed"}</div>
+      <div style={{ fontFamily: SANS, fontSize: SIZE_TITLE, color: INK, marginBottom: 6 }}>{target?.title || "(this habit no longer exists)"}</div>
+      <div style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>{changes.join(", ") || "no changes proposed"}</div>
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
         <Btn primary color={INKBLUE} disabled={saving || !target} onClick={approve}>{saving ? "Saving…" : "Approve"}</Btn>
         <Btn color={MUTE} disabled={saving} onClick={discard}>Discard</Btn>
       </div>
@@ -356,10 +367,10 @@ function ReviewPracticeHabitOperationCard({ op, secretary, onResolved }) {
         <Pill color={DEEPTEAL}>practice update</Pill>
         <Pill color={MUTE}>{op.sourceType}</Pill>
       </div>
-      <div style={{ fontFamily: SANS, fontSize: 13, color: INK, marginBottom: 6 }}>{target?.title || "(this practice no longer exists)"}</div>
-      <div style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE, marginBottom: 10 }}>{changes.join(", ") || "no changes proposed"}</div>
+      <div style={{ fontFamily: SANS, fontSize: SIZE_TITLE, color: INK, marginBottom: 6 }}>{target?.title || "(this practice no longer exists)"}</div>
+      <div style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE }}>{changes.join(", ") || "no changes proposed"}</div>
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
-      <div style={{ display: "flex", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
         <Btn primary color={INKBLUE} disabled={saving || !target} onClick={approve}>{saving ? "Saving…" : "Approve"}</Btn>
         <Btn color={MUTE} disabled={saving} onClick={discard}>Discard</Btn>
       </div>
@@ -449,7 +460,7 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
                 type="button"
                 onClick={() => setDraft(s)}
                 style={{
-                  textAlign: "left", border: `1px solid ${LINE}`, borderRadius: 8, background: HEAD_BG,
+                  textAlign: "left", border: `1px solid ${LINE}`, borderRadius: RADIUS_SM, background: HEAD_BG,
                   color: INK, fontFamily: SANS, fontSize: 12, padding: "7px 10px", cursor: "pointer",
                 }}
               >

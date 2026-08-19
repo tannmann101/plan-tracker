@@ -246,6 +246,23 @@ export const isoDate = (d) => {
 
 export const todayISO = () => isoDate(new Date());
 
+// A raw "YYYY-MM-DD" is a field value, not something to print as-is --
+// this is the one place an ISO date turns into the short human form
+// ("Aug 20") used everywhere a date shows as a formatted field rather
+// than a Kind/Item's own stored string (Log's Date column, EntityCard's
+// due/target pill, Week's date-range note). Today/tomorrow read as words,
+// matching Today.jsx's own dayLabel() convention, since those are the two
+// days a household actually thinks about by name rather than date.
+export const formatShortDate = (iso) => {
+  if (!iso) return null;
+  if (iso === todayISO()) return "Today";
+  const d = new Date(`${iso}T00:00:00`);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  if (iso === isoDate(tomorrow)) return "Tomorrow";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
 // Monday-start, per the Week/Calendar page's column layout (§7.2).
 export const weekStartISO = (d = new Date()) => {
   const date = new Date(d);
