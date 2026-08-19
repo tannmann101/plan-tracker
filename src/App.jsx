@@ -94,6 +94,17 @@ function Shell({ user }) {
     else navigate("/secretary");
   }, [isDesktop, navigate]);
 
+  // The unscoped equivalent -- "just start a conversation," not tied to any
+  // entity. Desktop already has two clearly labeled ways in (the header's
+  // 💬 icon and "Secretary" pill); mobile had only the hamburger menu two
+  // taps deep, no fast path at all, which is the gap this closes with a
+  // second floating button beside the "+" FAB.
+  const openSecretary = useCallback(() => {
+    setAskSecretaryContext(null);
+    if (isDesktop) setChatOpen(true);
+    else navigate("/secretary");
+  }, [isDesktop, navigate]);
+
   // triageCapture drafts a pendingOperation server-side (see
   // functions/index.js) -- this just kicks that off and refreshes so the
   // Secretary review log picks it up; nothing here decides a placement.
@@ -149,6 +160,12 @@ function Shell({ user }) {
       title="Add"
       offsetRight={isDesktop && chatOpen ? CHAT_DOCK_WIDTH + 20 : 20}
     />
+  );
+  // Mobile-only -- desktop's header already carries two clearly labeled
+  // ways into Secretary, so a third floating button there would just be
+  // clutter; this is specifically the fast path mobile was missing.
+  const secretaryFab = !isDesktop && (
+    <FAB onClick={openSecretary} title="Ask Secretary" icon="💬" offsetRight={84} small />
   );
   const addForm = addOpen && <AddForm secretary={secretary} onClose={() => setAddOpen(false)} onNavigate={navigate} />;
 
@@ -363,6 +380,7 @@ function Shell({ user }) {
       </div>
 
       {fab}
+      {secretaryFab}
       {addForm}
     </div>
   );
