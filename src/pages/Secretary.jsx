@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea, CheckboxRow, Nested } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE, CARD, HEAD_BG, SIZE_TITLE, GAP_ACTIONS, RADIUS_SM, RADIUS_CHIP } from "../theme";
-import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES, todayISO } from "../constants";
+import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES, todayISO, formatRelativeTime } from "../constants";
 import { Field, TagsInput, MultiCheckList, KindParentPicker, DurationInput } from "../components/formFields";
 import { allTagsInUse, kindSubtreeIds, upcomingItems, practiceHabitsSummary, disciplinesSummary, kindsNeedingAttention } from "../lib/graph";
 import { triageCapture, secretaryChat } from "../lib/claude";
@@ -401,26 +401,112 @@ function suggestionsFor(entityContext) {
   ];
 }
 
+// Chat sessions -- a thread is scoped to a specific entity (entityFamily/
+// entityId, mirroring entityContext's own shape) or general when both are
+// null. Sessions aren't created just by opening a panel (that would spam
+// the collection with empty threads every time an Ask-Secretary icon gets
+// clicked) -- only the first real message in a scope lazily creates one,
+// via createSession below, called from SecretaryChatPanel's send().
+const LEGACY_SESSION_ID = "legacy";
+
+function scopeMatches(session, entityContext) {
+  return (session.entityFamily || null) === (entityContext?.family || null) &&
+    (session.entityId || null) === (entityContext?.id || null);
+}
+
+// The messages households sent before sessions existed have no sessionId
+// at all -- rather than migrate or silently orphan that real history,
+// it's surfaced as one shared, read-only "Earlier conversation" entry at
+// the end of the general (unscoped) session list.
+function sessionsForScope(secretary, entityContext) {
+  const scoped = (secretary.chatSessions || [])
+    .filter((s) => scopeMatches(s, entityContext))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const hasLegacyMessages = !entityContext && (secretary.chatMessages || []).some((m) => !m.sessionId);
+  return hasLegacyMessages ? [...scoped, { id: LEGACY_SESSION_ID, title: "Earlier conversation", legacy: true }] : scoped;
+}
+
+function findLatestSession(secretary, entityContext) {
+  const scoped = (secretary.chatSessions || []).filter((s) => scopeMatches(s, entityContext));
+  return scoped.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0] || null;
+}
+
+async function createSession(secretary, entityContext) {
+  const now = Date.now();
+  const base = {
+    entityFamily: entityContext?.family || null,
+    entityId: entityContext?.id || null,
+    entityTitle: entityContext?.title || null,
+    title: entityContext?.title || "New chat",
+    createdAt: now, updatedAt: now,
+  };
+  const id = await secretary.saveChatSession(base);
+  return { id, ...base };
+}
+
 // Persistent chat -- exported so Workspace (§10) can embed the exact same
 // panel scoped to whatever ticket was clicked, rather than a second chat
 // implementation. entityContext, when given, is sent to secretaryChat so
 // the model prefers proposing an update to that entity over a fresh create.
-export function SecretaryChatPanel({ secretary, entityContext, onOperationCreated }) {
+//
+// Session resolution is self-contained: pass nothing and the panel always
+// resumes the most-recently-active thread for this entityContext (or
+// starts one on first send if none exists yet) -- this is what the
+// desktop dock and Workspace's embedded panel use, unchanged. Secretary's
+// own full page instead controls it explicitly (sessionId + a session
+// browser above this panel), so a household member can switch between or
+// start additional threads for the same scope rather than always landing
+// on "the" one.
+export function SecretaryChatPanel({ secretary, entityContext, sessionId, onSessionResolved, onOperationCreated }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
   const [gridPrefs] = useTimeGridPrefs();
+  const [resolvedSessionId, setResolvedSessionId] = useState(null);
 
-  const messages = (secretary.chatMessages || []).slice().sort((a, b) => a.at - b.at);
+  useEffect(() => {
+    if (sessionId) return; // parent has already picked a specific thread
+    const existing = findLatestSession(secretary, entityContext);
+    setResolvedSessionId(existing?.id || null);
+    if (existing) onSessionResolved?.(existing);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId, entityContext?.family, entityContext?.id, secretary.chatSessions]);
+
+  const activeSessionId = sessionId || resolvedSessionId;
+
+  useEffect(() => {
+    setError(null);
+  }, [activeSessionId]);
+
+  const isLegacy = activeSessionId === LEGACY_SESSION_ID;
+  const messages = (secretary.chatMessages || [])
+    .filter((m) => (isLegacy ? !m.sessionId : activeSessionId && m.sessionId === activeSessionId))
+    .slice()
+    .sort((a, b) => a.at - b.at);
 
   const send = async () => {
     const text = draft.trim();
-    if (!text || sending) return;
+    if (!text || sending || isLegacy) return;
     setSending(true);
     setError(null);
     setDraft("");
     try {
-      await secretary.saveChatMessage({ role: "user", text });
+      const isFirstMessage = messages.length === 0;
+      let session = activeSessionId ? (secretary.chatSessions || []).find((s) => s.id === activeSessionId) : null;
+      if (!session) {
+        session = await createSession(secretary, entityContext);
+        setResolvedSessionId(session.id);
+        onSessionResolved?.(session);
+      }
+      await secretary.saveChatMessage({ role: "user", text, sessionId: session.id });
+      // A general session's title starts as "New chat" -- once it's
+      // actually said something, that's a far more useful label in the
+      // session browser than a generic placeholder. Scoped sessions
+      // already carry the entity's own title, so this only ever fires once
+      // per general thread.
+      const retitle = isFirstMessage && !session.entityFamily && session.title === "New chat";
+      await secretary.saveChatSession({ ...session, updatedAt: Date.now(), ...(retitle ? { title: text.slice(0, 60) } : {}) });
+
       const history = [...messages, { role: "user", text }].slice(-20).map((m) => ({ role: m.role, text: m.text }));
       const existingKinds = (secretary.kinds || []).map((k) => ({ id: k.id, title: k.title, kindType: k.kindType, domain: k.domain }));
       const existingItems = upcomingItems(secretary.items);
@@ -433,7 +519,7 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
         practiceHabits, disciplines, attention, existingResources,
         today: todayISO(), activeHours: { startHour: gridPrefs.startHour, endHour: gridPrefs.endHour },
       });
-      await secretary.saveChatMessage({ role: "assistant", text: result.reply, pendingOperationId: result.pendingOperationId || null });
+      await secretary.saveChatMessage({ role: "assistant", text: result.reply, sessionId: session.id, pendingOperationId: result.pendingOperationId || null });
       if (result.pendingOperationId) {
         await secretary.refresh();
         onOperationCreated?.();
@@ -450,7 +536,10 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
       {entityContext && (
         <Note>Scoped to "{entityContext.title}" -- Secretary will prefer proposing edits to it.</Note>
       )}
-      {messages.length === 0 && (
+      {isLegacy && (
+        <Note>This is your history from before conversations were split into sessions -- read-only. Start a new chat to keep talking with Secretary.</Note>
+      )}
+      {messages.length === 0 && !isLegacy && (
         <div style={{ marginBottom: 10 }}>
           <Note>Nothing asked yet -- Secretary drafts, you always approve. A few things you can try:</Note>
           <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>
@@ -481,10 +570,44 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
         ))}
       </div>
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
-      <div style={{ display: "flex", gap: 8 }}>
-        <Textarea value={draft} onChange={setDraft} placeholder="Ask Secretary…" rows={2} />
-        <Btn primary color={INKBLUE} disabled={sending || !draft.trim()} onClick={send}>{sending ? "…" : "Send"}</Btn>
-      </div>
+      {!isLegacy && (
+        <div style={{ display: "flex", gap: 8 }}>
+          <Textarea value={draft} onChange={setDraft} placeholder="Ask Secretary…" rows={2} />
+          <Btn primary color={INKBLUE} disabled={sending || !draft.trim()} onClick={send}>{sending ? "…" : "Send"}</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// A row of past threads for the current scope -- only shown once there's
+// more than one to choose between (a fresh scope with a single thread has
+// nothing to switch to yet). Exported alongside SecretaryChatPanel so
+// Secretary's own page can render it above the panel; the dock and
+// Workspace's embedded panel don't use it, they just always resume "the"
+// latest thread per entityContext.
+function SessionTabs({ secretary, entityContext, activeSessionId, onSelect }) {
+  const sessions = sessionsForScope(secretary, entityContext);
+  if (sessions.length < 2) return null;
+  return (
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+      {sessions.map((s) => {
+        const active = s.id === activeSessionId;
+        return (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onSelect(s.id)}
+            style={{
+              border: `1px solid ${active ? INKBLUE : LINE}`, borderRadius: RADIUS_SM, cursor: "pointer",
+              background: active ? INKBLUE : HEAD_BG, color: active ? CARD : INK,
+              fontFamily: MONO, fontSize: 11, padding: "5px 10px",
+            }}
+          >
+            {s.title}{s.updatedAt ? ` · ${formatRelativeTime(s.updatedAt)}` : ""}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -503,12 +626,26 @@ export default function Secretary({ secretary, onBack, focusEntityContext, onFoc
   const [captureError, setCaptureError] = useState(null);
   const [importing, setImporting] = useState(false);
   const [chatFocus, setChatFocus] = useState(null); // { family, entity } -- scopes the Chat panel below
+  const [selectedSessionId, setSelectedSessionId] = useState(null); // null = let the panel resume the latest thread
+
+  const focusChat = (next) => {
+    setChatFocus(next);
+    setSelectedSessionId(null);
+  };
 
   useEffect(() => {
     if (!focusEntityContext) return;
-    setChatFocus(focusEntityContext);
+    focusChat(focusEntityContext);
     onFocusHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusEntityContext, onFocusHandled]);
+
+  const chatEntityContext = chatFocus ? { family: chatFocus.family, id: chatFocus.entity.id, title: chatFocus.entity.title } : null;
+
+  const startNewSession = async () => {
+    const session = await createSession(secretary, chatEntityContext);
+    setSelectedSessionId(session.id);
+  };
 
   const pending = (secretary.pendingOperations || [])
     .filter((o) => o.status === "pending")
@@ -567,11 +704,22 @@ export default function Secretary({ secretary, onBack, focusEntityContext, onFoc
         <SectionTitle note="scheduling, sequencing, edits -- propose-then-confirm">
           Chat{chatFocus ? ` — ${chatFocus.entity.title}` : ""}
         </SectionTitle>
-        {chatFocus && <Btn small color={MUTE} onClick={() => setChatFocus(null)}>Unfocus</Btn>}
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn small onClick={startNewSession}>+ New chat</Btn>
+          {chatFocus && <Btn small color={MUTE} onClick={() => focusChat(null)}>Unfocus</Btn>}
+        </div>
       </div>
+      <SessionTabs
+        secretary={secretary}
+        entityContext={chatEntityContext}
+        activeSessionId={selectedSessionId}
+        onSelect={setSelectedSessionId}
+      />
       <SecretaryChatPanel
         secretary={secretary}
-        entityContext={chatFocus ? { family: chatFocus.family, id: chatFocus.entity.id, title: chatFocus.entity.title } : null}
+        entityContext={chatEntityContext}
+        sessionId={selectedSessionId}
+        onSessionResolved={(s) => setSelectedSessionId((cur) => cur || s.id)}
       />
 
       {importing && (

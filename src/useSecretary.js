@@ -14,6 +14,7 @@ const PRACTICE_HABITS_REF = collection(db, "practiceHabits");
 const DISCIPLINES_REF = collection(db, "disciplines");
 const PENDING_OPS_REF = collection(db, "pendingOperations");
 const CHAT_REF = collection(db, "secretaryChat");
+const CHAT_SESSIONS_REF = collection(db, "chatSessions");
 const EVENTS_REF = collection(db, "events");
 const CAPTURES_REF = collection(db, "captures");
 const CONFIG_REF = collection(db, "config");
@@ -68,6 +69,7 @@ export function useSecretary(enabled) {
   const [disciplines, setDisciplines] = useState(null);
   const [pendingOperations, setPendingOperations] = useState(null);
   const [chatMessages, setChatMessages] = useState(null);
+  const [chatSessions, setChatSessions] = useState(null);
   const [events, setEvents] = useState(null);
   const [captures, setCaptures] = useState(null);
   const [domains, setDomains] = useState(DEFAULT_DOMAINS);
@@ -80,7 +82,7 @@ export function useSecretary(enabled) {
   const refresh = useCallback(async () => {
     setStatus((s) => (s === "ready" ? "ready" : "loading"));
     try {
-      const [kindsSnap, itemsSnap, habitsSnap, disciplinesSnap, opsSnap, chatSnap, eventsSnap, capturesSnap, configSnap] =
+      const [kindsSnap, itemsSnap, habitsSnap, disciplinesSnap, opsSnap, chatSnap, chatSessionsSnap, eventsSnap, capturesSnap, configSnap] =
         await Promise.all([
           getDocs(REFS.kind),
           getDocs(REFS.item),
@@ -88,6 +90,7 @@ export function useSecretary(enabled) {
           getDocs(DISCIPLINES_REF),
           getDocs(PENDING_OPS_REF),
           getDocs(CHAT_REF),
+          getDocs(CHAT_SESSIONS_REF),
           getDocs(EVENTS_REF),
           getDocs(CAPTURES_REF),
           getDocs(CONFIG_REF),
@@ -99,6 +102,7 @@ export function useSecretary(enabled) {
       setDisciplines(mapDocs(disciplinesSnap));
       setPendingOperations(mapDocs(opsSnap));
       setChatMessages(mapDocs(chatSnap));
+      setChatSessions(mapDocs(chatSessionsSnap));
       setEvents(mapDocs(eventsSnap));
       setCaptures(mapDocs(capturesSnap));
 
@@ -458,6 +462,34 @@ export function useSecretary(enabled) {
     }
   }, []);
 
+  // A chat session is a persistent thread -- scoped to an entity
+  // (entityFamily/entityId, mirroring entityContext) or general when both
+  // are null. Same upsert-by-optional-id shape as savePendingOperation/
+  // saveCapture: pass an id to touch an existing session (bump updatedAt,
+  // maybe retitle), omit it to create a new thread.
+  const saveChatSession = useCallback(async (session) => {
+    try {
+      const { id, ...rest } = session;
+      const now = Date.now();
+      let docId = id;
+      if (id) {
+        await setDoc(doc(CHAT_SESSIONS_REF, id), { ...rest, createdAt: rest.createdAt || now });
+      } else {
+        const ref = await addDoc(CHAT_SESSIONS_REF, { ...rest, createdAt: now });
+        docId = ref.id;
+      }
+      setChatSessions((prevList) => {
+        const next = (prevList || []).filter((s) => s.id !== docId);
+        next.push({ id: docId, ...rest, createdAt: rest.createdAt || now });
+        return next;
+      });
+      return docId;
+    } catch (err) {
+      console.error("Failed to save chat session", err);
+      throw err;
+    }
+  }, []);
+
   // Domains / Resources / Practice-categories editors -- full-array
   // replacement, not a partial merge, so an entry can be reordered or
   // removed as easily as edited.
@@ -478,12 +510,12 @@ export function useSecretary(enabled) {
   }, []);
 
   return {
-    kinds, items, practiceHabits, disciplines, pendingOperations, chatMessages, events, captures,
+    kinds, items, practiceHabits, disciplines, pendingOperations, chatMessages, chatSessions, events, captures,
     domains, resources, practiceCategories, disciplineTypes,
     status, saveStatus, refresh,
     saveEntity, deleteEntity, savePracticeHabit, deletePracticeHabit, saveDiscipline, deleteDiscipline,
     saveCapture, deleteCapture, savePendingOperation, deletePendingOperation, applyCompoundOperation,
-    saveChatMessage, saveConfig,
+    saveChatMessage, saveChatSession, saveConfig,
   };
 }
 
