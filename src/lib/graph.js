@@ -253,6 +253,7 @@ export function practiceHabitsSummary(data) {
       weekDoneCount, weekTotalDays: 7,
       linkedKindId: h.linkedKindId || null, linkedKindTitle: linkedKind?.title || null,
       progressUnit: h.progressUnit || null, progressCurrent: goal?.current ?? null, progressTarget: h.progressTarget || null,
+      progressMode: h.linkedKindId ? (h.progressMode || "log") : null,
     };
   });
 }

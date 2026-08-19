@@ -48,10 +48,23 @@ export default function Today({ secretary, onBack, onNavigateKind, onAskSecretar
     .filter((i) => i.timing?.targetDay === d)
     .sort((a, b) => Number(!!a.done) - Number(!!b.done) || (a.timing?.time || "").localeCompare(b.timing?.time || ""))]));
 
-  const toggleDone = (entity, next) => secretary.saveEntity("item", {
-    ...entity, done: next, completedAt: next ? Date.now() : null,
-    ...(entity.isRecurringPracticeItem ? { progressAmount: next ? (entity.progressAmount || 1) : 0 } : {}),
-  });
+  // A practice check-in's quick checkbox defaults its first-ever
+  // progressAmount to 1 -- the right behavior for a checkbox-mode habit
+  // (each check is worth 1 toward its target, same as Plans' own tracker
+  // checkbox), but a log-mode habit's amount is variable per day and
+  // shouldn't be guessed at; checking there just marks it done, and the
+  // actual amount gets logged via the edit modal (open the card). Also
+  // self-heals parentKindId to the habit's current linkedKindId on every
+  // toggle, so a goal-linked habit's check-in stays traceable wherever it
+  // shows (calendar, Workspace, Log) even if it drifted or predates linking.
+  const toggleDone = (entity, next) => {
+    const habit = entity.isRecurringPracticeItem ? (secretary.practiceHabits || []).find((h) => h.id === entity.practiceHabitId) : null;
+    const isLogMode = habit?.linkedKindId && (habit.progressMode || "log") === "log";
+    secretary.saveEntity("item", {
+      ...entity, done: next, completedAt: next ? Date.now() : null,
+      ...(habit ? { progressAmount: next ? (entity.progressAmount || (isLogMode ? 0 : 1)) : 0, parentKindId: habit.linkedKindId || null } : {}),
+    });
+  };
 
   // Direct drag-and-drop reschedule (TimeGrid's own onReschedule) -- a
   // human dragging a block writes straight through secretary.saveEntity,

@@ -360,6 +360,30 @@ try {
 } catch (e) {
   check("practice habit with a wrong-typed progressTarget is rejected", false);
 }
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "practiceHabits/habit-checkbox-mode"), validPracticeHabit({
+    linkedKindId: "kind1", progressUnit: "sessions", progressTarget: 30, progressMode: "checkbox",
+  })));
+  check("practice habit with progressMode 'checkbox' is allowed", true);
+} catch (e) {
+  check("practice habit with progressMode 'checkbox' is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "practiceHabits/habit-log-mode"), validPracticeHabit({
+    linkedKindId: "kind1", progressUnit: "pages", progressTarget: 300, progressMode: "log",
+  })));
+  check("practice habit with progressMode 'log' is allowed", true);
+} catch (e) {
+  check("practice habit with progressMode 'log' is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "practiceHabits/habit-bad-mode"), validPracticeHabit({ progressMode: "sometimes" })));
+  check("practice habit with an out-of-vocabulary progressMode is rejected", true);
+} catch (e) {
+  check("practice habit with an out-of-vocabulary progressMode is rejected", false);
+}
 
 try {
   const { type: _type, ...missingType } = validDiscipline();

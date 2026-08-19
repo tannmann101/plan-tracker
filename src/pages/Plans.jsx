@@ -23,6 +23,10 @@ function slugify(label) {
 
 const WEEKDAY_LABELS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
 const OTHER_TYPE_ID = "__other__";
+const PROGRESS_MODE_OPTIONS = [
+  { id: "checkbox", label: "Check off each day (adds 1 toward the target)" },
+  { id: "log", label: "Log an amount each day (variable per day)" },
+];
 
 // §9.1 -- category management, habit definitions, and the weekly tracker
 // grid. The grid never keeps its own completion state: every cell reads/
@@ -42,6 +46,7 @@ function PracticesTab({ secretary, onAskSecretary }) {
   const [habitLinkedKindId, setHabitLinkedKindId] = useState(null);
   const [habitProgressUnit, setHabitProgressUnit] = useState("");
   const [habitProgressTarget, setHabitProgressTarget] = useState("");
+  const [habitProgressMode, setHabitProgressMode] = useState("checkbox");
   const [weekStart, setWeekStart] = useState(() => weekStartISO());
   const [editingCell, setEditingCell] = useState(null); // { habitId, day }
   const [cellValue, setCellValue] = useState("");
@@ -72,6 +77,7 @@ function PracticesTab({ secretary, onAskSecretary }) {
     setHabitLinkedKindId(null);
     setHabitProgressUnit("");
     setHabitProgressTarget("");
+    setHabitProgressMode("checkbox");
   };
 
   const startEditHabit = (habit) => {
@@ -83,6 +89,10 @@ function PracticesTab({ secretary, onAskSecretary }) {
     setHabitLinkedKindId(habit.linkedKindId || null);
     setHabitProgressUnit(habit.progressUnit || "");
     setHabitProgressTarget(habit.progressTarget ? String(habit.progressTarget) : "");
+    // Habits linked before progressMode existed default to "log" here --
+    // that's the behavior they already had (a numeric cell, no checkbox),
+    // so editing one without touching this field can't silently change it.
+    setHabitProgressMode(habit.progressMode || "log");
   };
 
   const saveHabit = async () => {
@@ -98,6 +108,7 @@ function PracticesTab({ secretary, onAskSecretary }) {
       linkedKindId: habitLinkedKindId || null,
       progressUnit: habitLinkedKindId ? habitProgressUnit.trim() : null,
       progressTarget: habitLinkedKindId ? Number(habitProgressTarget) : null,
+      progressMode: habitLinkedKindId ? habitProgressMode : null,
     });
     resetHabitForm();
   };
@@ -113,18 +124,29 @@ function PracticesTab({ secretary, onAskSecretary }) {
     if (kind && kind.status !== "done") {
       await secretary.saveEntity("kind", { ...kind, status: "done" });
     }
-    await secretary.savePracticeHabit({ ...habit, linkedKindId: null, progressUnit: null, progressTarget: null });
+    await secretary.savePracticeHabit({ ...habit, linkedKindId: null, progressUnit: null, progressTarget: null, progressMode: null });
   };
 
+  // A checkbox tick always sets progressAmount to 1 (0 when unchecked) --
+  // harmless for a plain, unlinked habit (nothing reads it), and exactly
+  // what a checkbox-mode goal-linked habit needs to accumulate toward its
+  // target the same way Today/Week's own quick checkbox does (§9.1.1's
+  // single-Item contract means either surface toggling the same day writes
+  // the same field). parentKindId is set from the habit's own linkedKindId
+  // on every write too, so a goal-linked habit's check-in is traceable
+  // (KindChainLine) wherever that Item shows -- calendar, Workspace, Log --
+  // not just visible from the habit's own row here.
   const toggleDay = async (habit, day) => {
     const existing = practiceItemFor(habit.id, day, secretary.items);
+    const parentKindId = habit.linkedKindId || null;
     if (existing) {
-      await secretary.saveEntity("item", { ...existing, done: !existing.done, completedAt: !existing.done ? Date.now() : null });
+      const done = !existing.done;
+      await secretary.saveEntity("item", { ...existing, done, completedAt: done ? Date.now() : null, progressAmount: done ? 1 : 0, parentKindId });
     } else {
       await secretary.saveEntity("item", {
         title: habit.title, itemType: "other", domain: "practices", secondaryDomains: [],
-        resources: habit.resources || [], tags: habit.tags || [], parentKindId: null,
-        timing: { targetDay: day, floating: true }, done: true, completedAt: Date.now(),
+        resources: habit.resources || [], tags: habit.tags || [], parentKindId,
+        timing: { targetDay: day, floating: true }, done: true, completedAt: Date.now(), progressAmount: 1,
         isRecurringPracticeItem: true, practiceHabitId: habit.id, createdVia: "add-form",
       });
     }
@@ -138,14 +160,15 @@ function PracticesTab({ secretary, onAskSecretary }) {
   const commitCell = async (habit, day) => {
     const amount = Number(cellValue) || 0;
     const existing = practiceItemFor(habit.id, day, secretary.items);
+    const parentKindId = habit.linkedKindId || null;
     if (amount <= 0) {
-      if (existing) await secretary.saveEntity("item", { ...existing, done: false, progressAmount: 0, completedAt: null });
+      if (existing) await secretary.saveEntity("item", { ...existing, done: false, progressAmount: 0, completedAt: null, parentKindId });
     } else if (existing) {
-      await secretary.saveEntity("item", { ...existing, done: true, progressAmount: amount, completedAt: existing.completedAt || Date.now() });
+      await secretary.saveEntity("item", { ...existing, done: true, progressAmount: amount, completedAt: existing.completedAt || Date.now(), parentKindId });
     } else {
       await secretary.saveEntity("item", {
         title: habit.title, itemType: "other", domain: "practices", secondaryDomains: [],
-        resources: habit.resources || [], tags: habit.tags || [], parentKindId: null,
+        resources: habit.resources || [], tags: habit.tags || [], parentKindId,
         timing: { targetDay: day, floating: true }, done: true, completedAt: Date.now(), progressAmount: amount,
         isRecurringPracticeItem: true, practiceHabitId: habit.id, createdVia: "add-form",
       });
@@ -189,10 +212,18 @@ function PracticesTab({ secretary, onAskSecretary }) {
         {habitLinkedKindId && (
           <>
             <Note>
-              Linked habits drop the weekly checkbox for a numeric log instead -- click a day in the tracker below to record how much you did (pages read, minutes, reps, whatever unit fits). "Mark goal reached" on the tracker row closes it out: the Goal/Project gets marked done and this habit turns back into a plain weekly checkbox.
+              "Mark goal reached" on the tracker row closes it out: the Goal/Project gets marked done and this habit turns back into a plain weekly checkbox.
             </Note>
-            <Field label="Progress unit (e.g. chapters, pages, minutes)">
-              <Input value={habitProgressUnit} onChange={setHabitProgressUnit} placeholder="chapters" />
+            <Field label="How progress gets logged">
+              <Select value={habitProgressMode} onChange={setHabitProgressMode} options={PROGRESS_MODE_OPTIONS} />
+            </Field>
+            <Note>
+              {habitProgressMode === "log"
+                ? "The tracker below drops the checkbox for a numeric cell instead -- click a day to record how much you did (pages, minutes, reps, whatever unit fits)."
+                : "The tracker below keeps the plain checkbox -- each check still adds 1 toward the target below, same as Today/Week's own checkbox for this habit."}
+            </Note>
+            <Field label={`Progress unit (e.g. ${habitProgressMode === "log" ? "chapters, pages, minutes" : "sessions, days, workouts"})`}>
+              <Input value={habitProgressUnit} onChange={setHabitProgressUnit} placeholder={habitProgressMode === "log" ? "chapters" : "sessions"} />
             </Field>
             <Field label="Target amount">
               <Input value={habitProgressTarget} onChange={setHabitProgressTarget} placeholder="12" type="number" />
@@ -245,6 +276,11 @@ function PracticesTab({ secretary, onAskSecretary }) {
                     const weekItems = weekDays.map((day) => practiceItemFor(habit.id, day, secretary.items));
                     const doneCount = weekItems.filter((i) => i?.done).length;
                     const goal = practiceHabitProgress(habit, secretary.items);
+                    // A goal-linked habit still gets a plain checkbox in the
+                    // tracker when its progressMode is "checkbox" -- only
+                    // "log" mode (the default for habits linked before this
+                    // field existed) swaps the cell for a numeric entry.
+                    const isLogMode = goal && (habit.progressMode || "log") === "log";
                     const linkedKind = habit.linkedKindId ? (secretary.kinds || []).find((k) => k.id === habit.linkedKindId) : null;
                     return (
                       <Fragment key={habit.id}>
@@ -266,7 +302,7 @@ function PracticesTab({ secretary, onAskSecretary }) {
                             const isEditing = editingCell && editingCell.habitId === habit.id && editingCell.day === day;
                             return (
                               <td key={day} style={{ textAlign: "center", padding: "4px", borderBottom: goal ? "none" : `1px solid ${LINE}` }}>
-                                {goal ? (
+                                {isLogMode ? (
                                   isEditing ? (
                                     <input
                                       autoFocus type="number" value={cellValue}

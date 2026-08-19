@@ -99,7 +99,7 @@ function kindPatch(draft) {
   };
 }
 
-function itemPatch(draft) {
+function itemPatch(draft, practiceHabits = []) {
   const patch = {
     title: draft.title,
     itemType: ITEM_TYPE_IDS.includes(draft.itemType) ? draft.itemType : 'task',
@@ -128,7 +128,24 @@ function itemPatch(draft) {
   if (draft.practiceHabitId) {
     patch.isRecurringPracticeItem = true;
     patch.practiceHabitId = draft.practiceHabitId;
-    if (draft.progressAmount != null) patch.progressAmount = draft.progressAmount;
+    const habit = practiceHabits.find((h) => h.id === draft.practiceHabitId);
+    // A goal-linked habit's check-in carries the same parentKindId as its
+    // habit -- resolved here rather than trusted from the model (which
+    // isn't told to echo it back), so the goal attachment is never
+    // silently missing from an AI-proposed check-in the way it would be
+    // if this were left to the model to remember.
+    if (habit?.linkedKindId) patch.parentKindId = habit.linkedKindId;
+    // Checkbox-mode habits accumulate 1 per check, same as a human
+    // clicking the checkbox on Plans/Today/Week -- the model's own
+    // progressAmount (if it hallucinated one) is ignored here so a
+    // checkbox-mode habit can't end up with an arbitrary logged number.
+    // Log-mode (or a plain, non-goal-linked habit) trusts the model's
+    // amount, same as before -- the human still reviews it in the queue.
+    if (habit?.linkedKindId && (habit.progressMode || 'log') === 'checkbox') {
+      patch.progressAmount = draft.done ? 1 : 0;
+    } else if (draft.progressAmount != null) {
+      patch.progressAmount = draft.progressAmount;
+    }
   }
   return patch;
 }
@@ -166,12 +183,12 @@ function practiceHabitPatch(draft) {
 // `ops` list expects. Returns null for a step whose opType doesn't match
 // anything recognized, so the caller can drop it rather than write a
 // step the client wouldn't know how to apply.
-function normalizeCompoundStep(step) {
+function normalizeCompoundStep(step, practiceHabits = []) {
   const opType = step.opType || '';
   const action = opType.startsWith('create') ? 'create' : 'update';
   let entityType, patch;
   if (opType.endsWith('kind')) { entityType = 'kind'; patch = kindPatch(step); }
-  else if (opType.endsWith('item')) { entityType = 'item'; patch = itemPatch(step); }
+  else if (opType.endsWith('item')) { entityType = 'item'; patch = itemPatch(step, practiceHabits); }
   else if (opType === 'update-discipline') { entityType = 'discipline'; patch = disciplinePatch(step); }
   else if (opType === 'update-practiceHabit') { entityType = 'practiceHabit'; patch = practiceHabitPatch(step); }
   else return null;
@@ -417,7 +434,7 @@ Suggesting a time: if asked to schedule something with no specific day or time g
 
 Practices: practiceHabits below lists every active Practice habit with today's completion state and this week's tally, so you can answer "did I do X today/this week" directly. If asked to check one off (or un-check it), propose an update-item targeting its "todayItemId" when set and the day in question is today (family "item", practiceHabitId set, done as asked) -- or, when there's no Item yet for that day (todayItemId null, or a day other than today), propose a create-item with the same practiceHabitId/targetDay/done, itemType "other", domain "practices", and leave time/durationMinutes null (a practice check-in is always floating). Never propose creating a brand-new Practice habit *definition* -- if asked to add one, tell the household to add it from Plans' Practices tab.
 
-Goal-linked practices: some practiceHabits build toward a Goal or Project instead of a plain daily checkbox -- those entries carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget (e.g. a "Read" habit linked to a "Read 1 book a month" Goal, progressUnit "chapters", progressCurrent 4, progressTarget 12). When the household reports progress on one of these ("I read 2 chapters today"), propose the same update-item/create-item shape as any other check-in, but set "progressAmount" to the amount and "done" to true (progressAmount 0 with done false to undo a day's log) -- never invent a running total yourself, it's always the sum of each day's progressAmount, computed client-side. Report progressCurrent/progressTarget/progressUnit plainly when asked how a goal is going. You can draft the Goal/Project Kind itself as a normal create-kind proposal when the household describes a new one -- but linking a Practice habit to it (setting its progressUnit/progressTarget) isn't something you can propose; direct the household to Plans' Practices tab to link the habit once the Kind exists, since it's a direct edit to the habit's own definition, not a create/update-item operation. Once a goal-linked habit's target is reached, the household closes it out from Plans ("Mark goal reached"), which turns it back into a plain weekly-checkbox habit -- you'll see linkedKindId disappear from that habit's entry afterward.
+Goal-linked practices: some practiceHabits build toward a Goal or Project instead of a plain daily checkbox -- those entries carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget/progressMode (e.g. a "Read" habit linked to a "Read 1 book a month" Goal, progressUnit "chapters", progressCurrent 4, progressTarget 12, progressMode "log"). progressMode "checkbox" means each day is worth exactly 1 toward the target -- treat it exactly like a plain habit (propose "done" true/false only, never set "progressAmount" yourself; the server derives it from "done"). progressMode "log" means the amount varies day to day -- when the household reports progress on one of these ("I read 2 chapters today"), set "progressAmount" to the amount and "done" to true (progressAmount 0 with done false to undo a day's log). Either way, never invent a running total yourself -- progressCurrent is always the sum of each day's progressAmount, computed client-side. Report progressCurrent/progressTarget/progressUnit plainly when asked how a goal is going. You can draft the Goal/Project Kind itself as a normal create-kind proposal when the household describes a new one -- but linking a Practice habit to it (setting its progressUnit/progressTarget/progressMode) isn't something you can propose; direct the household to Plans' Practices tab to link the habit once the Kind exists, since it's a direct edit to the habit's own definition, not a create/update-item operation. Once a goal-linked habit's target is reached, the household closes it out from Plans ("Mark goal reached"), which turns it back into a plain weekly-checkbox habit -- you'll see linkedKindId disappear from that habit's entry afterward.
 
 Habits to Break: disciplines below lists every unresolved habit being eliminated, whether or not it's currently "in focus," each with "focused" (true/false), its live streak, and the next milestone it's working toward. Discuss progress and offer encouragement, and now you can act too -- propose a single-step "update-discipline" (targetId = its id from disciplines below) to pull one into focus ("focused": true), stop focusing it ("focused": false), log a relapse today ("relapse": true -- resets the streak clock to right now), or mark it resolved for good ("resolved": true). Only set the field(s) actually being asked for; never propose creating a brand-new discipline yourself -- if asked to add one, tell the household to add it from Plans' "Habits to Break" section.
 
@@ -437,7 +454,7 @@ existingKinds (id/title/kindType/domain, for parentKindId/targetId matching): ${
 
 existingItems (id/title/domain/targetDay/floating/time/durationMinutes -- today through the next 2 weeks, for scheduling/overlap checks and general awareness): ${JSON.stringify(existingItems)}
 
-practiceHabits (id/title/categoryId/todayItemId/todayDone/weekDoneCount out of weekTotalDays; goal-linked ones also carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget): ${JSON.stringify(practiceHabits)}
+practiceHabits (id/title/categoryId/todayItemId/todayDone/weekDoneCount out of weekTotalDays; goal-linked ones also carry linkedKindId/linkedKindTitle/progressUnit/progressCurrent/progressTarget/progressMode): ${JSON.stringify(practiceHabits)}
 
 disciplines (id/title/type/focused/streakDays/nextMilestoneLabel/daysToNextMilestone -- every unresolved one, focused or not): ${JSON.stringify(disciplines)}
 
@@ -474,7 +491,7 @@ existingResources: ${JSON.stringify(existingResources)}`;
   let pendingOperationId = null;
   if (parsed.proposedOperation?.compound) {
     const ops = (Array.isArray(parsed.proposedOperation.steps) ? parsed.proposedOperation.steps : [])
-      .map(normalizeCompoundStep)
+      .map((step) => normalizeCompoundStep(step, practiceHabits))
       .filter(Boolean);
     for (const op of ops) {
       if (op.entityType === 'kind' || op.entityType === 'item') op.patch.createdVia = 'secretary-chat';
@@ -496,7 +513,7 @@ existingResources: ${JSON.stringify(existingResources)}`;
       }
     } else {
       const family = draft.family === 'kind' ? 'kind' : 'item';
-      const patch = family === 'kind' ? kindPatch(draft) : itemPatch(draft);
+      const patch = family === 'kind' ? kindPatch(draft) : itemPatch(draft, practiceHabits);
       patch.createdVia = 'secretary-chat';
       if (draft.opType?.startsWith('update') && draft.targetId) {
         pendingOperationId = await createPendingOperation({ opType: draft.opType, targetId: draft.targetId, patch, sourceType: 'chat' });

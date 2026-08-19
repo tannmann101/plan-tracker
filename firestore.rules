@@ -125,6 +125,10 @@ service cloud.firestore {
         d.updatedAt is number;
     }
 
+    function progressModeValues() {
+      return ['checkbox', 'log'];
+    }
+
     // practiceHabits are the habit *definition* only -- never a completion
     // record. A given habit+day's completion lives on exactly one Item
     // (isRecurringPracticeItem + practiceHabitId above), not here.
@@ -134,6 +138,11 @@ service cloud.firestore {
     // instead of a plain daily checkbox -- computed client-side (see
     // lib/graph.js's practiceHabitProgress), nothing stored here but the
     // target itself, so it stays trivial to retarget or unlink at any time.
+    // progressMode governs how each day's amount gets logged for a linked
+    // habit: "checkbox" (a plain check adds 1, same as an unlinked habit)
+    // or "log" (a numeric amount entered per day, for a metric that isn't
+    // naturally one-per-day). Missing/null is treated client-side as "log"
+    // for habits linked before this field existed.
     function isValidPracticeHabit(d) {
       return d.title is string && d.title.size() > 0 &&
         d.categoryId is string && d.categoryId.size() > 0 &&
@@ -144,6 +153,7 @@ service cloud.firestore {
         (!('linkedKindId' in d) || d.linkedKindId == null || d.linkedKindId is string) &&
         (!('progressUnit' in d) || d.progressUnit == null || d.progressUnit is string) &&
         (!('progressTarget' in d) || d.progressTarget == null || d.progressTarget is number) &&
+        (!('progressMode' in d) || d.progressMode == null || d.progressMode in progressModeValues()) &&
         d.createdAt is number;
     }
 

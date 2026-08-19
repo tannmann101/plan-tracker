@@ -362,6 +362,9 @@ export function TimeGridDay({
               <div style={{ fontFamily: SANS, fontSize: 10.5, fontWeight: 600, color: INK, lineHeight: 1.25, textDecoration: item.done ? "line-through" : "none" }}>
                 {item.isRecurringPracticeItem && <span title="Tracked as a Practice -- same box as Plans' weekly tracker">↻ </span>}
                 {item.title}
+                {item.isRecurringPracticeItem && item.progressAmount > 0 && (
+                  <span title="Amount logged for this day" style={{ fontFamily: MONO, fontSize: 9, color: MUTE, marginLeft: 4 }}>· {item.progressAmount}</span>
+                )}
               </div>
               {overlapping && <div style={{ fontFamily: MONO, fontSize: 9, color: BRICK, fontWeight: 600 }}>⚠ overlap</div>}
               {onAskSecretary && height >= 32 && (
@@ -404,6 +407,9 @@ function FloatingChip({ item, onToggleDone, onEdit, onAskSecretary, draggable, o
       >
         {item.isRecurringPracticeItem && <span title="Tracked as a Practice -- same box as Plans' weekly tracker">↻ </span>}
         {item.title}
+        {item.isRecurringPracticeItem && item.progressAmount > 0 && (
+          <span title="Amount logged for this day" style={{ fontFamily: MONO, fontSize: 10, color: MUTE, marginLeft: 4 }}>· {item.progressAmount}</span>
+        )}
       </span>
       {onAskSecretary && (
         <button

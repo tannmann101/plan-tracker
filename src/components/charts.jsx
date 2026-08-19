@@ -403,7 +403,7 @@ export function Heatmap({ rows, color = INKBLUE, cell = 13, gap = 3, weekGap = 5
               onClick={onCellClick && c.item ? () => onCellClick(c.item) : undefined}
               style={{ cursor: onCellClick && c.item ? "pointer" : "default" }}
             >
-              <title>{`${r.title} -- ${c.day}: ${c.done ? "done -- click to open" : "not done"}`}</title>
+              <title>{`${r.title} -- ${c.day}: ${c.done ? `done${c.item?.progressAmount ? ` (${c.item.progressAmount})` : ""} -- click to open` : "not done"}`}</title>
             </rect>
           ))}
         </g>

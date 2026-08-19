@@ -23,6 +23,7 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
   const [consentStatus, setConsentStatus] = useState(entity.consentStatus || "pending");
 
   const [done, setDone] = useState(!!entity.done);
+  const [progressAmount, setProgressAmount] = useState(entity.progressAmount ? String(entity.progressAmount) : "");
   const [targetDay, setTargetDay] = useState(entity.timing?.targetDay || "");
   const [floating, setFloating] = useState(entity.timing?.floating !== false);
   const [time, setTime] = useState(entity.timing?.time || "");
@@ -40,6 +41,15 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
   const linkedItems = family === "kind" ? itemsForKind(entity.id, secretary.items) : [];
   const excludeIds = family === "kind" ? kindSubtreeIds(entity.id, secretary.kinds) : null;
 
+  // A log-mode goal-linked practice habit's check-in (§ weekly tracker
+  // coherence) swaps the plain Done checkbox for its numeric amount here
+  // too -- the same field Plans' tracker cell edits, so wherever this Item
+  // gets opened (calendar, Workspace, Log), logging an amount works the
+  // same way instead of only being possible from Plans.
+  const linkedHabit = family === "item" && entity.isRecurringPracticeItem
+    ? (secretary.practiceHabits || []).find((h) => h.id === entity.practiceHabitId) : null;
+  const isLoggedPractice = linkedHabit?.linkedKindId && (linkedHabit.progressMode || "log") === "log";
+
   const save = async () => {
     if (!title.trim()) return;
     setSaving(true);
@@ -56,8 +66,15 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
           else delete patch.consentStatus;
         }
       } else {
-        patch.done = done;
-        patch.completedAt = done ? (entity.completedAt || Date.now()) : null;
+        if (isLoggedPractice) {
+          const amount = Number(progressAmount) || 0;
+          patch.progressAmount = amount;
+          patch.done = amount > 0;
+          patch.completedAt = amount > 0 ? (entity.completedAt || Date.now()) : null;
+        } else {
+          patch.done = done;
+          patch.completedAt = done ? (entity.completedAt || Date.now()) : null;
+        }
         patch.timing = (targetDay || dueDate || milestones.length)
           ? {
               targetDay: targetDay || null, time: floating ? null : (time || null),
@@ -155,7 +172,13 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
 
       {family === "item" && (
         <>
-          <CheckboxRow checked={done} onChange={setDone}>Done</CheckboxRow>
+          {isLoggedPractice ? (
+            <Field label={`Amount logged${linkedHabit.progressUnit ? ` (${linkedHabit.progressUnit})` : ""}`}>
+              <Input type="number" value={progressAmount} onChange={setProgressAmount} onEnter={save} />
+            </Field>
+          ) : (
+            <CheckboxRow checked={done} onChange={setDone}>Done</CheckboxRow>
+          )}
           <Field label="Attach to (reassign to fix a mis-categorization)">
             <KindParentPicker kinds={secretary.kinds} value={parentKindId} onChange={setParentKindId} />
           </Field>
