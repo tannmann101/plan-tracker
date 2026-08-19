@@ -79,6 +79,7 @@ export default function Today({ secretary, onBack, onNavigateKind, onAskSecretar
               onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
               onSlotClick={onSlotClick}
               disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
+              onAskSecretary={onAskSecretary}
             />
           ))}
         </DayGridRow>

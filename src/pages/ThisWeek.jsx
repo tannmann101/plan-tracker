@@ -8,7 +8,8 @@ import AddForm from "../components/AddForm";
 import EditEntityModal from "../components/EditEntityModal";
 import DisciplineDetailModal from "../components/DisciplineDetailModal";
 import CalendarMonthView from "../components/CalendarMonthView";
-import { weekStartISO, addDaysISO } from "../constants";
+import { weekStartISO, addDaysISO, todayISO } from "../constants";
+import { dayScheduleLoad } from "../lib/graph";
 
 const VIEW_TABS = [
   { id: "week", label: "Week" },
@@ -49,6 +50,20 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
     .filter((i) => i.timing.targetDay === d)
     .sort((a, b) => (a.timing.floating === false ? 0 : 1) - (b.timing.floating === false ? 0 : 1) || (a.timing.time || "").localeCompare(b.timing.time || ""))]));
 
+  // "Proactively flagging an empty week/overloaded day" -- computed
+  // straight from this week's own Items, no chat round-trip needed. Only
+  // days from today onward are actionable (an empty day that's already
+  // past isn't a gap to fill), same guard TimeGridDay's own per-day badge
+  // uses.
+  const today = todayISO();
+  const scheduleNotes = weekDays.map((d, i) => ({ d, i })).filter(({ d }) => d >= today).map(({ d, i }) => {
+    const floating = byDay[d].filter((it) => it.timing?.floating !== false || !it.timing?.time);
+    const timed = byDay[d].filter((it) => it.timing?.floating === false && it.timing?.time);
+    return { day: d, label: `${WEEKDAY_LABELS[i]} ${d.slice(5)}`, load: dayScheduleLoad(floating, timed, gridPrefs.startHour, gridPrefs.endHour) };
+  });
+  const emptyDays = scheduleNotes.filter((s) => s.load.isEmpty);
+  const overloadedDays = scheduleNotes.filter((s) => s.load.isOverloaded);
+
   const toggleDone = (entity, next) => secretary.saveEntity("item", {
     ...entity, done: next, completedAt: next ? Date.now() : null,
     ...(entity.isRecurringPracticeItem ? { progressAmount: next ? (entity.progressAmount || 1) : 0 } : {}),
@@ -77,6 +92,13 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
             <Btn small onClick={() => setWeekStart(weekStartISO())} color={MUTE}>This week</Btn>
             <Btn small onClick={() => setWeekStart(addDaysISO(weekStart, 7))} color={MUTE}>Next week →</Btn>
           </div>
+          {(emptyDays.length > 0 || overloadedDays.length > 0) && (
+            <Note>
+              {emptyDays.length > 0 && `${emptyDays.length} day${emptyDays.length === 1 ? "" : "s"} this week ${emptyDays.length === 1 ? "has" : "have"} nothing scheduled yet (${emptyDays.map((d) => d.label).join(", ")}).`}
+              {emptyDays.length > 0 && overloadedDays.length > 0 && " "}
+              {overloadedDays.length > 0 && `${overloadedDays.map((d) => d.label).join(", ")} ${overloadedDays.length === 1 ? "is" : "are"} booked solid.`}
+            </Note>
+          )}
           {layout === "blocked" ? (
             <DayGridRow count={weekDays.length} minColPx={isDesktop ? 155 : 140} gapPx={10}>
               {weekDays.map((d, i) => (
@@ -87,6 +109,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                   startHour={gridPrefs.startHour} endHour={gridPrefs.endHour} pxPerHour={gridPrefs.pxPerHour}
                   onToggleDone={toggleDone} onEdit={openEdit} onSlotClick={onSlotClick}
                   disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
+                  onAskSecretary={onAskSecretary}
                 />
               ))}
             </DayGridRow>

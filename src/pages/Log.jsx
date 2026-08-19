@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Btn, SectionTitle, Note, Pill, Input, TabBar } from "../ui";
-import { MONO, SANS, INK, MUTE, LINE, DOMAIN_COLORS, softTint } from "../theme";
+import { Btn, SectionTitle, Note, Pill, Input, TabBar, IconButton } from "../ui";
+import { MONO, SANS, INK, MUTE, LINE, INKBLUE, DOMAIN_COLORS, softTint } from "../theme";
 import EditEntityModal from "../components/EditEntityModal";
 import { domainLabel, kindTypeLabel, itemTypeLabel, weekStartISO } from "../constants";
 
@@ -35,7 +35,7 @@ function rowDescription(family, entity, domains) {
   return bits.join(" · ");
 }
 
-export default function Log({ secretary, onBack }) {
+export default function Log({ secretary, onBack, onAskSecretary }) {
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState("all");
   const [domainFilter, setDomainFilter] = useState("all");
@@ -114,7 +114,7 @@ export default function Log({ secretary, onBack }) {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["Title", "Kind/Item", "Date", "Description", "Tags"].map((h) => (
+                  {["Title", "Kind/Item", "Date", "Description", "Tags", ""].map((h) => (
                     <th key={h} style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "0 10px 8px 0", borderBottom: `1px solid ${LINE}` }}>{h}</th>
                   ))}
                 </tr>
@@ -140,6 +140,16 @@ export default function Log({ secretary, onBack }) {
                       <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
                         {(entity.tags || []).map((t) => <Pill key={t}>#{t}</Pill>)}
                       </div>
+                    </td>
+                    <td style={{ padding: "8px 0 8px 0", borderBottom: `1px solid ${LINE}` }}>
+                      {onAskSecretary && (
+                        <IconButton
+                          title="Ask Secretary about this" color={INKBLUE}
+                          onClick={(e) => { e.stopPropagation(); onAskSecretary(fam, entity); }}
+                        >
+                          💬
+                        </IconButton>
+                      )}
                     </td>
                   </tr>
                 ))}
