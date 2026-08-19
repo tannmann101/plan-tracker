@@ -215,12 +215,31 @@ service cloud.firestore {
 
     // Secretary chat history -- kept lightweight (role/text/timestamp + an
     // optional link to the pendingOperation it generated), not full LLM
-    // request/response payloads.
+    // request/response payloads. sessionId is optional so the household's
+    // pre-existing messages (written before chat sessions existed) remain
+    // valid documents -- the client treats sessionId == null as belonging
+    // to a single read-only "earlier conversation" bucket rather than
+    // requiring a migration here.
     function isValidChatMessage(d) {
       return d.role in ['user', 'assistant'] &&
         d.text is string &&
         d.at is number &&
+        (!('sessionId' in d) || d.sessionId == null || d.sessionId is string) &&
         (!('pendingOperationId' in d) || d.pendingOperationId == null || d.pendingOperationId is string);
+    }
+
+    // A chat session is a persistent thread, scoped to either a specific
+    // entity (entityFamily+entityId, mirroring entityContext's own shape)
+    // or general/unscoped when both are null. title starts as the entity's
+    // title (scoped) or "New chat" (general), and the client retitles a
+    // general session from its first message once one exists.
+    function isValidChatSession(d) {
+      return d.title is string && d.title.size() > 0 &&
+        (!('entityFamily' in d) || d.entityFamily == null || d.entityFamily is string) &&
+        (!('entityId' in d) || d.entityId == null || d.entityId is string) &&
+        (!('entityTitle' in d) || d.entityTitle == null || d.entityTitle is string) &&
+        d.createdAt is number &&
+        d.updatedAt is number;
     }
 
     // config/domains, config/resources, config/practiceCategories hold the
@@ -276,6 +295,12 @@ service cloud.firestore {
       allow read: if isAllowed();
       allow delete: if isAllowed();
       allow create, update: if isAllowed() && isValidChatMessage(request.resource.data);
+    }
+
+    match /chatSessions/{id} {
+      allow read: if isAllowed();
+      allow delete: if isAllowed();
+      allow create, update: if isAllowed() && isValidChatSession(request.resource.data);
     }
 
     match /config/{id} {

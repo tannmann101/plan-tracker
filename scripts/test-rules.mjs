@@ -105,6 +105,16 @@ const validChatMessage = (overrides = {}) => ({
   ...overrides,
 });
 
+const validChatSession = (overrides = {}) => ({
+  title: "New chat",
+  entityFamily: null,
+  entityId: null,
+  entityTitle: null,
+  createdAt: now(),
+  updatedAt: now(),
+  ...overrides,
+});
+
 const validConfig = (overrides = {}) => ({
   entries: [{ id: "google-calendar", label: "Google Calendar" }],
   ...overrides,
@@ -121,6 +131,7 @@ for (const [name, path, payload] of [
   ["capture", "captures/capture1", validCapture()],
   ["pending operation", "pendingOperations/op1", validPendingOperation()],
   ["chat message", "secretaryChat/msg1", validChatMessage()],
+  ["chat session", "chatSessions/session1", validChatSession()],
   ["config doc", "config/domains", validConfig()],
 ]) {
   try {
@@ -490,6 +501,44 @@ try {
 } catch (e) {
   check("standalone update-practiceHabit pending operation is allowed", false);
   console.error(e.message);
+}
+
+// -- Chat sessions + sessioned chat messages --
+
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "secretaryChat/msg-sessioned"), validChatMessage({ sessionId: "session1" })));
+  check("chat message with a sessionId is allowed", true);
+} catch (e) {
+  check("chat message with a sessionId is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "secretaryChat/msg-bad-sessionid"), validChatMessage({ sessionId: 5 })));
+  check("chat message with a wrong-typed sessionId is rejected", true);
+} catch (e) {
+  check("chat message with a wrong-typed sessionId is rejected", false);
+}
+try {
+  const { title: _title, ...missingTitle } = validChatSession();
+  await assertFails(setDoc(doc(tannerDb, "chatSessions/session-missing-title"), missingTitle));
+  check("chat session missing a required field is rejected", true);
+} catch (e) {
+  check("chat session missing a required field is rejected", false);
+}
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "chatSessions/session-scoped"), validChatSession({
+    title: "Kitchen remodel", entityFamily: "kind", entityId: "kind1", entityTitle: "Kitchen remodel",
+  })));
+  check("chat session scoped to an entity is allowed", true);
+} catch (e) {
+  check("chat session scoped to an entity is allowed", false);
+  console.error(e.message);
+}
+try {
+  await assertFails(setDoc(doc(tannerDb, "chatSessions/session-bad-entityid"), validChatSession({ entityId: 5 })));
+  check("chat session with a wrong-typed entityId is rejected", true);
+} catch (e) {
+  check("chat session with a wrong-typed entityId is rejected", false);
 }
 
 // -- Captures: narrowed to raw intake only --

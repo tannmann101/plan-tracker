@@ -263,6 +263,25 @@ export const formatShortDate = (iso) => {
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 };
 
+// A millisecond timestamp (chat session "last active", not a stored ISO
+// date field) turned into "Just now"/"12m ago"/"3h ago"/"5d ago", falling
+// back to formatShortDate's own short form once it's more than a week
+// stale -- distinct from formatShortDate because a chat session's
+// updatedAt needs finer-than-a-day granularity, unlike everything else
+// that formats dates in this app.
+export const formatRelativeTime = (at) => {
+  if (!at) return null;
+  const diffMs = Date.now() - at;
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 1) return "Just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d ago`;
+  return formatShortDate(isoDate(new Date(at)));
+};
+
 // Monday-start, per the Week/Calendar page's column layout (§7.2).
 export const weekStartISO = (d = new Date()) => {
   const date = new Date(d);
