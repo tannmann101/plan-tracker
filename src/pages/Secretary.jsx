@@ -367,6 +367,29 @@ function ReviewPracticeHabitOperationCard({ op, secretary, onResolved }) {
   );
 }
 
+// A handful of example prompts for the empty-chat state -- the household's
+// own feedback was that it wasn't obvious what Secretary could actually be
+// asked to do. Clicking one just fills the draft box (never auto-sends),
+// same "you always confirm" spirit as everything else here. Tailored a bit
+// when the conversation is scoped to something, generic otherwise.
+function suggestionsFor(entityContext) {
+  if (entityContext) {
+    if (entityContext.family === "discipline") {
+      return [`How's my streak on "${entityContext.title}" going?`, "Pull this into focus for the week", "I slipped today"];
+    }
+    if (entityContext.family === "practiceHabit") {
+      return ["Mark this done for today", `Link this to a new Goal`, "How am I doing on this this week?"];
+    }
+    return [`Move this to tomorrow at 9am`, `What's still open on this?`, "Turn this into its own Project"];
+  }
+  return [
+    "Schedule a dentist call for tomorrow afternoon",
+    "Create a goal to read one book a month",
+    "What should I focus on this week?",
+    "Turn my kitchen cleanout idea into a project",
+  ];
+}
+
 // Persistent chat -- exported so Workspace (§10) can embed the exact same
 // panel scoped to whatever ticket was clicked, rather than a second chat
 // implementation. entityContext, when given, is sent to secretaryChat so
@@ -415,6 +438,26 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
     <div>
       {entityContext && (
         <Note>Scoped to "{entityContext.title}" -- Secretary will prefer proposing edits to it.</Note>
+      )}
+      {messages.length === 0 && (
+        <div style={{ marginBottom: 10 }}>
+          <Note>Nothing asked yet -- Secretary drafts, you always approve. A few things you can try:</Note>
+          <div style={{ display: "flex", flexDirection: "column", gap: 5, marginTop: 6 }}>
+            {suggestionsFor(entityContext).map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setDraft(s)}
+                style={{
+                  textAlign: "left", border: `1px solid ${LINE}`, borderRadius: 8, background: HEAD_BG,
+                  color: INK, fontFamily: SANS, fontSize: 12, padding: "7px 10px", cursor: "pointer",
+                }}
+              >
+                "{s}"
+              </button>
+            ))}
+          </div>
+        </div>
       )}
       <div style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 360, overflowY: "auto", marginBottom: 10, padding: messages.length ? "4px 2px" : 0 }}>
         {messages.map((m) => (

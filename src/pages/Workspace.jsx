@@ -522,7 +522,7 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
       {disciplineModal && (
         <DisciplineDetailModal
           discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)}
-          onAskSecretary={(family, entity) => { setDisciplineModal(null); askSecretaryLocal(family, entity); }}
+          onAskSecretary={askSecretaryLocal}
         />
       )}
     </div>

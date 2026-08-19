@@ -58,7 +58,7 @@ export default function DisciplineDetailModal({ discipline, secretary, onClose, 
         <Btn primary color={BRICK} disabled={saving} onClick={() => run({ startedAt: Date.now() })}>Slipped today</Btn>
         <Btn color={MUTE} disabled={saving} onClick={() => run({ focused: false })}>Stop focusing</Btn>
         <Btn color={MUTE} disabled={saving} onClick={() => run({ focused: false, resolved: true })}>Mark resolved</Btn>
-        {onAskSecretary && <Btn color={INKBLUE} onClick={() => onAskSecretary("discipline", discipline)}>Ask Secretary</Btn>}
+        {onAskSecretary && <Btn color={INKBLUE} onClick={() => { onAskSecretary("discipline", discipline); onClose(); }}>Ask Secretary</Btn>}
       </div>
       <div style={{ marginTop: 12 }}>
         <Btn color={MUTE} onClick={onClose}>Close</Btn>

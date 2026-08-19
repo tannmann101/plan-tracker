@@ -331,7 +331,8 @@ export function Modal({ onClose, children, width = 420 }) {
 // always reachable regardless of which hub area you're in. offsetRight lets
 // the desktop shell nudge it clear of the Secretary chat dock when that's
 // open, rather than the dock covering it.
-export function FAB({ onClick, title = "Capture", offsetRight = 20 }) {
+export function FAB({ onClick, title = "Capture", offsetRight = 20, icon = "+", small }) {
+  const size = small ? 44 : 52;
   return (
     <button
       type="button"
@@ -340,13 +341,13 @@ export function FAB({ onClick, title = "Capture", offsetRight = 20 }) {
       aria-label={title}
       className="ui-fab"
       style={{
-        position: "fixed", right: offsetRight, bottom: 20, width: 52, height: 52, borderRadius: "50%",
+        position: "fixed", right: offsetRight, bottom: 20, width: size, height: size, borderRadius: "50%",
         background: INKBLUE, color: "#fff", border: "none", boxShadow: `0 2px 10px rgb(${SHADOW_RGB} / 0.28)`,
-        cursor: "pointer", fontSize: 22, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40,
+        cursor: "pointer", fontSize: small ? 18 : 22, display: "flex", alignItems: "center", justifyContent: "center", zIndex: 40,
         transition: `right ${TRANSITION}`,
       }}
     >
-      +
+      {icon}
     </button>
   );
 }
