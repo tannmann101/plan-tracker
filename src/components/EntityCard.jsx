@@ -1,5 +1,5 @@
-import { Card, Checkbox, Pill } from "../ui";
-import { SANS, MONO, INK, MUTE, DEEPTEAL, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS, softTint } from "../theme";
+import { Card, Checkbox, Pill, IconButton } from "../ui";
+import { SANS, MONO, INK, MUTE, INKBLUE, DEEPTEAL, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS, softTint } from "../theme";
 import { InfoIcon, KindChainLine } from "./InfoModal";
 import { domainLabel, kindStatusLabel, itemTypeLabel, kindTypeLabel } from "../constants";
 import { kindAttention } from "../lib/graph";
@@ -32,8 +32,13 @@ function cappedPills(list, render) {
 // kanban, Workspace's boards, and Log's rows all render through this (or a
 // thin wrapper) rather than bespoke per-page markup (§15). A Kind shows its
 // status pill; an Item shows a completion checkbox. Tapping the card body
-// (not the checkbox, not the info icon) opens the edit modal.
-export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, note, onEdit, onNavigateKind }) {
+// (not the checkbox, the info icon, or the Secretary icon) opens the edit
+// modal. onAskSecretary is optional -- when given, a small chat-bubble icon
+// opens a conversation scoped to this exact entity (App.jsx's askSecretary,
+// or Workspace's own lighter local focus), so "ask Secretary about this" is
+// reachable from wherever the entity is being looked at, not only from
+// Workspace's board.
+export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, note, onEdit, onNavigateKind, onAskSecretary }) {
   const domainColor = DOMAIN_COLORS[entity.domain] || MUTE;
   const done = family === "item" ? !!entity.done : entity.status === "done";
   const timing = timingLabel(entity.timing);
@@ -79,7 +84,12 @@ export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, 
         {note && <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginTop: 6 }}>{note}</div>}
         <KindChainLine family={family} entity={entity} data={secretary} onNavigateKind={onNavigateKind} />
       </div>
-      <InfoIcon family={family} entity={entity} data={secretary} onNavigateKind={onNavigateKind} />
+      <div style={{ display: "flex", flexDirection: "column", gap: 4, flex: "none" }}>
+        <InfoIcon family={family} entity={entity} data={secretary} onNavigateKind={onNavigateKind} />
+        {onAskSecretary && (
+          <IconButton title="Ask Secretary about this" color={INKBLUE} onClick={() => onAskSecretary(family, entity)}>💬</IconButton>
+        )}
+      </div>
     </Card>
   );
 }

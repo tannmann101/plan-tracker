@@ -1,5 +1,5 @@
 import { Fragment, useState } from "react";
-import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox, Pill, ProgressBar } from "../ui";
+import { Btn, SectionTitle, Note, Card, Input, Select, TabBar, Checkbox, Pill, ProgressBar, IconButton } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK, DOMAIN_COLORS, STATUS_COLORS, HEAD_BG, softTint } from "../theme";
 import { EntityCard } from "../components/EntityCard";
 import { Field, TagsInput, MultiCheckList, DisciplineMilestonesEditor, KindParentPicker } from "../components/formFields";
@@ -25,7 +25,7 @@ const OTHER_TYPE_ID = "__other__";
 // grid. The grid never keeps its own completion state: every cell reads/
 // writes through practiceItemFor's find-or-create-on-demand Item, the same
 // one Today/Week's own checkbox would touch for that habit+day (§9.1.1).
-function PracticesTab({ secretary }) {
+function PracticesTab({ secretary, onAskSecretary }) {
   const categories = secretary.practiceCategories || [];
   const habits = secretary.practiceHabits || [];
   const goalProjectKinds = (secretary.kinds || []).filter((k) => k.kindType === "project" || k.kindType === "goal");
@@ -247,12 +247,17 @@ function PracticesTab({ secretary }) {
                       <Fragment key={habit.id}>
                         <tr>
                           <td style={{ padding: "4px 10px 4px 0", borderBottom: goal ? "none" : `1px solid ${LINE}` }}>
-                            <button
-                              type="button" onClick={() => startEditHabit(habit)} title="Edit practice"
-                              style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 12.5, color: INK, textAlign: "left", textDecoration: editingHabitId === habit.id ? "underline" : "none" }}
-                            >
-                              {habit.title}
-                            </button>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                              <button
+                                type="button" onClick={() => startEditHabit(habit)} title="Edit practice"
+                                style={{ border: "none", background: "none", padding: 0, cursor: "pointer", fontFamily: SANS, fontSize: 12.5, color: INK, textAlign: "left", textDecoration: editingHabitId === habit.id ? "underline" : "none" }}
+                              >
+                                {habit.title}
+                              </button>
+                              {onAskSecretary && (
+                                <IconButton title="Ask Secretary about this" color={INKBLUE} onClick={() => onAskSecretary("practiceHabit", habit)}>💬</IconButton>
+                              )}
+                            </div>
                           </td>
                           {weekDays.map((day, i) => {
                             const isEditing = editingCell && editingCell.habitId === habit.id && editingCell.day === day;
@@ -319,7 +324,7 @@ function PracticesTab({ secretary }) {
         </div>
       )}
 
-      <DisciplinesSection secretary={secretary} />
+      <DisciplinesSection secretary={secretary} onAskSecretary={onAskSecretary} />
     </div>
   );
 }
@@ -331,7 +336,7 @@ function PracticesTab({ secretary }) {
 // today" resets that clock rather than requiring per-day check-ins, and
 // every meaningful transition is event-logged (useSecretary.js) so Trends
 // can plot streak history later.
-function DisciplinesSection({ secretary }) {
+function DisciplinesSection({ secretary, onAskSecretary }) {
   const disciplines = secretary.disciplines || [];
   const active = disciplines.filter((d) => !d.resolved);
   const resolved = disciplines.filter((d) => d.resolved);
@@ -489,6 +494,7 @@ function DisciplinesSection({ secretary }) {
                   <Btn small color={BRICK} onClick={() => slip(d)}>Slipped today</Btn>
                   <Btn small color={MUTE} onClick={() => toggleFocus(d)}>{d.focused ? "Stop focusing" : "Pull into focus"}</Btn>
                   <Btn small color={MUTE} onClick={() => resolve(d)}>Mark resolved</Btn>
+                  {onAskSecretary && <Btn small color={INKBLUE} onClick={() => onAskSecretary("discipline", d)}>Ask Secretary</Btn>}
                 </div>
               </Card>
             );
@@ -528,7 +534,7 @@ const FILTER_TABS = [
 // also be auto-promoted into "in-progress" as a side effect of saving an
 // Item under it (see useSecretary.js) -- both write the same field, so the
 // column a card sits in is always the true current state either way.
-function KanbanTab({ secretary, onNavigateKind }) {
+function KanbanTab({ secretary, onNavigateKind, onAskSecretary }) {
   const [filter, setFilter] = useState("all");
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -572,6 +578,7 @@ function KanbanTab({ secretary, onNavigateKind }) {
                     family="kind" entity={k} secretary={secretary}
                     onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
                     onNavigateKind={onNavigateKind}
+                    onAskSecretary={onAskSecretary}
                   />
                 </div>
               ))}
@@ -594,7 +601,7 @@ function KanbanTab({ secretary, onNavigateKind }) {
   );
 }
 
-export default function Plans({ secretary, onBack, onNavigateKind }) {
+export default function Plans({ secretary, onBack, onNavigateKind, onAskSecretary }) {
   const [tab, setTab] = useState("practices");
   return (
     <div>
@@ -603,7 +610,9 @@ export default function Plans({ secretary, onBack, onNavigateKind }) {
         <SectionTitle>Plans</SectionTitle>
         <TabBar tabs={TOP_TABS} active={tab} onChange={setTab} />
       </div>
-      {tab === "practices" ? <PracticesTab secretary={secretary} /> : <KanbanTab secretary={secretary} onNavigateKind={onNavigateKind} />}
+      {tab === "practices"
+        ? <PracticesTab secretary={secretary} onAskSecretary={onAskSecretary} />
+        : <KanbanTab secretary={secretary} onNavigateKind={onNavigateKind} onAskSecretary={onAskSecretary} />}
     </div>
   );
 }

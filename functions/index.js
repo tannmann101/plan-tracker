@@ -24,6 +24,11 @@ const DOMAIN_IDS = ['creative', 'vocation', 'education', 'head-of-household', 'p
 const KIND_TYPE_IDS = ['project', 'goal', 'practice'];
 const ITEM_TYPE_IDS = ['task', 'session', 'prep', 'errand', 'other'];
 
+// Human-readable labels for entityContext.family -- a conversation can now
+// be opened scoped to any of the four writable entity types (a Kind/Item
+// ticket, a Practice habit row, or a discipline card), not just Kind/Item.
+const ENTITY_FAMILY_LABELS = { kind: 'Kind', item: 'Item', practiceHabit: 'Practice habit', discipline: 'Discipline' };
+
 function requireHousehold(request) {
   const email = request.auth?.token?.email;
   if (!email || !HOUSEHOLD_EMAILS.includes(email)) {
@@ -365,9 +370,9 @@ Schema:
 
   A single step:
   {
-    "opType": one of ["create-kind", "create-item", "update-kind", "update-item", "update-discipline"],
-    "targetId": string or null (required, and must be an id from existingKinds/existingItems/entityContext/practiceHabits' todayItemId/disciplines, when opType starts with "update"),
-    "family": "kind" or "item" (omit/ignore for "update-discipline"),
+    "opType": one of ["create-kind", "create-item", "update-kind", "update-item", "update-discipline", "update-practiceHabit"],
+    "targetId": string or null (required, and must be an id from existingKinds/existingItems/entityContext/practiceHabits/disciplines, when opType starts with "update"),
+    "family": "kind" or "item" (omit/ignore for "update-discipline"/"update-practiceHabit"),
     "title": string, "kindType": string or null, "itemType": string or null,
     "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "secondaryDomains": [string], "tags": [string],
     "targetDay": string or null (ISO date, YYYY-MM-DD),
@@ -380,6 +385,9 @@ Schema:
     "focused": boolean or null (opType "update-discipline" only -- true to pull it into focus, false to stop focusing it),
     "resolved": boolean or null (opType "update-discipline" only -- true to mark it resolved/broken for good),
     "relapse": boolean or null (opType "update-discipline" only -- true to log a relapse today, resetting its streak clock),
+    "linkedKindId": string or null (opType "update-practiceHabit" only -- links an existing Practice habit to a Goal/Project's id, from existingKinds),
+    "progressUnit": string or null (opType "update-practiceHabit" only -- how progress toward "linkedKindId" is measured, e.g. "chapters"),
+    "progressTarget": number or null (opType "update-practiceHabit" only -- the target amount in "progressUnit"),
     "note": string (one sentence explaining the proposal -- when you scheduled around a conflict, say so here)
   }
 
@@ -400,13 +408,13 @@ Goal-linked practices: some practiceHabits build toward a Goal or Project instea
 
 Habits to Break: disciplines below lists every unresolved habit being eliminated, whether or not it's currently "in focus," each with "focused" (true/false), its live streak, and the next milestone it's working toward. Discuss progress and offer encouragement, and now you can act too -- propose a single-step "update-discipline" (targetId = its id from disciplines below) to pull one into focus ("focused": true), stop focusing it ("focused": false), log a relapse today ("relapse": true -- resets the streak clock to right now), or mark it resolved for good ("resolved": true). Only set the field(s) actually being asked for; never propose creating a brand-new discipline yourself -- if asked to add one, tell the household to add it from Plans' "Habits to Break" section.
 
-Compound proposals: some requests need more than one linked write at once -- promoting a single Item into its own Project or Goal with that Item becoming a nested Session under it, or turning a Practice habit (or a discipline you just helped focus) into a Goal with milestones and several scheduled Sessions, optionally linking the habit to that Goal in the same bundle. For these, set "proposedOperation" to the compound shape from the schema above instead of a single step. Give a step a short "ref" (like "s1") ONLY if a LATER step in the SAME bundle needs to point at the entity it creates -- reference it there as the literal string "$ref:s1" in whatever field takes that id (almost always "parentKindId" or "linkedKindId"); refs only resolve within their own bundle, never across separate proposals. A step targeting an EXISTING entity (opType starting with "update") must set "targetId" to a real id from existingKinds/existingItems/practiceHabits/disciplines below, and should echo back every field of that entity you are not intentionally changing (its current title/domain/tags/resources/targetDay/time/durationMinutes) -- omitting a field on an update risks clearing it, the same as with a single-step update. Use compound only when the request genuinely needs more than one write; a single create or edit should still be a single-step proposedOperation, not a one-step "compound." One opType only ever makes sense as a compound step, never standalone: "update-practiceHabit" (targetId = its id from practiceHabits, "linkedKindId" set to the Goal/Project's id -- often "$ref:sN" for one created earlier in the same bundle -- plus "progressUnit"/"progressTarget" if the household described how progress is measured, e.g. "chapters" / 12).
+Compound proposals: some requests need more than one linked write at once -- promoting a single Item into its own Project or Goal with that Item becoming a nested Session under it, or turning a Practice habit (or a discipline you just helped focus) into a Goal with milestones and several scheduled Sessions, optionally linking the habit to that Goal in the same bundle. For these, set "proposedOperation" to the compound shape from the schema above instead of a single step. Give a step a short "ref" (like "s1") ONLY if a LATER step in the SAME bundle needs to point at the entity it creates -- reference it there as the literal string "$ref:s1" in whatever field takes that id (almost always "parentKindId" or "linkedKindId"); refs only resolve within their own bundle, never across separate proposals. A step targeting an EXISTING entity (opType starting with "update") must set "targetId" to a real id from existingKinds/existingItems/practiceHabits/disciplines below, and should echo back every field of that entity you are not intentionally changing (its current title/domain/tags/resources/targetDay/time/durationMinutes) -- omitting a field on an update risks clearing it, the same as with a single-step update. Use compound only when the request genuinely needs more than one write; a single create or edit should still be a single-step proposedOperation, not a one-step "compound." "update-practiceHabit" (targetId = its id from practiceHabits, "linkedKindId" set to the Goal/Project's id, plus "progressUnit"/"progressTarget" if the household described how progress is measured, e.g. "chapters" / 12) works both ways -- a single step on its own when the Goal/Project already exists, or a compound step with "linkedKindId" set to "$ref:sN" when it's being created in the same bundle.
 
 Attention: attention below lists Projects/Goals/Practices that are overdue, stalled with nothing scheduled soon, or have nothing attached yet. Mention these proactively when relevant -- especially if asked something like "what should I focus on" or "what's falling behind" -- rather than only reacting to direct questions about a specific one.
 
 Resources: existingResources below is the household's list of tools/locations/apps things get tracked in or done with (e.g. a notebook, an app, a calendar) -- reference these by name when relevant (e.g. suggesting where to log something), but they aren't something you create or assign directly.
 
-${entityContext ? `This conversation was opened from a specific ${entityContext.family === 'kind' ? 'Kind' : 'Item'}: ${JSON.stringify(entityContext)}. Prefer proposing updates to it (opType "update-${entityContext.family}", targetId "${entityContext.id}") when the conversation is about changing it.` : ''}
+${entityContext ? `This conversation was opened from a specific ${ENTITY_FAMILY_LABELS[entityContext.family] || entityContext.family}: ${JSON.stringify(entityContext)}. Prefer proposing updates to it (opType "update-${entityContext.family}", targetId "${entityContext.id}") when the conversation is about changing it -- treat "this", "it", "that" as referring to it unless the household clearly means something else.` : ''}
 
 existingKinds (id/title/kindType/domain, for parentKindId/targetId matching): ${JSON.stringify(existingKinds)}
 
@@ -448,6 +456,11 @@ existingResources: ${JSON.stringify(existingResources)}`;
       if (draft.targetId) {
         const patch = disciplinePatch(draft);
         pendingOperationId = await createPendingOperation({ opType: 'update-discipline', targetId: draft.targetId, patch, sourceType: 'chat' });
+      }
+    } else if (draft.opType === 'update-practiceHabit') {
+      if (draft.targetId) {
+        const patch = practiceHabitPatch(draft);
+        pendingOperationId = await createPendingOperation({ opType: 'update-practiceHabit', targetId: draft.targetId, patch, sourceType: 'chat' });
       }
     } else {
       const family = draft.family === 'kind' ? 'kind' : 'item';

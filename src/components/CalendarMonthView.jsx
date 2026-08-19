@@ -29,7 +29,7 @@ function monthGridDays(monthStart) {
 // prev/next navigation, date numbers top-left, a dot on any day carrying
 // Items, tap a day to see (and add to) that day's Items. Same
 // EntityCard/AddForm/EditEntityModal pieces the Week view and Today use.
-export default function CalendarMonthView({ secretary, onNavigateKind }) {
+export default function CalendarMonthView({ secretary, onNavigateKind, onAskSecretary }) {
   const [monthStart, setMonthStart] = useState(() => {
     const d = new Date();
     d.setDate(1);
@@ -110,6 +110,7 @@ export default function CalendarMonthView({ secretary, onNavigateKind }) {
                   onToggleDone={toggleDone}
                   onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
                   onNavigateKind={onNavigateKind}
+                  onAskSecretary={onAskSecretary}
                 />
               ))}
             </div>

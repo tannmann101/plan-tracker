@@ -29,7 +29,7 @@ const WEEKDAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 // gone -- it was a smaller, cropped copy of the same view Workspace's
 // gallery now shows properly (full width, with real drilldown); this page
 // stays the week's own schedule.
-export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate }) {
+export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate, onAskSecretary }) {
   const { isDesktop } = useViewport();
   const [view, setView] = useState("week");
   const [layout, setLayout] = useState("blocked");
@@ -104,6 +104,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                       <EntityCard
                         key={item.id} family="item" entity={item} secretary={secretary}
                         onToggleDone={toggleDone} onEdit={openEdit} onNavigateKind={onNavigateKind}
+                        onAskSecretary={onAskSecretary}
                       />
                     ))}
                   </div>
@@ -113,7 +114,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
           )}
         </>
       ) : (
-        <CalendarMonthView secretary={secretary} onNavigateKind={onNavigateKind} />
+        <CalendarMonthView secretary={secretary} onNavigateKind={onNavigateKind} onAskSecretary={onAskSecretary} />
       )}
 
       {adding && (
@@ -126,7 +127,10 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
         />
       )}
       {disciplineModal && (
-        <DisciplineDetailModal discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)} />
+        <DisciplineDetailModal
+          discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)}
+          onAskSecretary={onAskSecretary}
+        />
       )}
     </div>
   );
