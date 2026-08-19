@@ -68,6 +68,13 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
     ...entity, done: next, completedAt: next ? Date.now() : null,
     ...(entity.isRecurringPracticeItem ? { progressAmount: next ? (entity.progressAmount || 1) : 0 } : {}),
   });
+  // Direct drag-and-drop reschedule -- see Today.jsx's own rescheduleItem
+  // for the "writes straight through, not via propose-then-confirm" note.
+  const rescheduleItem = (itemId, patch) => {
+    const item = weekItems.find((i) => i.id === itemId);
+    if (!item) return;
+    secretary.saveEntity("item", { ...item, timing: { ...item.timing, ...patch } });
+  };
   const openEdit = (fam, e) => setEditing({ family: fam, entity: e });
   const openAdd = (defaults) => { setAddDefaults(defaults); setAdding(true); };
   const onSlotClick = (iso, hour) => openAdd({ targetDay: iso, time: `${String(hour).padStart(2, "0")}:00` });
@@ -110,6 +117,7 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
                   onToggleDone={toggleDone} onEdit={openEdit} onSlotClick={onSlotClick}
                   disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
                   onAskSecretary={onAskSecretary}
+                  onReschedule={rescheduleItem}
                 />
               ))}
             </DayGridRow>

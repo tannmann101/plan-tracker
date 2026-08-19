@@ -53,6 +53,17 @@ export default function Today({ secretary, onBack, onNavigateKind, onAskSecretar
     ...(entity.isRecurringPracticeItem ? { progressAmount: next ? (entity.progressAmount || 1) : 0 } : {}),
   });
 
+  // Direct drag-and-drop reschedule (TimeGrid's own onReschedule) -- a
+  // human dragging a block writes straight through secretary.saveEntity,
+  // same as the Plans kanban's drag-to-restatus; it does not go through
+  // Secretary's propose-then-confirm queue, since that's for the AI's own
+  // proposals, not a person moving their own calendar by hand.
+  const rescheduleItem = (itemId, patch) => {
+    const item = items.find((i) => i.id === itemId);
+    if (!item) return;
+    secretary.saveEntity("item", { ...item, timing: { ...item.timing, ...patch } });
+  };
+
   const openAdd = (defaults) => { setAddDefaults(defaults); setAdding(true); };
   const onSlotClick = (iso, hour) => openAdd({ targetDay: iso, time: `${String(hour).padStart(2, "0")}:00` });
 
@@ -80,6 +91,7 @@ export default function Today({ secretary, onBack, onNavigateKind, onAskSecretar
               onSlotClick={onSlotClick}
               disciplines={activeDisciplines} onDisciplineClick={setDisciplineModal}
               onAskSecretary={onAskSecretary}
+              onReschedule={rescheduleItem}
             />
           ))}
         </DayGridRow>
