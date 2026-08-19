@@ -360,6 +360,14 @@ exports.secretaryChat = onCall({ secrets: [anthropicApiKey], timeoutSeconds: 60 
   const disciplines = Array.isArray(request.data?.disciplines) ? request.data.disciplines : [];
   const attention = Array.isArray(request.data?.attention) ? request.data.attention : [];
   const existingResources = Array.isArray(request.data?.existingResources) ? request.data.existingResources : [];
+  // Both new this pass (§ schedule intelligence) -- neither was previously
+  // sent, so the model had no ground truth for "today"/"tomorrow" beyond
+  // guessing from whichever existingItems happened to be dated, and no
+  // sense of the household's normal waking hours when asked to suggest a
+  // time with no day/time specified.
+  const today = typeof request.data?.today === 'string' ? request.data.today : null;
+  const activeHours = request.data?.activeHours && typeof request.data.activeHours.startHour === 'number'
+    && typeof request.data.activeHours.endHour === 'number' ? request.data.activeHours : null;
 
   const system = `You are Secretary, a formal, courteous, old-fashioned household secretary having a conversation with your employer. You can discuss scheduling, help sequence milestones, check off a Practice habit, and draft new Kinds/Items or edits to existing ones -- but you never write anything yourself. Respond with ONLY a single JSON object, no prose, no markdown fences.
 
@@ -400,7 +408,9 @@ Schema:
 
 Only set proposedOperation when the conversation actually calls for creating or changing something -- most turns should just be a reply with proposedOperation null. Never invent an update to something the household didn't ask to change.
 
-Scheduling: when the household asks you to book, schedule, or time-block something, check existingItems below for that day before proposing a "time" -- an Item's time slot runs from its "time" for "durationMinutes" (default 30 if absent); existingItems includes both timed and floating Items so you have the full picture of what's already placed, but only timed ones (time set, not null) can actually collide. If the requested time collides with an existing Item, do not silently double-book it: either pick the nearest genuinely free slot that still fits what was asked (same day, closest to the requested time) and say so plainly in "note" and "reply", or, if nothing reasonable is free that day, set proposedOperation to null, explain the conflict in "reply", and ask how the household wants to resolve it (move the existing Item, pick a different day, or double-book on purpose). Never invent a "resolution" the household didn't ask for -- point out the conflict and let them decide when it's ambiguous.
+Scheduling: when the household asks you to book, schedule, or time-block something, check existingItems below for that day before proposing a "time" -- an Item's time slot runs from its "time" for "durationMinutes" (default 30 if absent); existingItems includes both timed and floating Items so you have the full picture of what's already placed, but only timed ones (time set, not null) can actually collide. If the requested time collides with an existing Item, do not silently double-book it: either pick the nearest genuinely free slot that still fits what was asked (same day, closest to the requested time) and say so plainly in "note" and "reply", or, if nothing reasonable is free that day, set proposedOperation to null, explain the conflict in "reply", and ask how the household wants to resolve it (move the existing Item, pick a different day, or double-book on purpose). Never invent a "resolution" the household didn't ask for -- point out the conflict and let them decide when it's ambiguous. The one exception: if the household's own message already says to move, bump, or reschedule whatever's in the way (not just "book X", but "move my other thing and fit this in," or a follow-up "yes, move it"), that IS being asked -- propose a compound bundle with an "update-item" step rescheduling the conflicting existingItems entry (echo back its other fields, only targetDay/time change) alongside the step placing what was requested.
+
+Suggesting a time: if asked to schedule something with no specific day or time given ("find me an hour for X this week," "when should I do this"), pick a slot yourself rather than asking the household to specify one -- prefer today's activeHours window below (the household's usual active hours) on the nearest day with room, checking existingItems the same way as above, and say in "note" which day/time you picked and why (e.g. "first open hour Thursday morning"). If activeHours is absent, use a reasonable daytime default (9am-9pm) rather than proposing something like 3am.
 
 Practices: practiceHabits below lists every active Practice habit with today's completion state and this week's tally, so you can answer "did I do X today/this week" directly. If asked to check one off (or un-check it), propose an update-item targeting its "todayItemId" when set and the day in question is today (family "item", practiceHabitId set, done as asked) -- or, when there's no Item yet for that day (todayItemId null, or a day other than today), propose a create-item with the same practiceHabitId/targetDay/done, itemType "other", domain "practices", and leave time/durationMinutes null (a practice check-in is always floating). Never propose creating a brand-new Practice habit *definition* -- if asked to add one, tell the household to add it from Plans' Practices tab.
 
@@ -415,6 +425,10 @@ Attention: attention below lists Projects/Goals/Practices that are overdue, stal
 Resources: existingResources below is the household's list of tools/locations/apps things get tracked in or done with (e.g. a notebook, an app, a calendar) -- reference these by name when relevant (e.g. suggesting where to log something), but they aren't something you create or assign directly.
 
 ${entityContext ? `This conversation was opened from a specific ${ENTITY_FAMILY_LABELS[entityContext.family] || entityContext.family}: ${JSON.stringify(entityContext)}. Prefer proposing updates to it (opType "update-${entityContext.family}", targetId "${entityContext.id}") when the conversation is about changing it -- treat "this", "it", "that" as referring to it unless the household clearly means something else.` : ''}
+
+${today ? `Today's date is ${today} (ISO, YYYY-MM-DD) -- resolve every relative day ("today," "tomorrow," "next Tuesday," "this week") against this, never against whatever dates happen to appear in existingItems.` : ''}
+
+${activeHours ? `The household's usual active hours run ${activeHours.startHour}:00-${activeHours.endHour}:00 -- prefer this window when picking a time yourself (see "Suggesting a time" below); it's a display preference, not a hard rule, so a time the household names explicitly outside it is still fine.` : ''}
 
 existingKinds (id/title/kindType/domain, for parentKindId/targetId matching): ${JSON.stringify(existingKinds)}
 

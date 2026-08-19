@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE, CARD, HEAD_BG } from "../theme";
-import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES } from "../constants";
+import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES, todayISO } from "../constants";
 import { Field, TagsInput, MultiCheckList, KindParentPicker, DurationInput } from "../components/formFields";
 import { allTagsInUse, kindSubtreeIds, upcomingItems, practiceHabitsSummary, disciplinesSummary, kindsNeedingAttention } from "../lib/graph";
 import { triageCapture, secretaryChat } from "../lib/claude";
+import { useTimeGridPrefs } from "../components/TimeGrid";
 import WeeklyMeetingImport from "./WeeklyMeetingImport";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -374,6 +375,7 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState(null);
+  const [gridPrefs] = useTimeGridPrefs();
 
   const messages = (secretary.chatMessages || []).slice().sort((a, b) => a.at - b.at);
 
@@ -395,6 +397,7 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
       const result = await secretaryChat({
         messages: history, entityContext, existingKinds, existingItems,
         practiceHabits, disciplines, attention, existingResources,
+        today: todayISO(), activeHours: { startHour: gridPrefs.startHour, endHour: gridPrefs.endHour },
       });
       await secretary.saveChatMessage({ role: "assistant", text: result.reply, pendingOperationId: result.pendingOperationId || null });
       if (result.pendingOperationId) {
