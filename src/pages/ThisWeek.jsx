@@ -64,10 +64,17 @@ export default function ThisWeek({ secretary, onBack, onNavigateKind, onNavigate
   const emptyDays = scheduleNotes.filter((s) => s.load.isEmpty);
   const overloadedDays = scheduleNotes.filter((s) => s.load.isOverloaded);
 
-  const toggleDone = (entity, next) => secretary.saveEntity("item", {
-    ...entity, done: next, completedAt: next ? Date.now() : null,
-    ...(entity.isRecurringPracticeItem ? { progressAmount: next ? (entity.progressAmount || 1) : 0 } : {}),
-  });
+  // See Today.jsx's own toggleDone for the checkbox-vs-log-mode default and
+  // parentKindId self-heal -- identical logic, kept in sync by hand since
+  // Today/Week don't share a page-level module to import a helper from.
+  const toggleDone = (entity, next) => {
+    const habit = entity.isRecurringPracticeItem ? (secretary.practiceHabits || []).find((h) => h.id === entity.practiceHabitId) : null;
+    const isLogMode = habit?.linkedKindId && (habit.progressMode || "log") === "log";
+    secretary.saveEntity("item", {
+      ...entity, done: next, completedAt: next ? Date.now() : null,
+      ...(habit ? { progressAmount: next ? (entity.progressAmount || (isLogMode ? 0 : 1)) : 0, parentKindId: habit.linkedKindId || null } : {}),
+    });
+  };
   // Direct drag-and-drop reschedule -- see Today.jsx's own rescheduleItem
   // for the "writes straight through, not via propose-then-confirm" note.
   const rescheduleItem = (itemId, patch) => {

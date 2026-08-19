@@ -73,7 +73,7 @@ export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, 
           {entity.retro && <Pill color={MUTE}>retro</Pill>}
           {entity.isRecurringPracticeItem && (
             <Pill color={DEEPTEAL} tint={softTint(DEEPTEAL)} title="Tracked as a Practice -- checking this box is the same box as Plans' weekly tracker">
-              ↻ practice
+              ↻ practice{entity.progressAmount > 0 ? ` · ${entity.progressAmount}` : ""}
             </Pill>
           )}
           {attention && <Pill color={ATTENTION_COLORS[attention.level]}>{attention.label}</Pill>}

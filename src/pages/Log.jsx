@@ -32,6 +32,7 @@ function rowDescription(family, entity, domains) {
   const type = family === "kind" ? kindTypeLabel(entity.kindType) : itemTypeLabel(entity.itemType);
   const bits = [domainLabel(entity.domain, domains), type];
   if ((entity.resources || []).length) bits.push(entity.resources.join(", "));
+  if (entity.isRecurringPracticeItem && entity.progressAmount > 0) bits.push(`logged ${entity.progressAmount}`);
   return bits.join(" · ");
 }
 
