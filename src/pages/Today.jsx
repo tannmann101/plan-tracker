@@ -31,7 +31,7 @@ function nextDays(today, count) {
 // in a right rail here, but that was a smaller, less capable copy of views
 // that now live properly on Workspace (full width, with real drilldown) --
 // this page is the day/week's own schedule, not a second analytics rail.
-export default function Today({ secretary, onBack, onNavigateKind }) {
+export default function Today({ secretary, onBack, onNavigateKind, onAskSecretary }) {
   const { isDesktop } = useViewport();
   const today = todayISO();
   const [view, setView] = useState("blocked");
@@ -97,6 +97,7 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
                     key={item.id} family="item" entity={item} secretary={secretary}
                     onToggleDone={toggleDone} onEdit={(fam, e) => setEditing({ family: fam, entity: e })}
                     onNavigateKind={onNavigateKind}
+                    onAskSecretary={onAskSecretary}
                   />
                 ))}
               </div>
@@ -120,7 +121,10 @@ export default function Today({ secretary, onBack, onNavigateKind }) {
         />
       )}
       {disciplineModal && (
-        <DisciplineDetailModal discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)} />
+        <DisciplineDetailModal
+          discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)}
+          onAskSecretary={onAskSecretary}
+        />
       )}
     </div>
   );

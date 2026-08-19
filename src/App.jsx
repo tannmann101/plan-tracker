@@ -68,6 +68,7 @@ function Shell({ user }) {
   const [captureBusy, setCaptureBusy] = useState(false);
   const [focusKindId, setFocusKindId] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [askSecretaryContext, setAskSecretaryContext] = useState(null); // { family, entity }
 
   const goToday = () => navigate("/today");
 
@@ -78,6 +79,20 @@ function Shell({ user }) {
     setFocusKindId(kindId);
     navigate("/workspace");
   }, [navigate]);
+
+  // The "Ask Secretary about this" affordance every entity card, practice
+  // row, and discipline card now carries (EntityCard, Plans, Discipline
+  // DetailModal, ...) -- one handler, threaded through pageProps so every
+  // page gets it for free. Desktop already has a persistent chat dock, so
+  // scoping it and opening it is enough; mobile has no such dock, so it
+  // hands the scope off to the dedicated Secretary page instead (picked up
+  // once via focusEntityContext, the same one-shot pattern Workspace's own
+  // focusKindId already uses).
+  const askSecretary = useCallback((family, entity) => {
+    setAskSecretaryContext({ family, entity });
+    if (isDesktop) setChatOpen(true);
+    else navigate("/secretary");
+  }, [isDesktop, navigate]);
 
   // triageCapture drafts a pendingOperation server-side (see
   // functions/index.js) -- this just kicks that off and refreshes so the
@@ -98,7 +113,7 @@ function Shell({ user }) {
   const stillLoading = secretary.status === "loading" && !secretary.kinds;
   const unsortedCount = (secretary.pendingOperations || []).filter((o) => o.status === "pending").length;
 
-  const pageProps = { secretary, onBack: goToday, onNavigateKind: navigateKind, onNavigate: navigate };
+  const pageProps = { secretary, onBack: goToday, onNavigateKind: navigateKind, onNavigate: navigate, onAskSecretary: askSecretary };
 
   const pageContent = stillLoading ? (
     <div style={{ fontFamily: MONO, fontSize: 12.5, color: MUTE, padding: "30px 4px" }}>Gathering your affairs…</div>
@@ -117,7 +132,11 @@ function Shell({ user }) {
   ) : path === "/log" ? (
     <Log {...pageProps} />
   ) : path === "/secretary" ? (
-    <Secretary {...pageProps} />
+    <Secretary
+      {...pageProps}
+      focusEntityContext={!isDesktop ? askSecretaryContext : null}
+      onFocusHandled={() => setAskSecretaryContext(null)}
+    />
   ) : path === "/settings" ? (
     <Settings {...pageProps} />
   ) : (
@@ -245,11 +264,19 @@ function Shell({ user }) {
             borderLeft: `1px solid ${LINE}`, background: CARD, display: "flex", flexDirection: "column",
           }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 16px 12px", borderBottom: `1px solid ${LINE}` }}>
-              <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: INK }}>Quick chat</span>
-              <IconButton title="Close" onClick={() => setChatOpen(false)}>×</IconButton>
+              <span style={{ fontFamily: SERIF, fontSize: 15, fontWeight: 600, color: INK }}>
+                Quick chat{askSecretaryContext ? ` — ${askSecretaryContext.entity.title}` : ""}
+              </span>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                {askSecretaryContext && <Btn small color={MUTE} onClick={() => setAskSecretaryContext(null)}>Unfocus</Btn>}
+                <IconButton title="Close" onClick={() => { setChatOpen(false); setAskSecretaryContext(null); }}>×</IconButton>
+              </div>
             </div>
             <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-              <SecretaryChatPanel secretary={secretary} />
+              <SecretaryChatPanel
+                secretary={secretary}
+                entityContext={askSecretaryContext ? { family: askSecretaryContext.family, id: askSecretaryContext.entity.id, title: askSecretaryContext.entity.title } : null}
+              />
             </div>
           </aside>
         )}

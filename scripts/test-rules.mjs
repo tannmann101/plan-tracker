@@ -482,6 +482,15 @@ try {
   check("update-discipline pending operation is allowed", false);
   console.error(e.message);
 }
+try {
+  await assertSucceeds(setDoc(doc(tannerDb, "pendingOperations/op-practicehabit"), validPendingOperation({
+    opType: "update-practiceHabit", targetId: "habit1", sourceType: "chat", patch: { linkedKindId: "kind1", progressUnit: "chapters", progressTarget: 12 },
+  })));
+  check("standalone update-practiceHabit pending operation is allowed", true);
+} catch (e) {
+  check("standalone update-practiceHabit pending operation is allowed", false);
+  console.error(e.message);
+}
 
 // -- Captures: narrowed to raw intake only --
 

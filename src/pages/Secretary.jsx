@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Btn, SectionTitle, Note, Card, Pill, Input, Select, Textarea } from "../ui";
 import { SANS, MONO, INK, MUTE, INKBLUE, BRICK, DEEPTEAL, LINE, CARD, HEAD_BG } from "../theme";
 import { KIND_TYPES, ITEM_TYPES, UNSORTED_FLAG_DAYS, DEFAULT_DURATION_MINUTES } from "../constants";
@@ -307,6 +307,65 @@ function ReviewDisciplineOperationCard({ op, secretary, onResolved }) {
   );
 }
 
+// The practice-habit analog of ReviewDisciplineOperationCard -- the one
+// thing Secretary chat can propose changing on an existing habit without a
+// full field-editing form: linking it to a Goal/Project (and the
+// progressUnit/progressTarget that comes with a link).
+function ReviewPracticeHabitOperationCard({ op, secretary, onResolved }) {
+  const target = (secretary.practiceHabits || []).find((h) => h.id === op.targetId);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(null);
+
+  const changes = [];
+  if (op.patch.linkedKindId) {
+    const kind = (secretary.kinds || []).find((k) => k.id === op.patch.linkedKindId);
+    changes.push(`link to "${kind?.title || op.patch.linkedKindId}"`);
+  }
+  if (op.patch.progressUnit) changes.push(`track in ${op.patch.progressUnit}`);
+  if (op.patch.progressTarget != null) changes.push(`target ${op.patch.progressTarget}`);
+
+  const approve = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      if (!target) throw new Error("That practice no longer exists.");
+      await secretary.savePracticeHabit({ ...target, ...op.patch });
+      await secretary.deletePendingOperation(op.id);
+      onResolved?.();
+    } catch (err) {
+      setError(err.message || "Could not approve that.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const discard = async () => {
+    setSaving(true);
+    try {
+      await secretary.deletePendingOperation(op.id);
+      onResolved?.();
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Card style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+        <Pill color={DEEPTEAL}>practice update</Pill>
+        <Pill color={MUTE}>{op.sourceType}</Pill>
+      </div>
+      <div style={{ fontFamily: SANS, fontSize: 13, color: INK, marginBottom: 6 }}>{target?.title || "(this practice no longer exists)"}</div>
+      <div style={{ fontFamily: MONO, fontSize: 11.5, color: MUTE, marginBottom: 10 }}>{changes.join(", ") || "no changes proposed"}</div>
+      {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn primary color={INKBLUE} disabled={saving || !target} onClick={approve}>{saving ? "Saving…" : "Approve"}</Btn>
+        <Btn color={MUTE} disabled={saving} onClick={discard}>Discard</Btn>
+      </div>
+    </Card>
+  );
+}
+
 // Persistent chat -- exported so Workspace (§10) can embed the exact same
 // panel scoped to whatever ticket was clicked, rather than a second chat
 // implementation. entityContext, when given, is sent to secretaryChat so
@@ -376,11 +435,23 @@ export function SecretaryChatPanel({ secretary, entityContext, onOperationCreate
 // §5 -- nothing auto-places. Everything a capture, the chat, or a
 // weekly-import batch drafts lands in pendingOperations; this page is
 // where a human actually confirms it into a real Kind/Item.
-export default function Secretary({ secretary, onBack }) {
+//
+// focusEntityContext/onFocusHandled mirror Workspace's focusKindId pattern
+// (§10) -- mobile's "Ask Secretary" affordance has no persistent chat dock
+// to open like desktop does, so it navigates here instead and hands off a
+// scoped entity once, picked up into chatFocus below and then cleared.
+export default function Secretary({ secretary, onBack, focusEntityContext, onFocusHandled }) {
   const [captureText, setCaptureText] = useState("");
   const [capturing, setCapturing] = useState(false);
   const [captureError, setCaptureError] = useState(null);
   const [importing, setImporting] = useState(false);
+  const [chatFocus, setChatFocus] = useState(null); // { family, entity } -- scopes the Chat panel below
+
+  useEffect(() => {
+    if (!focusEntityContext) return;
+    setChatFocus(focusEntityContext);
+    onFocusHandled?.();
+  }, [focusEntityContext, onFocusHandled]);
 
   const pending = (secretary.pendingOperations || [])
     .filter((o) => o.status === "pending")
@@ -427,14 +498,24 @@ export default function Secretary({ secretary, onBack }) {
             <ReviewCompoundOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
           ) : op.opType === "update-discipline" ? (
             <ReviewDisciplineOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
+          ) : op.opType === "update-practiceHabit" ? (
+            <ReviewPracticeHabitOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
           ) : (
             <ReviewOperationCard key={op.id} op={op} secretary={secretary} onResolved={secretary.refresh} />
           )
         ))
       )}
 
-      <SectionTitle note="scheduling, sequencing, edits -- propose-then-confirm">Chat</SectionTitle>
-      <SecretaryChatPanel secretary={secretary} />
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
+        <SectionTitle note="scheduling, sequencing, edits -- propose-then-confirm">
+          Chat{chatFocus ? ` — ${chatFocus.entity.title}` : ""}
+        </SectionTitle>
+        {chatFocus && <Btn small color={MUTE} onClick={() => setChatFocus(null)}>Unfocus</Btn>}
+      </div>
+      <SecretaryChatPanel
+        secretary={secretary}
+        entityContext={chatFocus ? { family: chatFocus.family, id: chatFocus.entity.id, title: chatFocus.entity.title } : null}
+      />
 
       {importing && (
         <WeeklyMeetingImport secretary={secretary} onClose={() => setImporting(false)} onImported={secretary.refresh} />

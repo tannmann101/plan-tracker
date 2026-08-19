@@ -69,11 +69,11 @@ function PanelHeader({ children, note, action }) {
 // column-per-status. Everything else (title, domain, tags, parent
 // reassignment, dates, delete) is still one click into the full edit modal
 // via the card body itself.
-function WorkspaceTicket({ family, entity, secretary, onEdit, onNavigateKind, onToggleDone }) {
+function WorkspaceTicket({ family, entity, secretary, onEdit, onNavigateKind, onToggleDone, onAskSecretary }) {
   const changeStatus = (status) => secretary.saveEntity("kind", { ...entity, status });
   return (
     <div>
-      <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} />
+      <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} onAskSecretary={onAskSecretary} />
       {family === "kind" && (
         <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, padding: "0 2px" }}>
           <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[entity.status] || MUTE, flex: "none" }} />
@@ -160,6 +160,18 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
   const [expandedWeek, setExpandedWeek] = useState(null);
   const [expandedStatus, setExpandedStatus] = useState(null);
   const galleryRef = useRef(null);
+  const chatRef = useRef(null);
+
+  // Workspace already has its own embedded chat panel with its own scoping
+  // (`focused`, above) -- the "Ask Secretary" icon on a ticket here should
+  // scope and reveal *that* panel rather than the App-level dock/page
+  // hand-off every other page uses, so this shadows the `onAskSecretary`
+  // prop Workspace also receives via App.jsx's pageProps spread (left
+  // unused on purpose).
+  const askSecretaryLocal = (family, entity) => {
+    setFocused({ family, entity });
+    chatRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   // Arriving here via a "why is this here" chain's Kind link (InfoModal's
   // onNavigateKind) focuses the chat on that Kind without forcing the edit
@@ -438,12 +450,12 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
       <SectionTitle note={`${kinds.length + items.length} tickets`}>Board</SectionTitle>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 14 }}>
         {kinds.map((k) => (
-          <WorkspaceTicket key={`kind-${k.id}`} family="kind" entity={k} secretary={secretary} onEdit={openTicket} onNavigateKind={onNavigateKind} />
+          <WorkspaceTicket key={`kind-${k.id}`} family="kind" entity={k} secretary={secretary} onEdit={openTicket} onNavigateKind={onNavigateKind} onAskSecretary={askSecretaryLocal} />
         ))}
         {items.map((i) => {
           const toggleDone = (entity, next) => secretary.saveEntity("item", { ...entity, done: next, completedAt: next ? Date.now() : null });
           return (
-            <WorkspaceTicket key={`item-${i.id}`} family="item" entity={i} secretary={secretary} onToggleDone={toggleDone} onEdit={openTicket} onNavigateKind={onNavigateKind} />
+            <WorkspaceTicket key={`item-${i.id}`} family="item" entity={i} secretary={secretary} onToggleDone={toggleDone} onEdit={openTicket} onNavigateKind={onNavigateKind} onAskSecretary={askSecretaryLocal} />
           );
         })}
       </div>
@@ -487,15 +499,17 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
           </div>
         </Card>
 
-        <Card style={{ flex: "2 1 380px" }}>
-          <PanelHeader action={focused && <Btn small color={MUTE} onClick={() => setFocused(null)}>Unfocus</Btn>}>
-            Chat{focused ? ` — ${focused.entity.title}` : ""}
-          </PanelHeader>
-          <SecretaryChatPanel
-            secretary={secretary}
-            entityContext={focused ? { family: focused.family, id: focused.entity.id, title: focused.entity.title } : null}
-          />
-        </Card>
+        <div ref={chatRef} style={{ flex: "2 1 380px" }}>
+          <Card>
+            <PanelHeader action={focused && <Btn small color={MUTE} onClick={() => setFocused(null)}>Unfocus</Btn>}>
+              Chat{focused ? ` — ${focused.entity.title}` : ""}
+            </PanelHeader>
+            <SecretaryChatPanel
+              secretary={secretary}
+              entityContext={focused ? { family: focused.family, id: focused.entity.id, title: focused.entity.title } : null}
+            />
+          </Card>
+        </div>
       </div>
 
       {adding && <AddForm secretary={secretary} onClose={() => setAdding(false)} />}
@@ -506,7 +520,10 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
         />
       )}
       {disciplineModal && (
-        <DisciplineDetailModal discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)} />
+        <DisciplineDetailModal
+          discipline={disciplineModal} secretary={secretary} onClose={() => setDisciplineModal(null)}
+          onAskSecretary={(family, entity) => { setDisciplineModal(null); askSecretaryLocal(family, entity); }}
+        />
       )}
     </div>
   );

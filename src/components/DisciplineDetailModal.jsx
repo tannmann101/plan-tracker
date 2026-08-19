@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Modal, Btn, ProgressBar, Pill } from "../ui";
-import { SERIF, SANS, MONO, INK, MUTE, BRICK, softTint } from "../theme";
+import { SERIF, SANS, MONO, INK, MUTE, BRICK, INKBLUE, softTint } from "../theme";
 import { disciplineStreak } from "../lib/graph";
 
 // Quick actions for a discipline pulled into focus (§ Habits to Break) --
@@ -8,7 +8,7 @@ import { disciplineStreak } from "../lib/graph";
 // milestones) stays exclusive to Plans, same split as practice habits:
 // this modal only offers the day-to-day actions (log a relapse, step back
 // from focus, or call it broken for good).
-export default function DisciplineDetailModal({ discipline, secretary, onClose }) {
+export default function DisciplineDetailModal({ discipline, secretary, onClose, onAskSecretary }) {
   const [saving, setSaving] = useState(false);
   const { days, nextMilestone, percent } = disciplineStreak(discipline);
   const milestones = [...(discipline.milestones || [])].sort((a, b) => a.days - b.days);
@@ -58,6 +58,7 @@ export default function DisciplineDetailModal({ discipline, secretary, onClose }
         <Btn primary color={BRICK} disabled={saving} onClick={() => run({ startedAt: Date.now() })}>Slipped today</Btn>
         <Btn color={MUTE} disabled={saving} onClick={() => run({ focused: false })}>Stop focusing</Btn>
         <Btn color={MUTE} disabled={saving} onClick={() => run({ focused: false, resolved: true })}>Mark resolved</Btn>
+        {onAskSecretary && <Btn color={INKBLUE} onClick={() => onAskSecretary("discipline", discipline)}>Ask Secretary</Btn>}
       </div>
       <div style={{ marginTop: 12 }}>
         <Btn color={MUTE} onClick={onClose}>Close</Btn>
