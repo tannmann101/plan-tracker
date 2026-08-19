@@ -4,7 +4,7 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // Base must match your GitHub Pages repo name, e.g. https://<user>.github.io/plan-tracker/
 export default defineConfig({
-  base: '/plan-tracker/',
+  base: '/',
   plugins: [
     react(),
     VitePWA({
