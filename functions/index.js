@@ -95,6 +95,7 @@ function kindPatch(draft) {
     tags: Array.isArray(draft.tags) ? draft.tags : [],
     parentKindId: draft.parentKindId || null,
     status: 'not-started',
+    timing: (draft.dueDate || draft.startDate) ? { startDate: draft.startDate || null, dueDate: draft.dueDate || null, milestones: [] } : null,
   };
 }
 
@@ -383,9 +384,11 @@ Schema:
     "family": "kind" or "item" (omit/ignore for "update-discipline"/"update-practiceHabit"),
     "title": string, "kindType": string or null, "itemType": string or null,
     "domain": one of ${JSON.stringify(DOMAIN_IDS)}, "secondaryDomains": [string], "tags": [string],
-    "targetDay": string or null (ISO date, YYYY-MM-DD),
+    "targetDay": string or null (ISO date, YYYY-MM-DD -- opType create-item/update-item only, the day it's placed on),
     "time": string or null (ISO 24h "HH:MM" -- only set this for a genuinely time-blocked Item; leave null for a floating one),
     "durationMinutes": number or null (only meaningful alongside "time"; default 30 if the conversation doesn't say),
+    "dueDate": string or null (ISO date, YYYY-MM-DD -- opType create-kind/update-kind only, a Goal/Project's target completion date),
+    "startDate": string or null (ISO date, YYYY-MM-DD -- opType create-kind/update-kind only, when work on it is meant to begin),
     "parentKindId": string or null,
     "practiceHabitId": string or null (only set when checking a Practice habit off/on for a day, or logging an amount against a goal-linked one -- an id from practiceHabits below; pair with "targetDay" and "done", and "progressAmount" for a goal-linked habit),
     "done": boolean or null (only meaningful alongside "practiceHabitId" -- true to mark that day's practice complete, false to un-mark it; for a goal-linked habit, true whenever progressAmount is greater than 0),
@@ -402,7 +405,7 @@ Schema:
   A compound bundle, when the request genuinely needs more than one linked write at once (see "Compound proposals" below):
   {
     "compound": true,
-    "steps": [ <same shape as a single step above, each optionally carrying a "ref" (e.g. "s1") that a LATER step in this same array can point back to>, ... ],
+    "steps": [ <each step drawn from the same field set as a single step above, but include ONLY "opType"/"targetId"/"family"/"ref" plus whichever fields that step's opType actually uses -- omit the rest rather than writing them out as null, exactly as you would for a single-step proposal>, ... ],
     "note": string
   }
 
@@ -443,14 +446,29 @@ attention (id/title/kindType/domain/level/label/hint -- Kinds needing a next ste
 existingResources: ${JSON.stringify(existingResources)}`;
 
   const messages = history.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.text }));
-  const responseText = await callClaude({ system, messages, maxTokens: 1536 });
+  // 1536 was too tight for a compound bundle plus an in-character reply --
+  // a real conversation hit it and got truncated mid-JSON ("Claude's
+  // response wasn't valid JSON"). 3072 gives real headroom; the tightened
+  // compound-step field guidance above also cuts typical output size.
+  const responseText = await callClaude({ system, messages, maxTokens: 3072 });
 
   let parsed;
   try {
     parsed = parseJson(responseText);
   } catch (err) {
     console.error('Failed to parse secretaryChat response as JSON', responseText, err);
-    throw new HttpsError('internal', "Claude's response wasn't valid JSON.");
+    // A malformed/truncated response shouldn't be a dead end -- if the
+    // "reply" string is still recoverable (the common case: valid JSON up
+    // through "reply", cut off partway through "proposedOperation"), fall
+    // back to it with no proposed operation rather than surfacing a raw
+    // error and losing the conversational turn entirely.
+    const replyMatch = responseText.match(/"reply"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (replyMatch) {
+      try {
+        parsed = { reply: JSON.parse(`"${replyMatch[1]}"`), proposedOperation: null };
+      } catch { /* fall through to the hard error below */ }
+    }
+    if (!parsed) throw new HttpsError('internal', "Claude's response wasn't valid JSON.");
   }
 
   let pendingOperationId = null;
