@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Btn, Input } from "../ui";
-import { MONO, SANS, INK, MUTE, INKBLUE, INKBLUE_SOFT, LINE } from "../theme";
+import { Btn, Input, Select, Checkbox } from "../ui";
+import { MONO, SANS, INK, MUTE, INKBLUE, INKBLUE_SOFT, LINE, RADIUS_SM, SIZE_META, LETTER_META } from "../theme";
 import { DURATION_OPTIONS } from "../constants";
 
 // Shared building blocks for AddForm.jsx and EditEntityModal.jsx -- kept in
@@ -10,13 +10,11 @@ import { DURATION_OPTIONS } from "../constants";
 export function Field({ label, children }) {
   return (
     <div style={{ marginBottom: 12 }}>
-      <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 5 }}>{label}</div>
+      <div style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META, marginBottom: 5 }}>{label}</div>
       {children}
     </div>
   );
 }
-
-export const fieldSelectStyle = { fontFamily: MONO, fontSize: 12, padding: "6px 9px", border: `1px solid ${LINE}`, borderRadius: 8, width: "100%" };
 
 // Free-text entry with autocomplete against every tag already in use
 // (§2.4) -- no fixed vocabulary, new tags are created just by typing one.
@@ -49,7 +47,7 @@ export function TagsInput({ value, onChange, suggestions }) {
         onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
         onBlur={add}
         placeholder="Add a tag…"
-        style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px", fontSize: 12.5, fontFamily: SANS, color: INK, width: "100%" }}
+        style={{ border: `1px solid ${LINE}`, borderRadius: RADIUS_SM, padding: "6px 9px", fontSize: 12.5, fontFamily: SANS, color: INK, width: "100%" }}
       />
       <datalist id="shared-tag-suggestions">
         {suggestions.filter((s) => !value.includes(s)).map((s) => <option key={s} value={s} />)}
@@ -62,16 +60,17 @@ export function TagsInput({ value, onChange, suggestions }) {
 // resources, more touch-friendly than a native multi-select.
 export function MultiCheckList({ options, value, onChange }) {
   return (
-    <div style={{ maxHeight: 140, overflowY: "auto", border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px" }}>
+    <div style={{ maxHeight: 140, overflowY: "auto", border: `1px solid ${LINE}`, borderRadius: RADIUS_SM, padding: "6px 9px" }}>
       {options.map((o) => {
         const id = typeof o === "string" ? o : o.id;
         const label = typeof o === "string" ? o : o.label;
         const checked = value.includes(id);
+        const toggle = () => onChange(checked ? value.filter((v) => v !== id) : [...value, id]);
         return (
-          <label key={id} style={{ display: "flex", alignItems: "center", gap: 7, fontFamily: MONO, fontSize: 11.5, color: INK, padding: "3px 0", cursor: "pointer" }}>
-            <input type="checkbox" checked={checked} onChange={() => onChange(checked ? value.filter((v) => v !== id) : [...value, id])} />
+          <div key={id} onClick={toggle} style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: MONO, fontSize: 11.5, color: INK, padding: "4px 0", cursor: "pointer" }}>
+            <Checkbox checked={checked} onChange={toggle} />
             {label}
-          </label>
+          </div>
         );
       })}
     </div>
@@ -91,8 +90,8 @@ export function MilestonesEditor({ value, onChange }) {
   return (
     <div>
       {value.map((m) => (
-        <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5 }}>
-          <input type="checkbox" checked={m.done} onChange={() => onChange(value.map((x) => (x.id === m.id ? { ...x, done: !x.done } : x)))} />
+        <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <Checkbox checked={m.done} onChange={() => onChange(value.map((x) => (x.id === m.id ? { ...x, done: !x.done } : x)))} />
           <span style={{ flex: 1, fontFamily: SANS, fontSize: 12.5, color: INK, textDecoration: m.done ? "line-through" : "none" }}>{m.title}</span>
           <button type="button" onClick={() => onChange(value.filter((x) => x.id !== m.id))} style={{ border: "none", background: "none", color: MUTE, cursor: "pointer", fontSize: 13 }}>×</button>
         </div>
@@ -149,26 +148,25 @@ export function DurationInput({ value, onChange }) {
   const [customMode, setCustomMode] = useState(!isPreset);
   const selectValue = customMode ? "custom" : String(value);
 
+  const selectOptions = [...DURATION_OPTIONS, { id: "custom", label: "Custom…" }];
+
   return (
     <div>
-      <select
+      <Select
         value={selectValue}
-        onChange={(e) => {
-          if (e.target.value === "custom") { setCustomMode(true); return; }
+        onChange={(v) => {
+          if (v === "custom") { setCustomMode(true); return; }
           setCustomMode(false);
-          onChange(e.target.value);
+          onChange(v);
         }}
-        style={fieldSelectStyle}
-      >
-        {DURATION_OPTIONS.map((o) => <option key={o.id} value={o.id}>{o.label}</option>)}
-        <option value="custom">Custom…</option>
-      </select>
+        options={selectOptions}
+      />
       {customMode && (
         <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
           <input
             className="ui-field" type="number" min={1} step={1} value={value}
             onChange={(e) => onChange(e.target.value)}
-            style={{ border: `1px solid ${LINE}`, borderRadius: 8, padding: "6px 9px", fontSize: 12.5, fontFamily: SANS, color: INK, width: 90 }}
+            style={{ border: `1px solid ${LINE}`, borderRadius: RADIUS_SM, padding: "6px 9px", fontSize: 12.5, fontFamily: SANS, color: INK, width: 90 }}
           />
           <span style={{ fontFamily: MONO, fontSize: 11, color: MUTE }}>minutes</span>
         </div>
@@ -186,13 +184,14 @@ export function KindParentPicker({ kinds, value, onChange, excludeIds }) {
   const options = (kinds || [])
     .filter((k) => !excluded || !excluded.has(k.id))
     .filter((k) => k.title.toLowerCase().includes(filter.trim().toLowerCase()));
+  const selectOptions = [{ id: "", label: "-- not linked --" }, ...options.map((k) => ({ id: k.id, label: `${k.title} (${k.kindType})` }))];
+
   return (
     <div>
       <Input value={filter} onChange={setFilter} placeholder="Search…" />
-      <select value={value || ""} onChange={(e) => onChange(e.target.value || null)} style={{ ...fieldSelectStyle, marginTop: 6 }}>
-        <option value="">-- not linked --</option>
-        {options.map((k) => <option key={k.id} value={k.id}>{k.title} ({k.kindType})</option>)}
-      </select>
+      <div style={{ marginTop: 6 }}>
+        <Select value={value || ""} onChange={(v) => onChange(v || null)} options={selectOptions} />
+      </div>
     </div>
   );
 }

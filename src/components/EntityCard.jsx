@@ -1,13 +1,13 @@
 import { Card, Checkbox, Pill, IconButton } from "../ui";
-import { SANS, MONO, INK, MUTE, INKBLUE, DEEPTEAL, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS, softTint } from "../theme";
+import { SANS, MONO, INK, MUTE, INKBLUE, DEEPTEAL, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS, SIZE_TITLE, GAP_ROW, softTint } from "../theme";
 import { InfoIcon, KindChainLine } from "./InfoModal";
-import { domainLabel, kindStatusLabel, itemTypeLabel, kindTypeLabel } from "../constants";
+import { domainLabel, kindStatusLabel, itemTypeLabel, kindTypeLabel, formatShortDate } from "../constants";
 import { kindAttention } from "../lib/graph";
 
 function timingLabel(timing) {
   if (!timing) return null;
-  if (timing.targetDay) return timing.time ? `${timing.targetDay} ${timing.time}` : timing.targetDay;
-  if (timing.dueDate) return `by ${timing.dueDate}`;
+  if (timing.targetDay) return timing.time ? `${formatShortDate(timing.targetDay)} ${timing.time}` : formatShortDate(timing.targetDay);
+  if (timing.dueDate) return `by ${formatShortDate(timing.dueDate)}`;
   return null;
 }
 
@@ -38,13 +38,13 @@ function cappedPills(list, render) {
 // or Workspace's own lighter local focus), so "ask Secretary about this" is
 // reachable from wherever the entity is being looked at, not only from
 // Workspace's board.
-export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, note, onEdit, onNavigateKind, onAskSecretary }) {
+export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, note, onEdit, onNavigateKind, onAskSecretary, style }) {
   const domainColor = DOMAIN_COLORS[entity.domain] || MUTE;
   const done = family === "item" ? !!entity.done : entity.status === "done";
   const timing = timingLabel(entity.timing);
   const attention = family === "kind" ? kindAttention(entity, secretary) : null;
   return (
-    <Card style={{ display: "flex", alignItems: "flex-start", gap: 11, opacity: done ? 0.62 : 1 }}>
+    <Card style={{ display: "flex", alignItems: "flex-start", gap: 11, opacity: done ? 0.62 : 1, ...style }}>
       {family === "item" && !readOnly && onToggleDone ? (
         <Checkbox checked={done} onChange={(next) => onToggleDone(entity, next)} />
       ) : (
@@ -55,10 +55,10 @@ export function EntityCard({ family, entity, secretary, onToggleDone, readOnly, 
         onClick={!readOnly && onEdit ? () => onEdit(family, entity) : undefined}
       >
         <div style={{
-          fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500,
+          fontFamily: SANS, fontSize: SIZE_TITLE, color: INK, fontWeight: 500,
           textDecoration: done ? "line-through" : "none", lineHeight: 1.4,
         }}>{entity.title}</div>
-        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 7 }}>
+        <div style={{ display: "flex", gap: GAP_ROW, flexWrap: "wrap", marginTop: 7 }}>
           {entity.domain && <Pill color={domainColor} tint={softTint(domainColor)}>{domainLabel(entity.domain, secretary.domains)}</Pill>}
           {(entity.secondaryDomains || []).map((id) => {
             const c = DOMAIN_COLORS[id] || MUTE;

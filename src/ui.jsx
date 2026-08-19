@@ -6,6 +6,7 @@ import { useState } from "react";
 import {
   MONO, SANS, SERIF, BG, CARD, PAGE, INK, MUTE, MUTE_SOFT, LINE, HEAD_BG,
   INKBLUE, INKBLUE_SOFT, BRICK, RADIUS, RADIUS_SM, SHADOW_CARD, SHADOW_RGB, TRANSITION, softTint,
+  GAP_HEADER, GAP_ACTIONS, SIZE_META, LETTER_META, TINT_ALPHA,
   THEME_VARS_CSS,
 } from "./theme";
 import { useViewport } from "./useViewport";
@@ -76,9 +77,9 @@ export function Wordmark({ size = 18 }) {
   );
 }
 
-export function SectionTitle({ children, note, id }) {
+export function SectionTitle({ children, note, id, style }) {
   return (
-    <div id={id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "32px 0 10px", gap: 10, flexWrap: "wrap" }}>
+    <div id={id} style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", margin: "32px 0 10px", gap: 10, flexWrap: "wrap", ...style }}>
       <h2 style={{
         fontFamily: SERIF, fontSize: 15.5, fontWeight: 600, color: INK, margin: 0,
         letterSpacing: "0.01em", display: "flex", alignItems: "center", gap: 8,
@@ -217,10 +218,66 @@ export function Card({ children, style, tint, onClick }) {
 export function Pill({ children, color = MUTE, tint, title }) {
   return (
     <span title={title} style={{
-      display: "inline-flex", alignItems: "center", fontFamily: MONO, fontSize: 10.5, fontWeight: 600,
-      letterSpacing: "0.02em", color, background: tint || HEAD_BG, border: `1px solid ${color}33`,
+      display: "inline-flex", alignItems: "center", fontFamily: MONO, fontSize: SIZE_META, fontWeight: 600,
+      letterSpacing: "0.02em", color, background: tint || HEAD_BG, border: `1px solid ${color}${TINT_ALPHA}`,
       borderRadius: 999, padding: "2px 9px", whiteSpace: "nowrap",
     }}>{children}</span>
+  );
+}
+
+// The read-mode counterpart to formFields.jsx's Field (which is edit-
+// only): a small uppercase mono label above a value, so a structured
+// number/duration/count gets the same "this is a field" treatment
+// wherever it's displayed -- a streak's day count, a goal's progress
+// figure, a tracker's X/7 -- rather than each place inventing its own
+// bare number or squeezing it into a sentence. Renders nothing for a
+// null/undefined/empty value rather than an empty label.
+export function Stat({ label, value, color = INK, size = 17 }) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div>
+      <div style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META }}>{label}</div>
+      <div style={{ fontFamily: SANS, fontSize: size, fontWeight: 600, color, lineHeight: 1.2 }}>{value}</div>
+    </div>
+  );
+}
+
+// The one heading every modal opens with (EditEntityModal, AddForm,
+// DisciplineDetailModal, InfoModal, ...) -- previously copy-pasted four
+// times with small drifts (margin, size). optional `note` is the small
+// MONO line some of those callers put directly under the title.
+export function ModalHeading({ children, note }) {
+  return (
+    <div style={{ marginBottom: GAP_HEADER }}>
+      <h3 style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: INK, margin: 0 }}>{children}</h3>
+      {note && <div style={{ fontFamily: MONO, fontSize: 11, color: MUTE, marginTop: 3 }}>{note}</div>}
+    </div>
+  );
+}
+
+// A single "toggle this" row -- label and checkbox together -- for the
+// handful of boolean settings that don't fit Field's "label above value"
+// shape (floating/not, retro, etc). Previously hand-rolled per call site
+// with drifting font (MONO in one modal, SANS in another) and spacing.
+export function CheckboxRow({ checked, onChange, children }) {
+  return (
+    <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: SANS, fontSize: 12.5, color: INK, cursor: "pointer", marginBottom: GAP_HEADER }}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      {children}
+    </label>
+  );
+}
+
+// A light "this belongs under that" treatment for nesting *within* one
+// card's own body -- a compound bundle's step that references an earlier
+// step, a milestone under its streak -- distinct from InfoModal's
+// KindChainLine/TraceChain, which trace a Kind/Item's parent chain across
+// separate entities rather than local structure inside one card.
+export function Nested({ children }) {
+  return (
+    <div style={{ borderLeft: `2px solid ${LINE}`, paddingLeft: 10, marginLeft: 2 }}>
+      {children}
+    </div>
   );
 }
 
@@ -424,7 +481,7 @@ export function AIAssist({ actionLabel = "Ask Secretary", onGenerate, onAccept, 
       </div>
       <div>{renderDraft(draft, { setDraft })}</div>
       {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK, marginTop: 10 }}>{error}</p>}
-      <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+      <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
         {onAccept ? (
           <Btn primary color={INKBLUE} disabled={accepting} onClick={accept}>{accepting ? "Saving…" : "Accept"}</Btn>
         ) : null}

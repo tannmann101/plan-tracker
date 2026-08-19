@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Modal, Btn, Input, Select } from "../ui";
-import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, LINE, BRICK } from "../theme";
+import { Modal, Btn, Input, Select, ModalHeading, CheckboxRow } from "../ui";
+import { SANS, MONO, MUTE, INKBLUE, LINE, BRICK, GAP_ACTIONS, SIZE_META, LETTER_META } from "../theme";
 import {
   KIND_TYPES, ITEM_TYPES, kindTypeLabel, itemTypeLabel, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, todayISO,
   DEFAULT_DURATION_MINUTES,
@@ -118,14 +118,14 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
 
   return (
     <Modal onClose={onClose} width={440}>
-      <h3 style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: INK, margin: "0 0 12px" }}>Add</h3>
+      <ModalHeading>Add</ModalHeading>
 
       {bothAllowed && !type ? (
         <table style={{ width: "100%", borderCollapse: "collapse" }}>
           <thead>
             <tr>
-              <th style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "0 0 8px", borderBottom: `1px solid ${LINE}` }}>Kind</th>
-              <th style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", textAlign: "left", padding: "0 0 8px", borderBottom: `1px solid ${LINE}` }}>Item</th>
+              <th style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META, textAlign: "left", padding: "0 0 8px", borderBottom: `1px solid ${LINE}` }}>Kind</th>
+              <th style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META, textAlign: "left", padding: "0 0 8px", borderBottom: `1px solid ${LINE}` }}>Item</th>
             </tr>
           </thead>
           <tbody>
@@ -200,12 +200,7 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
             </>
           )}
 
-          <Field label="This already happened (retro)">
-            <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: SANS, fontSize: 12.5, color: INK, cursor: "pointer" }}>
-              <input type="checkbox" checked={retro} onChange={(e) => setRetro(e.target.checked)} />
-              Skip forward-planning fields, mark this done/complete
-            </label>
-          </Field>
+          <CheckboxRow checked={retro} onChange={setRetro}>This already happened -- skip forward-planning fields, mark done/complete</CheckboxRow>
 
           {retro ? (
             <Field label="Completed on">
@@ -218,10 +213,7 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
                   <Field label="Target day">
                     <Input type="date" value={targetDay} onChange={setTargetDay} />
                   </Field>
-                  <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: SANS, fontSize: 12.5, color: INK, cursor: "pointer", marginBottom: 12 }}>
-                    <input type="checkbox" checked={floating} onChange={(e) => setFloating(e.target.checked)} />
-                    Floating (no specific time)
-                  </label>
+                  <CheckboxRow checked={floating} onChange={setFloating}>Floating (no specific time)</CheckboxRow>
                   {!floating && (
                     <>
                       <Field label="Time">
@@ -250,7 +242,7 @@ export default function AddForm({ secretary, allowKinds = true, allowItems = tru
 
           {error && <p style={{ fontFamily: MONO, fontSize: 11.5, color: BRICK }}>{error}</p>}
 
-          <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+          <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS }}>
             <Btn primary color={INKBLUE} disabled={saving || !title.trim()} onClick={save}>{saving ? "Saving…" : "Add"}</Btn>
             {bothAllowed && <Btn color={MUTE} onClick={() => { setFamily(null); setType(null); }}>← Back</Btn>}
             <Btn color={MUTE} onClick={onClose}>Cancel</Btn>

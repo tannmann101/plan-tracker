@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Btn, SectionTitle, Note, Pill, Card, Select, IconButton } from "../ui";
+import { Btn, SectionTitle, Note, Pill, Card, Select, IconButton, CheckboxRow } from "../ui";
 import {
-  MONO, SANS, INK, MUTE, CARD, LINE, INKBLUE, DEEPTEAL, BRICK, MOSS, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS, softTint,
+  MONO, SANS, INK, MUTE, CARD, LINE, INKBLUE, DEEPTEAL, BRICK, MOSS, DOMAIN_COLORS, STATUS_COLORS, ATTENTION_COLORS,
+  SIZE_TITLE, SIZE_META, LETTER_META, GAP_STACK, GAP_ROW, GAP_HEADER, RADIUS, softTint,
 } from "../theme";
 import { EntityCard } from "../components/EntityCard";
 import EditEntityModal from "../components/EditEntityModal";
@@ -53,10 +54,10 @@ function weeklySeriesFor(weekly, domains) {
 // as a set of clearly bounded control surfaces rather than one long stack.
 function PanelHeader({ children, note, action }) {
   return (
-    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 10, flexWrap: "wrap" }}>
-      <div style={{ fontFamily: SANS, fontSize: 13.5, fontWeight: 600, color: INK }}>{children}</div>
+    <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: GAP_HEADER, flexWrap: "wrap" }}>
+      <div style={{ fontFamily: SANS, fontSize: SIZE_TITLE, fontWeight: 600, color: INK }}>{children}</div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        {note && <span style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE }}>{note}</span>}
+        {note && <span style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE }}>{note}</span>}
         {action}
       </div>
     </div>
@@ -71,15 +72,21 @@ function PanelHeader({ children, note, action }) {
 // via the card body itself.
 function WorkspaceTicket({ family, entity, secretary, onEdit, onNavigateKind, onToggleDone, onAskSecretary }) {
   const changeStatus = (status) => secretary.saveEntity("kind", { ...entity, status });
+  if (family !== "kind") {
+    return <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} onAskSecretary={onAskSecretary} />;
+  }
+  // The status control reads as part of the same card, not a floating
+  // sibling -- a shared border/radius wrapper with the EntityCard's own
+  // shadow suppressed (tint="none" equivalent: border-only) and a divider
+  // line above the footer strip, rather than two independently-bordered
+  // pieces stacked with a gap between them.
   return (
-    <div>
-      <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} onAskSecretary={onAskSecretary} />
-      {family === "kind" && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4, padding: "0 2px" }}>
-          <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[entity.status] || MUTE, flex: "none" }} />
-          <Select value={entity.status} onChange={changeStatus} options={KIND_STATUSES} width="100%" />
-        </div>
-      )}
+    <div style={{ border: `1px solid ${LINE}`, borderRadius: RADIUS, overflow: "hidden" }}>
+      <EntityCard family={family} entity={entity} secretary={secretary} onEdit={onEdit} onNavigateKind={onNavigateKind} onToggleDone={onToggleDone} onAskSecretary={onAskSecretary} style={{ border: "none", borderRadius: 0, boxShadow: "none" }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderTop: `1px solid ${LINE}` }}>
+        <span style={{ width: 6, height: 6, borderRadius: "50%", background: STATUS_COLORS[entity.status] || MUTE, flex: "none" }} />
+        <Select value={entity.status} onChange={changeStatus} options={KIND_STATUSES} width="100%" />
+      </div>
     </div>
   );
 }
@@ -93,8 +100,8 @@ function DisciplineCard({ d, secretary, onOpen }) {
     <Card onClick={onOpen} style={{ cursor: "pointer" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 14, flexWrap: "wrap" }}>
         <div>
-          <div style={{ fontFamily: SANS, fontSize: 13.5, color: INK, fontWeight: 500 }}>{d.title}</div>
-          <div style={{ display: "flex", gap: 6, marginTop: 6, flexWrap: "wrap" }}>
+          <div style={{ fontFamily: SANS, fontSize: SIZE_TITLE, color: INK, fontWeight: 500 }}>{d.title}</div>
+          <div style={{ display: "flex", gap: GAP_ROW, marginTop: 6, flexWrap: "wrap" }}>
             <Pill color={MUTE}>{disciplineTypeLabel(d.type, secretary.disciplineTypes)}</Pill>
             {d.resolved && <Pill color={MOSS}>resolved</Pill>}
             {!d.resolved && !d.focused && <Pill color={MUTE}>paused</Pill>}
@@ -108,7 +115,7 @@ function DisciplineCard({ d, secretary, onOpen }) {
           ].map(([label, value, color]) => (
             <div key={label} style={{ textAlign: "right" }}>
               <div style={{ fontFamily: SANS, fontSize: 17, fontWeight: 600, color }}>{value}</div>
-              <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.04em" }}>{label}</div>
+              <div style={{ fontFamily: MONO, fontSize: 9.5, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META }}>{label}</div>
             </div>
           ))}
         </div>
@@ -319,7 +326,7 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
       id: "habits", label: "Habits to Break",
       note: "Each bar sequence is one habit's past streaks in order, then the current one -- click a card for its detail.",
       body: disciplineHistory.length === 0 ? <Note>No habits being eliminated yet -- add one from Plans' "Habits to Break" to start tracking streak history here.</Note> : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: GAP_STACK }}>
           {disciplineHistory.map((d) => (
             <DisciplineCard key={d.id} d={d} secretary={secretary} onOpen={() => openDiscipline(d.id)} />
           ))}
@@ -340,14 +347,14 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
       id: "cycleTime", label: "Goal Cycle Time",
       note: "Days from a Goal's creation to its completion -- click one to open it.",
       body: cycleTimes.length === 0 ? <Note>No Goals completed yet.</Note> : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: GAP_STACK }}>
           {cycleTimes.map((c) => (
             <ListRow
               key={c.kindId} onOpen={() => openKind(c.kindId)}
               left={(
                 <div>
-                  <div style={{ fontFamily: SANS, fontSize: 13, color: INK }}>{c.title}</div>
-                  <div style={{ display: "flex", gap: 6, marginTop: 4 }}>
+                  <div style={{ fontFamily: SANS, fontSize: SIZE_TITLE, color: INK }}>{c.title}</div>
+                  <div style={{ display: "flex", gap: GAP_ROW, marginTop: 4 }}>
                     <Pill color={DOMAIN_COLORS[c.domain] || MUTE}>{domainLabel(c.domain, secretary.domains)}</Pill>
                   </div>
                 </div>
@@ -362,13 +369,13 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
       id: "attention", label: "Needs Attention",
       note: "Projects, Goals, and Practices that are overdue, stalled, or have nothing attached yet -- click one to open it.",
       body: attentionList.length === 0 ? <Note>Nothing needs attention right now.</Note> : (
-        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: GAP_STACK }}>
           {attentionList.map((a) => (
             <ListRow
               key={a.id} onOpen={() => openKind(a.id)}
               left={(
                 <div>
-                  <div style={{ fontFamily: SANS, fontSize: 13, color: INK }}>{a.title}</div>
+                  <div style={{ fontFamily: SANS, fontSize: SIZE_TITLE, color: INK }}>{a.title}</div>
                   <div style={{ fontFamily: MONO, fontSize: 10.5, color: ATTENTION_COLORS[a.level], marginTop: 4 }}>{a.hint}</div>
                 </div>
               )}
@@ -425,20 +432,17 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
         >
           Filters
         </PanelHeader>
-        <label style={{ display: "flex", alignItems: "center", gap: 6, fontFamily: MONO, fontSize: 11.5, color: MUTE, cursor: "pointer", marginBottom: 12 }}>
-          <input type="checkbox" checked={showDone} onChange={(e) => setShowDone(e.target.checked)} />
-          Show done/archived
-        </label>
-        <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Domain</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 12 }}>
+        <CheckboxRow checked={showDone} onChange={setShowDone}>Show done/archived</CheckboxRow>
+        <div style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META, marginBottom: 6 }}>Domain</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: GAP_ROW, marginBottom: 12 }}>
           {secretary.domains.map((d) => (
             <button key={d.id} type="button" onClick={() => setDomainFilter(domainFilter === d.id ? null : d.id)} style={{ border: "none", background: "none", padding: 0, cursor: "pointer" }}>
               <Pill color={DOMAIN_COLORS[d.id] || MUTE} tint={domainFilter === d.id ? softTint(DOMAIN_COLORS[d.id] || MUTE) : undefined}>{d.label}</Pill>
             </button>
           ))}
         </div>
-        <div style={{ fontFamily: MONO, fontSize: 10.5, color: MUTE, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6 }}>Resource</div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, maxHeight: 90, overflowY: "auto" }}>
+        <div style={{ fontFamily: MONO, fontSize: SIZE_META, color: MUTE, textTransform: "uppercase", letterSpacing: LETTER_META, marginBottom: 6 }}>Resource</div>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: GAP_ROW, maxHeight: 90, overflowY: "auto" }}>
           {secretary.resources.map((r) => (
             <button key={r} type="button" onClick={() => setResourceFilter(resourceFilter === r ? null : r)} style={{ border: "none", background: "none", padding: 0, cursor: "pointer" }}>
               <Pill color={MUTE} tint={resourceFilter === r ? softTint(MUTE) : undefined}>{r}</Pill>
@@ -465,7 +469,7 @@ export default function Workspace({ secretary, onBack, onNavigateKind, onNavigat
         <SectionTitle note={`${activeIdx + 1} of ${VIEWS.length}`}>Views</SectionTitle>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
           <IconButton title="Previous view" onClick={() => cycleView(-1)}>←</IconButton>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 5, flex: 1 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: GAP_ROW, flex: 1 }}>
             {VIEWS.map((v) => (
               <button
                 key={v.id}

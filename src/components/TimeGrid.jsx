@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, MOSS, DOMAIN_COLORS, BG, softTint } from "../theme";
+import { MONO, SANS, INK, MUTE, MUTE_SOFT, LINE, INKBLUE, BRICK, MOSS, DOMAIN_COLORS, BG, RADIUS_CHIP, TINT_ALPHA, softTint } from "../theme";
 import { Checkbox } from "../ui";
 import { useViewport } from "../useViewport";
 import { disciplineStreak, dayScheduleLoad } from "../lib/graph";
@@ -111,7 +111,7 @@ export function TimeRangeControl({ prefs, onChange }) {
   );
 }
 
-const selectStyle = { fontFamily: MONO, fontSize: 11, padding: "3px 5px", border: `1px solid ${LINE}`, borderRadius: 6, background: BG };
+const selectStyle = { fontFamily: MONO, fontSize: 11, padding: "3px 5px", border: `1px solid ${LINE}`, borderRadius: RADIUS_CHIP, background: BG };
 
 function timeToMinutes(t) {
   const [h, m] = t.split(":").map(Number);
@@ -210,12 +210,12 @@ export function TimeGridDay({
           {label}
         </div>
         {load.isOverloaded && (
-          <span style={{ fontFamily: MONO, fontSize: 9.5, color: BRICK, background: softTint(BRICK), border: `1px solid ${BRICK}55`, borderRadius: 999, padding: "1px 6px" }}>
+          <span style={{ fontFamily: MONO, fontSize: 9.5, color: BRICK, background: softTint(BRICK), border: `1px solid ${BRICK}${TINT_ALPHA}`, borderRadius: 999, padding: "1px 6px" }}>
             booked solid
           </span>
         )}
         {!load.isOverloaded && showEmptyBadge && (
-          <span style={{ fontFamily: MONO, fontSize: 9.5, color: MOSS, background: softTint(MOSS), border: `1px solid ${MOSS}55`, borderRadius: 999, padding: "1px 6px" }}>
+          <span style={{ fontFamily: MONO, fontSize: 9.5, color: MOSS, background: softTint(MOSS), border: `1px solid ${MOSS}${TINT_ALPHA}`, borderRadius: 999, padding: "1px 6px" }}>
             nothing scheduled
           </span>
         )}
@@ -237,7 +237,7 @@ export function TimeGridDay({
         </div>
       )}
 
-      <div style={{ position: "relative", height: gridHeight, border: `1px solid ${LINE}`, borderRadius: 6, overflow: "hidden" }}>
+      <div style={{ position: "relative", height: gridHeight, border: `1px solid ${LINE}`, borderRadius: RADIUS_CHIP, overflow: "hidden" }}>
         {free.filter(([s, e]) => e - s >= 20).map(([s, e]) => (
           <div
             key={`free-${s}`}
@@ -278,7 +278,7 @@ export function TimeGridDay({
               style={{
                 position: "absolute", top, height, left: `${column * widthPct}%`, width: `calc(${widthPct}% - 3px)`,
                 background: softTint(color), border: `1px solid ${color}`, borderLeft: `3px solid ${color}`,
-                borderRadius: 4, padding: "2px 5px", overflow: "hidden", cursor: "pointer",
+                borderRadius: RADIUS_CHIP, padding: "2px 5px", overflow: "hidden", cursor: "pointer",
               }}
             >
               <div style={{ fontFamily: SANS, fontSize: 10.5, fontWeight: 600, color: INK, lineHeight: 1.25, textDecoration: item.done ? "line-through" : "none" }}>
@@ -310,7 +310,7 @@ export function TimeGridDay({
 function FloatingChip({ item, onToggleDone, onEdit, onAskSecretary }) {
   const domainColor = DOMAIN_COLORS[item.domain] || MUTE;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, background: softTint(domainColor), border: `1px solid ${domainColor}55`, borderRadius: 6, padding: "3px 6px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 6, background: softTint(domainColor), border: `1px solid ${domainColor}${TINT_ALPHA}`, borderRadius: RADIUS_CHIP, padding: "3px 6px" }}>
       {onToggleDone && <Checkbox checked={!!item.done} onChange={(next) => onToggleDone(item, next)} color={domainColor} />}
       <span
         onClick={() => onEdit?.("item", item)}
@@ -345,7 +345,7 @@ function DisciplineChip({ discipline, onClick }) {
     <div
       onClick={onClick}
       title={`Working to eliminate -- day ${days}${nextMilestone ? `, ${nextMilestone.days - days}d to "${nextMilestone.label}"` : ""}`}
-      style={{ display: "flex", alignItems: "center", gap: 6, background: softTint(BRICK), border: `1px solid ${BRICK}55`, borderRadius: 6, padding: "3px 6px", cursor: "pointer" }}
+      style={{ display: "flex", alignItems: "center", gap: 6, background: softTint(BRICK), border: `1px solid ${BRICK}${TINT_ALPHA}`, borderRadius: RADIUS_CHIP, padding: "3px 6px", cursor: "pointer" }}
     >
       <span style={{ fontFamily: SANS, fontSize: 11, color: BRICK, fontWeight: 700, flex: "none" }}>⊘</span>
       <span style={{ fontFamily: SANS, fontSize: 11, color: INK, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>

@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Modal, Btn, Input, Select } from "../ui";
-import { SERIF, SANS, MONO, INK, MUTE, INKBLUE, BRICK, LINE } from "../theme";
+import { Modal, Btn, Input, Select, ModalHeading, CheckboxRow } from "../ui";
+import { SANS, MONO, MUTE, INKBLUE, BRICK, LINE, GAP_ACTIONS } from "../theme";
 import { KIND_STATUSES, INITIATORS, FAMILY_SCOPES, CONSENT_STATUSES, DEFAULT_DURATION_MINUTES } from "../constants";
 import { allTagsInUse, kindSubtreeIds, itemsForKind } from "../lib/graph";
 import { Field, TagsInput, MultiCheckList, MilestonesEditor, KindParentPicker, DurationInput } from "./formFields";
@@ -96,7 +96,7 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
 
   return (
     <Modal onClose={onClose} width={440}>
-      <h3 style={{ fontFamily: SERIF, fontSize: 16, fontWeight: 600, color: INK, margin: "0 0 12px" }}>Edit</h3>
+      <ModalHeading>Edit</ModalHeading>
 
       <Field label="Name">
         <Input value={title} onChange={setTitle} onEnter={save} autoFocus />
@@ -155,20 +155,14 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
 
       {family === "item" && (
         <>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: MONO, fontSize: 12, color: INK, cursor: "pointer", marginBottom: 12 }}>
-            <input type="checkbox" checked={done} onChange={(e) => setDone(e.target.checked)} />
-            Done
-          </label>
+          <CheckboxRow checked={done} onChange={setDone}>Done</CheckboxRow>
           <Field label="Attach to (reassign to fix a mis-categorization)">
             <KindParentPicker kinds={secretary.kinds} value={parentKindId} onChange={setParentKindId} />
           </Field>
           <Field label="Target day">
             <Input type="date" value={targetDay} onChange={setTargetDay} />
           </Field>
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: MONO, fontSize: 12, color: INK, cursor: "pointer", marginBottom: 12 }}>
-            <input type="checkbox" checked={floating} onChange={(e) => setFloating(e.target.checked)} />
-            Floating (no specific time)
-          </label>
+          <CheckboxRow checked={floating} onChange={setFloating}>Floating (no specific time)</CheckboxRow>
           {!floating && (
             <>
               <Field label="Time">
@@ -215,7 +209,7 @@ export default function EditEntityModal({ family, entity, secretary, onClose, on
           </div>
         </div>
       ) : (
-        <div style={{ display: "flex", gap: 8, marginTop: 16, justifyContent: "space-between" }}>
+        <div style={{ display: "flex", gap: 8, marginTop: GAP_ACTIONS, justifyContent: "space-between" }}>
           <div style={{ display: "flex", gap: 8 }}>
             <Btn primary color={INKBLUE} disabled={saving || !title.trim()} onClick={save}>{saving ? "Saving…" : "Save"}</Btn>
             <Btn color={MUTE} onClick={onClose}>Cancel</Btn>
